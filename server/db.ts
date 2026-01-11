@@ -153,8 +153,11 @@ export async function createTimeEntry(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { timeEntries } = await import("../drizzle/schema");
-  const result = await db.insert(timeEntries).values(data);
-  return result;
+  const { desc } = await import("drizzle-orm");
+  await db.insert(timeEntries).values(data);
+  // Return the created entry
+  const entries = await db.select().from(timeEntries).where(eq(timeEntries.userId, data.userId)).orderBy(desc(timeEntries.id)).limit(1);
+  return entries[0];
 }
 
 export async function updateTimeEntry(id: number, data: any) {

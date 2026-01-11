@@ -49,3 +49,12 @@
 
 ## Bugfixes
 - [x] require() Fehler in tRPC-Procedures beheben (Zod-Import)
+
+## Zeiterfassung
+- [x] Kalenderkomponente mit Monatsansicht erstellen
+- [x] Tageserfassung-Formular mit Projekt-Zuordnung
+- [x] Onsite/Remote/Off duty/Business trip Status-Auswahl
+- [x] Automatische Manntage-Berechnung (1h = 0,125 MT)
+- [x] Automatische Tagessatz-Berechnung basierend auf Kundenstammdaten
+- [x] Monatsnavigation (vor/zurück)
+- [x] Tagesdetails anzeigen und bearbeiten
