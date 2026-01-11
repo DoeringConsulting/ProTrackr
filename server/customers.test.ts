@@ -36,9 +36,10 @@ describe("customers", () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
+    const randomId = Math.floor(Math.random() * 1000000);
     const customerData = {
       provider: "Test Provider",
-      mandatenNr: "TEST001",
+      mandatenNr: `TEST${randomId}`,
       projectName: "Test Project",
       location: "Test Location",
       onsiteRate: 100000, // 1000.00 EUR in cents

@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -24,14 +25,12 @@ export const appRouter = router({
       return await getCustomers();
     }),
     getById: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({ id: z.number() }).parse(val);
     }).query(async ({ input }) => {
       const { getCustomerById } = await import("./db");
       return await getCustomerById(input.id);
     }),
     create: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         provider: z.string(),
         mandatenNr: z.string(),
@@ -48,7 +47,6 @@ export const appRouter = router({
       return await createCustomer(input);
     }),
     update: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         id: z.number(),
         provider: z.string().optional(),
@@ -68,7 +66,6 @@ export const appRouter = router({
       return { success: true };
     }),
     delete: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteCustomer } = await import("./db");
@@ -80,7 +77,6 @@ export const appRouter = router({
   // Time tracking
   timeEntries: router({
     list: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         startDate: z.string().optional(),
         endDate: z.string().optional(),
@@ -92,14 +88,12 @@ export const appRouter = router({
       return await getTimeEntries(ctx.user.id, startDate, endDate);
     }),
     getById: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({ id: z.number() }).parse(val);
     }).query(async ({ input }) => {
       const { getTimeEntryById } = await import("./db");
       return await getTimeEntryById(input.id);
     }),
     create: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         customerId: z.number(),
         date: z.string(),
@@ -121,7 +115,6 @@ export const appRouter = router({
       });
     }),
     update: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         id: z.number(),
         customerId: z.number().optional(),
@@ -145,7 +138,6 @@ export const appRouter = router({
       return { success: true };
     }),
     delete: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteTimeEntry } = await import("./db");
@@ -157,14 +149,12 @@ export const appRouter = router({
   // Expenses
   expenses: router({
     listByTimeEntry: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({ timeEntryId: z.number() }).parse(val);
     }).query(async ({ input }) => {
       const { getExpensesByTimeEntry } = await import("./db");
       return await getExpensesByTimeEntry(input.timeEntryId);
     }),
     create: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         timeEntryId: z.number(),
         category: z.enum(["car", "train", "flight", "transport", "meal", "hotel", "food", "fuel", "other"]),
@@ -180,7 +170,6 @@ export const appRouter = router({
       return await createExpense(input);
     }),
     update: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         id: z.number(),
         category: z.enum(["car", "train", "flight", "transport", "meal", "hotel", "food", "fuel", "other"]).optional(),
@@ -198,7 +187,6 @@ export const appRouter = router({
       return { success: true };
     }),
     delete: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteExpense } = await import("./db");
@@ -210,7 +198,6 @@ export const appRouter = router({
   // Exchange rates
   exchangeRates: router({
     getByDate: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({ date: z.string() }).parse(val);
     }).query(async ({ input }) => {
       const { getExchangeRateByDate, createExchangeRate } = await import("./db");
@@ -241,7 +228,6 @@ export const appRouter = router({
       return await getFixedCosts(ctx.user.id);
     }),
     create: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         category: z.string(),
         amount: z.number(),
@@ -255,7 +241,6 @@ export const appRouter = router({
       });
     }),
     update: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({
         id: z.number(),
         category: z.string().optional(),
@@ -269,7 +254,6 @@ export const appRouter = router({
       return { success: true };
     }),
     delete: protectedProcedure.input((val: unknown) => {
-      const z = require("zod").z;
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteFixedCost } = await import("./db");

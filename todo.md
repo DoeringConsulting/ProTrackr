@@ -46,3 +46,6 @@
 - [ ] Unit-Tests für Reisekostenerfassung
 - [ ] Unit-Tests für Abrechnungslogik
 - [ ] Unit-Tests für Währungsumrechnung
+
+## Bugfixes
+- [x] require() Fehler in tRPC-Procedures beheben (Zod-Import)
