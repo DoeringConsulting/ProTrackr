@@ -1,11 +1,85 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { Calendar, Euro, FileText, Users } from "lucide-react";
+import { Calendar, Euro, FileText, Users, TrendingUp, PieChart as PieChartIcon } from "lucide-react";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export default function Dashboard() {
   const { data: customers, isLoading: customersLoading } = trpc.customers.list.useQuery();
   const { data: timeEntries, isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({});
+  const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
+
+  // Calculate monthly revenue data for the last 6 months
+  const getMonthlyRevenueData = () => {
+    const now = new Date();
+    const months = [];
+    
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthName = date.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+      
+      const monthEntries = timeEntries?.filter(entry => {
+        const entryDate = new Date(entry.date);
+        return entryDate.getMonth() === date.getMonth() && 
+               entryDate.getFullYear() === date.getFullYear();
+      }) || [];
+      
+      const revenue = monthEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0) / 100;
+      
+      months.push({
+        month: monthName,
+        umsatz: Math.round(revenue),
+      });
+    }
+    
+    return months;
+  };
+
+  // Calculate cost breakdown
+  const getCostBreakdown = () => {
+    const totalFixed = fixedCosts?.reduce((sum, cost) => sum + cost.amount, 0) || 0;
+    const thisMonthRevenue = timeEntries?.filter(entry => {
+      const entryDate = new Date(entry.date);
+      const now = new Date();
+      return entryDate.getMonth() === now.getMonth() && 
+             entryDate.getFullYear() === now.getFullYear();
+    }).reduce((sum, entry) => sum + entry.calculatedAmount, 0) || 0;
+    
+    const zus = Math.round(thisMonthRevenue * 0.1952);
+    const healthInsurance = Math.round(thisMonthRevenue * 0.09);
+    const tax = Math.round(Math.max(0, thisMonthRevenue - totalFixed - zus) * 0.19);
+    
+    return [
+      { name: 'Fixkosten', value: Math.round(totalFixed / 100), color: '#3b82f6' },
+      { name: 'ZUS', value: Math.round(zus / 100), color: '#8b5cf6' },
+      { name: 'Krankenvers.', value: Math.round(healthInsurance / 100), color: '#ec4899' },
+      { name: 'Steuer', value: Math.round(tax / 100), color: '#f59e0b' },
+    ];
+  };
+
+  // Calculate project comparison
+  const getProjectComparison = () => {
+    const projectRevenue: Record<string, number> = {};
+    
+    timeEntries?.forEach(entry => {
+      if (!projectRevenue[entry.projectName]) {
+        projectRevenue[entry.projectName] = 0;
+      }
+      projectRevenue[entry.projectName] += entry.calculatedAmount;
+    });
+    
+    return Object.entries(projectRevenue)
+      .map(([name, value]) => ({
+        projekt: name.length > 15 ? name.substring(0, 15) + '...' : name,
+        umsatz: Math.round(value / 100),
+      }))
+      .sort((a, b) => b.umsatz - a.umsatz)
+      .slice(0, 5);
+  };
+
+  const monthlyData = getMonthlyRevenueData();
+  const costData = getCostBreakdown();
+  const projectData = getProjectComparison();
 
   const stats = [
     {
@@ -125,6 +199,81 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Charts Section */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-emerald-600" />
+                <CardTitle>Umsatzentwicklung</CardTitle>
+              </div>
+              <CardDescription>Monatlicher Umsatz der letzten 6 Monate</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `€${value}`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="umsatz" stroke="#10b981" strokeWidth={2} name="Umsatz (€)" />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <PieChartIcon className="h-5 w-5 text-indigo-600" />
+                <CardTitle>Kostenverteilung</CardTitle>
+              </div>
+              <CardDescription>Aktuelle Kostenaufschlüsselung</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={costData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={(entry) => `${entry.name}: €${entry.value}`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {costData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `€${value}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Projekt-Vergleich</CardTitle>
+            <CardDescription>Top 5 Projekte nach Umsatz</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={projectData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="projekt" />
+                <YAxis />
+                <Tooltip formatter={(value) => `€${value}`} />
+                <Legend />
+                <Bar dataKey="umsatz" fill="#3b82f6" name="Umsatz (€)" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

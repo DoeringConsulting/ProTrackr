@@ -98,3 +98,24 @@
 - [x] Kategorien: Auto, Telefon, Software, Buchhaltung, Sonstige
 - [x] Integration in Navigation (Settings-Bereich)
 - [x] Tests für Fixkosten-Verwaltung
+
+## PDF-Export
+- [x] PDF-Export-Funktion für Buchhaltungsbericht
+- [x] PDF-Export-Funktion für Kundenbericht
+- [x] PDF-Layout mit Logo und Formatierung
+- [x] Export-Button in Berichte-Seite integrieren
+
+## Dashboard-Charts
+- [x] Recharts-Bibliothek integrieren
+- [x] Umsatz-Diagramm (monatlicher Verlauf)
+- [x] Kosten-Diagramm (Fixkosten vs. variable Kosten)
+- [x] Projekt-Vergleichs-Diagramm
+- [x] Responsive Chart-Darstellung
+
+## Belegupload-UI
+- [x] Upload-Komponente für Dokumente erstellen
+- [x] S3-Integration für Datei-Upload (Backend vorbereitet)
+- [x] Dokumenten-Vorschau implementieren
+- [x] Verknüpfung mit Reisekosten-Einträgen
+- [x] Dokumenten-Liste mit Download-Funktion
+- [x] Löschen-Funktion für Belege

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { FileText, Download, Calculator } from "lucide-react";
+import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
 
 export default function Reports() {
   const [startDate, setStartDate] = useState(() => {
@@ -181,7 +182,7 @@ export default function Reports() {
                       Detaillierte Kostenrechnung für den Zeitraum {new Date(startDate).toLocaleDateString("de-DE")} - {new Date(endDate).toLocaleDateString("de-DE")}
                     </CardDescription>
                   </div>
-                  <Button variant="outline" onClick={() => toast.info("Export-Funktion wird implementiert")}>
+                  <Button variant="outline" onClick={() => exportAccountingReportToPDF(accountingData, startDate, endDate)}>
                     <Download className="mr-2 h-4 w-4" />
                     PDF Export
                   </Button>
@@ -304,7 +305,7 @@ export default function Reports() {
                           {customerData.customer.projectName} - {customerData.customer.provider}
                         </CardDescription>
                       </div>
-                      <Button variant="outline" onClick={() => toast.info("Export-Funktion wird implementiert")}>
+                      <Button variant="outline" onClick={() => customerData && exportCustomerReportToPDF(customerData, startDate, endDate)}>
                         <Download className="mr-2 h-4 w-4" />
                         PDF Export
                       </Button>
