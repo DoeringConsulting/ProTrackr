@@ -163,3 +163,23 @@
 - [x] Navigation für Smartphones optimieren
 - [x] Responsive Breakpoints überprüfen und anpassen
 - [x] Touch-Gesten für häufige Aktionen implementieren
+
+## Cron-Job für Benachrichtigungen
+- [x] Public Endpoint für Scheduler erstellen
+- [x] API-Key-Authentifizierung für Scheduler-Endpoint
+- [x] Dokumentation für Cron-Job-Konfiguration
+- [x] Fehlerbehandlung und Logging
+
+## Erweiterte Währungsumrechnung
+- [x] NBP-API für alle verfügbaren Währungen erweitern (13 Währungen)
+- [x] Währungsauswahl in Berichten integrieren (Backend vorbereitet)
+- [x] Automatische Wechselkurs-Abfrage für gewähltes Datum
+- [x] Währungsumrechnung in Buchhaltungsbericht anzeigen (Backend vorbereitet)
+- [x] Historische Wechselkurse speichern
+
+## Backup-Funktion
+- [x] Datenbank-Export als JSON implementieren
+- [x] Backup-Seite in UI erstellen
+- [x] Download-Funktion für Backup-Dateien
+- [x] Automatisches Backup mit Zeitplan (via Cron-Job)
+- [x] Wiederherstellungs-Funktion (Import)

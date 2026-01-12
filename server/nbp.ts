@@ -1,14 +1,38 @@
 import axios from "axios";
 
 /**
- * Fetches EUR/PLN exchange rate from Narodowy Bank Polski (NBP) API
- * @param date - Date for which to fetch the rate (format: YYYY-MM-DD)
- * @returns Exchange rate as a number (e.g., 4.2369)
+ * List of all currencies supported by NBP API
+ * Source: https://api.nbp.pl/api/exchangerates/tables/a/?format=json
  */
-export async function fetchNBPExchangeRate(date: Date): Promise<number> {
+export const NBP_CURRENCIES = [
+  { code: "EUR", name: "Euro" },
+  { code: "USD", name: "Dolar amerykański" },
+  { code: "CHF", name: "Frank szwajcarski" },
+  { code: "GBP", name: "Funt szterling" },
+  { code: "AUD", name: "Dolar australijski" },
+  { code: "CAD", name: "Dolar kanadyjski" },
+  { code: "CZK", name: "Korona czeska" },
+  { code: "DKK", name: "Korona duńska" },
+  { code: "HUF", name: "Forint (Węgry)" },
+  { code: "JPY", name: "Jen (Japonia)" },
+  { code: "NOK", name: "Korona norweska" },
+  { code: "SEK", name: "Korona szwedzka" },
+  { code: "XDR", name: "SDR (MFW)" },
+];
+
+/**
+ * Fetches exchange rate from Narodowy Bank Polski (NBP) API for any supported currency
+ * @param currencyCode - Currency code (e.g., "EUR", "USD")
+ * @param date - Date for which to fetch the rate (format: YYYY-MM-DD)
+ * @returns Exchange rate as a number (e.g., 4.2369 for EUR/PLN)
+ */
+export async function fetchNBPExchangeRate(
+  currencyCode: string = "EUR",
+  date: Date = new Date()
+): Promise<number> {
   try {
     const dateStr = date.toISOString().split("T")[0]; // YYYY-MM-DD
-    const url = `https://api.nbp.pl/api/exchangerates/rates/a/eur/${dateStr}/?format=json`;
+    const url = `https://api.nbp.pl/api/exchangerates/rates/a/${currencyCode.toLowerCase()}/${dateStr}/?format=json`;
     
     const response = await axios.get(url);
     const rate = response.data.rates[0].mid;
@@ -26,7 +50,7 @@ export async function fetchNBPExchangeRate(date: Date): Promise<number> {
         throw new Error("No exchange rate available for the past 7 days");
       }
       
-      return fetchNBPExchangeRate(previousDay);
+      return fetchNBPExchangeRate(currencyCode, previousDay);
     }
     
     throw error;

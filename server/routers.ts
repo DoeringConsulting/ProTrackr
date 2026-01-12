@@ -195,6 +195,25 @@ export const appRouter = router({
     }),
   }),
 
+  // Currency support
+  currencies: router({
+    list: publicProcedure.query(() => {
+      const { NBP_CURRENCIES } = require("./nbp");
+      return NBP_CURRENCIES;
+    }),
+    getRate: publicProcedure.input((val: unknown) => {
+      return z.object({
+        currencyCode: z.string(),
+        date: z.string(),
+      }).parse(val);
+    }).query(async ({ input }) => {
+      const { fetchNBPExchangeRate } = await import("./nbp");
+      const date = new Date(input.date);
+      const rate = await fetchNBPExchangeRate(input.currencyCode, date);
+      return { currencyCode: input.currencyCode, date: input.date, rate };
+    }),
+  }),
+
   // Exchange rates
   exchangeRates: router({
     getByDate: protectedProcedure.input((val: unknown) => {
@@ -207,7 +226,7 @@ export const appRouter = router({
       let rate = await getExchangeRateByDate(date);
       
       if (!rate) {
-        const nbpRate = await fetchNBPExchangeRate(date);
+        const nbpRate = await fetchNBPExchangeRate("EUR", date);
         await createExchangeRate({
           date,
           currencyPair: "EUR/PLN",
@@ -350,6 +369,22 @@ export const appRouter = router({
       const { deleteFixedCost } = await import("./db");
       await deleteFixedCost(input.id);
       return { success: true };
+    }),
+  }),
+
+  // Backup
+  backup: router({
+    create: protectedProcedure.mutation(async () => {
+      const { createBackup } = await import("./backup");
+      return await createBackup();
+    }),
+    restore: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        backup: z.any(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { restoreBackup } = await import("./backup");
+      return await restoreBackup(input.backup);
     }),
   }),
 });
