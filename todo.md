@@ -119,3 +119,24 @@
 - [x] Verknüpfung mit Reisekosten-Einträgen
 - [x] Dokumenten-Liste mit Download-Funktion
 - [x] Löschen-Funktion für Belege
+
+## Excel-Export
+- [x] Excel-Export-Bibliothek installieren
+- [x] Excel-Export-Funktion für Buchhaltungsbericht
+- [x] Excel-Export-Funktion für Kundenbericht
+- [x] Export-Button in Berichte-Seite integrieren
+
+## E-Mail-Benachrichtigungen
+- [x] Benachrichtigungs-Logik für Monatsabschluss
+- [x] Benachrichtigungs-Logik für fehlende Zeiterfassungen
+- [x] Benachrichtigungs-Logik für anstehende Abrechnungsfristen
+- [x] Benachrichtigungs-Logik für unvollständige Reisekostenabrechnungen
+- [x] Integration mit Manus Notification API
+
+## Datenimport
+- [x] Import-Seite erstellen
+- [x] Excel-Parser für Kundendaten
+- [x] Excel-Parser für Zeiterfassungsdaten (vorbereitet)
+- [x] Excel-Parser für Reisekostendaten (vorbereitet)
+- [x] Validierung und Fehlerbehandlung
+- [x] Fortschrittsanzeige während Import

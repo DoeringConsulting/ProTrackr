@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { FileText, Download, Calculator } from "lucide-react";
 import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
+import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
 
 export default function Reports() {
   const [startDate, setStartDate] = useState(() => {
@@ -182,10 +183,29 @@ export default function Reports() {
                       Detaillierte Kostenrechnung für den Zeitraum {new Date(startDate).toLocaleDateString("de-DE")} - {new Date(endDate).toLocaleDateString("de-DE")}
                     </CardDescription>
                   </div>
-                  <Button variant="outline" onClick={() => exportAccountingReportToPDF(accountingData, startDate, endDate)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    PDF Export
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => exportAccountingReportToPDF(accountingData, startDate, endDate)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      PDF Export
+                    </Button>
+                    <Button variant="outline" onClick={() => {
+                      exportAccountingReportToExcel({
+                        revenue: accountingData.grossRevenue,
+                        fixedCosts: fixedCosts.map(fc => ({ category: fc.category, amount: fc.amount })),
+                        variableCosts: accountingData.variableCosts,
+                        zus: accountingData.zus,
+                        healthInsurance: accountingData.healthInsurance,
+                        tax: accountingData.tax,
+                        netProfit: accountingData.netProfit,
+                        startDate,
+                        endDate,
+                      });
+                      toast.success("Excel-Datei wird heruntergeladen");
+                    }}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Excel Export
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -305,10 +325,38 @@ export default function Reports() {
                           {customerData.customer.projectName} - {customerData.customer.provider}
                         </CardDescription>
                       </div>
-                      <Button variant="outline" onClick={() => customerData && exportCustomerReportToPDF(customerData, startDate, endDate)}>
-                        <Download className="mr-2 h-4 w-4" />
-                        PDF Export
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => customerData && exportCustomerReportToPDF(customerData, startDate, endDate)}>
+                          <Download className="mr-2 h-4 w-4" />
+                          PDF Export
+                        </Button>
+                        <Button variant="outline" onClick={() => {
+                          if (customerData) {
+                            exportCustomerReportToExcel({
+                              customerName: customerData.customer.provider,
+                              projectName: customerData.customer.projectName,
+                              consultant: "Berater",
+                              startDate,
+                              endDate,
+                              entries: customerData.entries.map(e => ({
+                                date: new Date(e.date).toLocaleDateString("de-DE"),
+                                hours: e.hours / 60,
+                                rate: e.rate || 0,
+                                amount: e.calculatedAmount,
+                                expenses: 0,
+                              })),
+                              totalHours: customerData.totalHours,
+                              totalAmount: customerData.totalAmount,
+                              totalExpenses: customerData.totalExpenses,
+                              grandTotal: customerData.grandTotal,
+                            });
+                            toast.success("Excel-Datei wird heruntergeladen");
+                          }
+                        }}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Excel Export
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>

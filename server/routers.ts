@@ -221,6 +221,48 @@ export const appRouter = router({
     }),
   }),
 
+  // Notifications
+  notifications: router({
+    sendMonthEndNotification: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        month: z.string(),
+        revenue: z.number(),
+        expenses: z.number(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { notifyMonthEnd } = await import("./notifications");
+      return await notifyMonthEnd(input.month, input.revenue, input.expenses);
+    }),
+    sendMissingTimeEntriesNotification: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        date: z.string(),
+        daysWithoutEntries: z.number(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { notifyMissingTimeEntries } = await import("./notifications");
+      return await notifyMissingTimeEntries(input.date, input.daysWithoutEntries);
+    }),
+    sendInvoiceDeadlineNotification: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        customer: z.string(),
+        deadline: z.string(),
+        daysLeft: z.number(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { notifyUpcomingInvoiceDeadline } = await import("./notifications");
+      return await notifyUpcomingInvoiceDeadline(input.customer, input.deadline, input.daysLeft);
+    }),
+    sendIncompleteExpensesNotification: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        month: z.string(),
+        entriesWithoutExpenses: z.number(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { notifyIncompleteExpenses } = await import("./notifications");
+      return await notifyIncompleteExpenses(input.month, input.entriesWithoutExpenses);
+    }),
+  }),
+
   // Documents
   documents: router({ listByExpense: protectedProcedure.input((val: unknown) => {
       return z.object({ expenseId: z.number() }).parse(val);

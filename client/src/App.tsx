@@ -10,6 +10,7 @@ import Customers from "./pages/Customers";
 import TimeTracking from "./pages/TimeTracking";
 import Expenses from "./pages/Expenses";
 import Reports from "./pages/Reports";
+import Import from "./pages/Import";
 import Settings from "./pages/Settings";
 
 function Router() {
@@ -18,9 +19,8 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/customers" component={Customers} />
       <Route path="/time-tracking" component={TimeTracking} />
-      <Route path="/expenses" component={Expenses} />
-      <Route path="/reports" component={Reports} />
-      <Route path="/settings" component={Settings} />
+      <Route path="/expenses" component={Expenses} />      <Route path={"/reports"} component={Reports} />
+      <Route path={"/import"} component={Import} />      <Route path="/settings" component={Settings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
