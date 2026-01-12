@@ -73,3 +73,18 @@
 - [x] Reisekosten-Übersicht mit Filter und Suche
 - [x] Automatische Berechnung der Gesamtkosten
 - [x] Tests für Reisekostenverwaltung
+
+## Abrechnungsberichte
+- [x] Berichte-Seite mit Zeitraum-Auswahl und Kunden-Filter
+- [x] Buchhaltungsbericht nach polnischem Recht erstellen
+- [x] Bruttoumsatz-Berechnung (Zeiterfassung + Reisekosten)
+- [x] Fixkosten-Integration
+- [x] ZUS (Sozialversicherung) Berechnung (19,52%)
+- [x] Krankenversicherung (9%) Berechnung
+- [x] Steuer (19%) Berechnung
+- [x] Nettogewinn-Berechnung
+- [x] Kundenbericht mit Details-Ansicht (Tagesübersicht)
+- [x] Kundenbericht mit Summary-Ansicht (Zusammenfassung)
+- [x] Berücksichtigung Exclusive/Inclusive Abrechnungsmodelle
+- [x] EUR/PLN Währungsumrechnung mit NBP-Integration (Backend vorbereitet)
+- [x] Tests für Berichtsfunktionen
