@@ -58,3 +58,18 @@
 - [x] Automatische Tagessatz-Berechnung basierend auf Kundenstammdaten
 - [x] Monatsnavigation (vor/zurück)
 - [x] Tagesdetails anzeigen und bearbeiten
+
+## Bugfixes (aktuell)
+- [x] tRPC API gibt HTML statt JSON zurück auf Zeiterfassungsseite (durch Server-Neustart behoben)
+
+## Reisekostenverwaltung
+- [x] Reisekosten-Formular mit allen Kategorien erstellen
+- [x] Distanz-Eingabe mit automatischer km-Pauschalen-Berechnung
+- [x] Transport-Kategorien (Auto, Zug, Flug, Transport)
+- [x] Unterkunft und Verpflegung (Hotel, Gastronomie, Verpflegungspauschale)
+- [x] Treibstoff und sonstige Kosten
+- [x] Belegupload-Funktion mit S3-Integration (Backend vorbereitet)
+- [x] Verknüpfung mit Zeiteinträgen
+- [x] Reisekosten-Übersicht mit Filter und Suche
+- [x] Automatische Berechnung der Gesamtkosten
+- [x] Tests für Reisekostenverwaltung

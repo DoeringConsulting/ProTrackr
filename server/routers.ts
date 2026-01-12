@@ -221,6 +221,39 @@ export const appRouter = router({
     }),
   }),
 
+  // Documents
+  documents: router({ listByExpense: protectedProcedure.input((val: unknown) => {
+      return z.object({ expenseId: z.number() }).parse(val);
+    }).query(async ({ input }) => {
+      const { getDocumentsByExpense } = await import("./db");
+      return await getDocumentsByExpense(input.expenseId);
+    }),
+    create: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        expenseId: z.number().optional(),
+        timeEntryId: z.number().optional(),
+        fileName: z.string(),
+        fileKey: z.string(),
+        fileUrl: z.string(),
+        mimeType: z.string(),
+        fileSize: z.number(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { createDocument } = await import("./db");
+      return await createDocument({
+        ...input,
+        userId: ctx.user.id,
+      });
+    }),
+    delete: protectedProcedure.input((val: unknown) => {
+      return z.object({ id: z.number() }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { deleteDocument } = await import("./db");
+      await deleteDocument(input.id);
+      return { success: true };
+    }),
+  }),
+
   // Fixed costs
   fixedCosts: router({
     list: protectedProcedure.query(async ({ ctx }) => {
