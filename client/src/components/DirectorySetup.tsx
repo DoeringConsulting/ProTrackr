@@ -98,14 +98,14 @@ export function DirectorySetup({ onComplete }: DirectorySetupProps) {
               <pre className="text-xs text-muted-foreground font-mono">
 {`DoringConsulting/
 ├── 2026/
-│   ├── 01-Januar/
-│   │   ├── Rechnungen/
-│   │   ├── Berichte/
-│   │   ├── Reisekosten/
-│   │   └── Belege/
-│   └── 02-Februar/
+│   ├── 01-Styczen/
+│   │   ├── Faktury/
+│   │   ├── Raporty/
+│   │   ├── Koszty_podrozy/
+│   │   └── Dokumenty/
+│   └── 02-Luty/
 │       └── ...
-└── Backups/`}
+└── Kopie_zapasowe/`}
               </pre>
             </div>
 

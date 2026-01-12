@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Building2, Edit, Plus, Trash2 } from "lucide-react";
+import { Archive, Building2, Edit, Plus, Trash2, ArchiveRestore } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -59,6 +59,7 @@ const initialFormData: CustomerFormData = {
 export default function Customers() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<number | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [formData, setFormData] = useState<CustomerFormData>(initialFormData);
 
   const utils = trpc.useUtils();
@@ -96,6 +97,26 @@ export default function Customers() {
     },
     onError: (error) => {
       toast.error("Fehler beim Löschen: " + error.message);
+    },
+  });
+
+  const archiveMutation = trpc.customers.archive.useMutation({
+    onSuccess: () => {
+      utils.customers.list.invalidate();
+      toast.success("Kunde erfolgreich archiviert");
+    },
+    onError: (error) => {
+      toast.error("Fehler beim Archivieren: " + error.message);
+    },
+  });
+
+  const unarchiveMutation = trpc.customers.unarchive.useMutation({
+    onSuccess: () => {
+      utils.customers.list.invalidate();
+      toast.success("Kunde erfolgreich wiederhergestellt");
+    },
+    onError: (error) => {
+      toast.error("Fehler beim Wiederherstellen: " + error.message);
     },
   });
 
@@ -159,10 +180,28 @@ export default function Customers() {
           </div>
           <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
             <DialogTrigger asChild>
-              <Button onClick={() => setIsDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Neuer Kunde
-              </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={showArchived ? "outline" : "default"}
+                      onClick={() => setShowArchived(!showArchived)}
+                    >
+                      {showArchived ? (
+                        <>
+                          <ArchiveRestore className="h-4 w-4 mr-2" />
+                          Aktive anzeigen
+                        </>
+                      ) : (
+                        <>
+                          <Archive className="h-4 w-4 mr-2" />
+                          Archivierte anzeigen
+                        </>
+                      )}
+                    </Button>
+                    <Button onClick={() => setIsDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Neuer Kunde
+                    </Button>
+                  </div>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
@@ -322,7 +361,7 @@ export default function Customers() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {customers.map((customer) => (
+                    {customers.filter(c => showArchived ? c.isArchived === 1 : c.isArchived === 0).map((customer) => (
                       <TableRow key={customer.id}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
@@ -352,12 +391,31 @@ export default function Customers() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {customer.isArchived === 0 ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => archiveMutation.mutate({ id: customer.id })}
+                                title="Archivieren"
+                              >
+                                <Archive className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => unarchiveMutation.mutate({ id: customer.id })}
+                                title="Wiederherstellen"
+                              >
+                                <ArchiveRestore className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(customer)}
+                              size="icon"
+                              onClick={() => deleteMutation.mutate({ id: customer.id })}
                             >
-                              <Edit className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"

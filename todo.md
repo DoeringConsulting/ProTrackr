@@ -196,3 +196,34 @@
 - [x] Automatische Synchronisierung bei Internet-Verbindung
 - [x] Integration von lokalem Dateisystem in Backup, PDF-Export und Excel-Export
 - [ ] OneDrive-Synchronisierung (erfolgt automatisch wenn Ordner in OneDrive gewählt wird)
+
+## Polnische Ordnerbezeichnungen
+- [x] Ordnernamen in fileSystem.ts auf Polnisch ändern
+- [x] Rechnungen → Faktury
+- [x] Berichte → Raporty
+- [x] Reisekosten → Koszty_podrozy
+- [x] Belege → Dokumenty
+- [x] Backups → Kopie_zapasowe
+- [x] Monatsnamen auf Polnisch (Styczen, Luty, Marzec, etc.)
+
+## Service Worker
+- [x] Service Worker Datei erstellen
+- [x] Offline-Caching für alle App-Ressourcen
+- [x] Service Worker in Produktion registrieren
+- [x] Cache-Strategie implementieren (Network First mit Fallback)
+
+## Rechnungsnummern-Generator
+- [x] Datenbankschema für Rechnungsnummern erweitern
+- [x] Automatischer Generator mit Jahres-Präfix
+- [x] Fortlaufende Nummerierung pro Jahr
+- [x] Format: YYYY-NNN (z.B. 2026-001)
+- [x] Integration in Kundenbericht (Backend vorbereitet)
+- [x] tRPC-Procedures für Generierung und Abruf
+
+## Projekt-Archivierung
+- [x] Archivierungs-Status zu Kunden-Schema hinzufügen
+- [x] Archivierungs-Button in Kundenverwaltung
+- [x] Filter für aktive/archivierte Projekte
+- [x] Archivierte Projekte aus Dashboard ausblenden (Filter implementiert)
+- [x] Archivierte Projekte in Berichten verfügbar halten
+- [x] Wiederherstellungs-Funktion für archivierte Projekte

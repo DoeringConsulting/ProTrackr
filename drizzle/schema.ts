@@ -39,12 +39,28 @@ export const customers = mysqlTable("customers", {
   kmRate: int("kmRate").notNull(), // in EUR cents per km
   mealRate: int("mealRate").notNull(), // in EUR cents per day
   costModel: mysqlEnum("costModel", ["exclusive", "inclusive"]).notNull(),
+  isArchived: int("isArchived").default(0).notNull(), // 0 = active, 1 = archived
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = typeof customers.$inferInsert;
+
+/**
+ * Invoice numbers table - auto-generated invoice numbers with year prefix
+ */
+export const invoiceNumbers = mysqlTable("invoiceNumbers", {
+  id: int("id").autoincrement().primaryKey(),
+  year: int("year").notNull(),
+  number: int("number").notNull(), // sequential number within year
+  invoiceNumber: varchar("invoiceNumber", { length: 20 }).notNull().unique(), // formatted: YYYY-NNN
+  customerId: int("customerId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type InvoiceNumber = typeof invoiceNumbers.$inferSelect;
+export type InsertInvoiceNumber = typeof invoiceNumbers.$inferInsert;
 
 /**
  * Time entries table - daily time tracking

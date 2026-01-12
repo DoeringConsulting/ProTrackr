@@ -1,0 +1,1 @@
+ALTER TABLE `customers` ADD `isArchived` int DEFAULT 0 NOT NULL;

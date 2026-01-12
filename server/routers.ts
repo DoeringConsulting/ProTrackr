@@ -3,8 +3,22 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
+import { generateInvoiceNumber, getInvoiceNumbers } from "./db";
 
 export const appRouter = router({
+  invoiceNumbers: router({
+    generate: protectedProcedure
+      .input(z.object({ customerId: z.number() }))
+      .mutation(async ({ input }) => {
+        const invoiceNumber = await generateInvoiceNumber(input.customerId);
+        return { invoiceNumber };
+      }),
+    list: protectedProcedure
+      .input(z.object({ year: z.number().optional() }))
+      .query(async ({ input }) => {
+        return await getInvoiceNumbers(input.year);
+      }),
+  }),
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
@@ -70,6 +84,20 @@ export const appRouter = router({
     }).mutation(async ({ input }) => {
       const { deleteCustomer } = await import("./db");
       await deleteCustomer(input.id);
+      return { success: true };
+    }),
+    archive: protectedProcedure.input((val: unknown) => {
+      return z.object({ id: z.number() }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { archiveCustomer } = await import("./db");
+      await archiveCustomer(input.id);
+      return { success: true };
+    }),
+    unarchive: protectedProcedure.input((val: unknown) => {
+      return z.object({ id: z.number() }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { unarchiveCustomer } = await import("./db");
+      await unarchiveCustomer(input.id);
       return { success: true };
     }),
   }),

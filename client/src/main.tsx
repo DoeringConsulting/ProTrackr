@@ -8,6 +8,7 @@ import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
 import "./i18n";
+import { registerServiceWorker } from "./registerSW";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,9 @@ const trpcClient = trpc.createClient({
     }),
   ],
 });
+
+// Register Service Worker for offline functionality
+registerServiceWorker();
 
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>

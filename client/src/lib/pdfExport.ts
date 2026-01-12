@@ -103,7 +103,7 @@ export async function exportAccountingReportToPDF(
       pdfBlob,
       now.getFullYear(),
       now.getMonth() + 1,
-      'Berichte'
+      'Raporty'
     );
   } catch (error) {
     // Fallback: Download as file
@@ -197,7 +197,7 @@ export async function exportCustomerReportToPDF(
       pdfBlob,
       now.getFullYear(),
       now.getMonth() + 1,
-      'Berichte'
+      'Raporty'
     );
   } catch (error) {
     // Fallback: Download as file

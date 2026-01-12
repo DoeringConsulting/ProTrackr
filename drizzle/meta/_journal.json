@@ -15,6 +15,20 @@
       "when": 1768124117331,
       "tag": "0001_normal_timeslip",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1768256896575,
+      "tag": "0002_wise_texas_twister",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1768257012935,
+      "tag": "0003_small_storm",
+      "breakpoints": true
     }
   ]
 }

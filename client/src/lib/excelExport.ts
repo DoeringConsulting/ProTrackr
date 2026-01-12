@@ -79,7 +79,7 @@ export async function exportAccountingReportToExcel(data: AccountingReportData) 
       blob,
       now.getFullYear(),
       now.getMonth() + 1,
-      'Berichte'
+      'Raporty'
     );
   } catch (error) {
     // Fallback: Download as file
@@ -142,7 +142,7 @@ export async function exportCustomerReportToExcel(data: CustomerReportData) {
       blob,
       now.getFullYear(),
       now.getMonth() + 1,
-      'Berichte'
+      'Raporty'
     );
   } catch (error) {
     // Fallback: Download as file

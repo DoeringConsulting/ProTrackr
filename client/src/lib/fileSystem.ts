@@ -40,7 +40,7 @@ export async function getRootDirectory(): Promise<FileSystemDirectoryHandle> {
 export async function ensureDirectoryStructure(
   year: number,
   month: number,
-  category: 'Rechnungen' | 'Berichte' | 'Reisekosten' | 'Belege' | 'Backups'
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
 ): Promise<FileSystemDirectoryHandle> {
   const root = await getRootDirectory();
   
@@ -52,8 +52,8 @@ export async function ensureDirectoryStructure(
   
   // Create month folder (01-Januar, 02-Februar, etc.)
   const monthNames = [
-    'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+    'Styczen', 'Luty', 'Marzec', 'Kwiecien', 'Maj', 'Czerwiec',
+    'Lipiec', 'Sierpien', 'Wrzesien', 'Pazdziernik', 'Listopad', 'Grudzien'
   ];
   const monthStr = `${month.toString().padStart(2, '0')}-${monthNames[month - 1]}`;
   const monthFolder = await yearFolder.getDirectoryHandle(monthStr, { create: true });
@@ -72,7 +72,7 @@ export async function saveFileToLocal(
   content: Blob | string,
   year: number,
   month: number,
-  category: 'Rechnungen' | 'Berichte' | 'Reisekosten' | 'Belege' | 'Backups'
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
 ): Promise<string> {
   try {
     const categoryFolder = await ensureDirectoryStructure(year, month, category);
@@ -109,7 +109,7 @@ export async function readFileFromLocal(
   filename: string,
   year: number,
   month: number,
-  category: 'Rechnungen' | 'Berichte' | 'Reisekosten' | 'Belege' | 'Backups'
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
 ): Promise<File> {
   try {
     const categoryFolder = await ensureDirectoryStructure(year, month, category);
@@ -145,6 +145,6 @@ export async function saveBackup(filename: string, content: string): Promise<str
     content,
     now.getFullYear(),
     now.getMonth() + 1,
-    'Backups'
+    'Kopie_zapasowe'
   );
 }

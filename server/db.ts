@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, invoiceNumbers, customers } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -287,4 +287,65 @@ export async function deleteDocument(id: number) {
   if (!db) throw new Error("Database not available");
   const { documents } = await import("../drizzle/schema");
   await db.delete(documents).where(eq(documents.id, id));
+}
+
+// Invoice Numbers
+export async function generateInvoiceNumber(customerId: number): Promise<string> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const currentYear = new Date().getFullYear();
+
+  // Get the last invoice number for this year
+  const lastInvoice = await db
+    .select()
+    .from(invoiceNumbers)
+    .where(eq(invoiceNumbers.year, currentYear))
+    .orderBy(desc(invoiceNumbers.number))
+    .limit(1);
+
+  const nextNumber = lastInvoice.length > 0 ? lastInvoice[0]!.number + 1 : 1;
+  const formattedNumber = `${currentYear}-${nextNumber.toString().padStart(3, '0')}`;
+
+  // Insert new invoice number
+  await db.insert(invoiceNumbers).values({
+    year: currentYear,
+    number: nextNumber,
+    invoiceNumber: formattedNumber,
+    customerId,
+  });
+
+  return formattedNumber;
+}
+
+export async function getInvoiceNumbers(year?: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  if (year) {
+    return await db
+      .select()
+      .from(invoiceNumbers)
+      .where(eq(invoiceNumbers.year, year))
+      .orderBy(desc(invoiceNumbers.createdAt));
+  }
+
+  return await db
+    .select()
+    .from(invoiceNumbers)
+    .orderBy(desc(invoiceNumbers.createdAt));
+}
+
+export async function archiveCustomer(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(customers).set({ isArchived: 1 }).where(eq(customers.id, id));
+}
+
+export async function unarchiveCustomer(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(customers).set({ isArchived: 0 }).where(eq(customers.id, id));
 }
