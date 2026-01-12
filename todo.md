@@ -227,3 +227,10 @@
 - [x] Archivierte Projekte aus Dashboard ausblenden (Filter implementiert)
 - [x] Archivierte Projekte in Berichten verfügbar halten
 - [x] Wiederherstellungs-Funktion für archivierte Projekte
+
+## Bugfixes - iframe-Kompatibilität
+- [x] File System Access API durch Download-API ersetzen (iframe-Kompatibilität)
+- [x] Automatische Downloads mit polnischer Ordnerstruktur im Dateinamen
+- [x] OneDrive-Synchronisierung über Browser-Download-Ordner ermöglichen
+- [x] Ordnerauswahl-Dialog entfernen und durch Download-basierte Lösung ersetzen
+- [x] Info-Dialog für Download-basierte Speicherung implementiert

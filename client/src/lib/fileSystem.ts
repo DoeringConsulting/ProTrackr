@@ -1,71 +1,45 @@
-// File System Access API Helper for local file storage
-/// <reference types="@types/wicg-file-system-access" />
-
-let rootDirectoryHandle: FileSystemDirectoryHandle | null = null;
+// Download-based file storage for iframe compatibility
+// Files are automatically downloaded with structured filenames
 
 /**
- * Request user to select root directory for file storage
+ * Generate structured filename with Polish folder structure
  */
-export async function selectRootDirectory(): Promise<FileSystemDirectoryHandle> {
-  try {
-    const handle = await window.showDirectoryPicker({
-      mode: 'readwrite',
-      startIn: 'documents',
-    });
-    
-    rootDirectoryHandle = handle;
-    localStorage.setItem('hasSelectedDirectory', 'true');
-    
-    return handle;
-  } catch (error) {
-    console.error('Failed to select directory:', error);
-    throw error;
-  }
-}
-
-/**
- * Get or request root directory handle
- */
-export async function getRootDirectory(): Promise<FileSystemDirectoryHandle> {
-  if (rootDirectoryHandle) {
-    return rootDirectoryHandle;
-  }
-  
-  return await selectRootDirectory();
-}
-
-/**
- * Create directory structure: Year/Month/Category
- */
-export async function ensureDirectoryStructure(
+function generateStructuredFilename(
+  filename: string,
   year: number,
   month: number,
   category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
-): Promise<FileSystemDirectoryHandle> {
-  const root = await getRootDirectory();
-  
-  // Create DoringConsulting root folder
-  const appRoot = await root.getDirectoryHandle('DoringConsulting', { create: true });
-  
-  // Create year folder
-  const yearFolder = await appRoot.getDirectoryHandle(year.toString(), { create: true });
-  
-  // Create month folder (01-Januar, 02-Februar, etc.)
+): string {
   const monthNames = [
     'Styczen', 'Luty', 'Marzec', 'Kwiecien', 'Maj', 'Czerwiec',
     'Lipiec', 'Sierpien', 'Wrzesien', 'Pazdziernik', 'Listopad', 'Grudzien'
   ];
   const monthStr = `${month.toString().padStart(2, '0')}-${monthNames[month - 1]}`;
-  const monthFolder = await yearFolder.getDirectoryHandle(monthStr, { create: true });
   
-  // Create category folder
-  const categoryFolder = await monthFolder.getDirectoryHandle(category, { create: true });
-  
-  return categoryFolder;
+  // Structure: DoringConsulting_YYYY_MM-Month_Category_filename
+  return `DoringConsulting_${year}_${monthStr}_${category}_${filename}`;
 }
 
 /**
- * Save file to local file system
+ * Download file with structured filename
+ */
+function downloadFile(filename: string, content: Blob | string) {
+  const blob = typeof content === 'string' 
+    ? new Blob([content], { type: 'text/plain' })
+    : content;
+  
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Save file to local storage (via download)
  */
 export async function saveFileToLocal(
   filename: string,
@@ -75,24 +49,13 @@ export async function saveFileToLocal(
   category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
 ): Promise<string> {
   try {
-    const categoryFolder = await ensureDirectoryStructure(year, month, category);
+    const structuredFilename = generateStructuredFilename(filename, year, month, category);
+    downloadFile(structuredFilename, content);
     
-    // Create file
-    const fileHandle = await categoryFolder.getFileHandle(filename, { create: true });
-    const writable = await fileHandle.createWritable();
-    
-    if (typeof content === 'string') {
-      await writable.write(content);
-    } else {
-      await writable.write(content);
-    }
-    
-    await writable.close();
-    
-    // Return relative path
+    // Return structured path for display
     const monthNames = [
-      'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+      'Styczen', 'Luty', 'Marzec', 'Kwiecien', 'Maj', 'Czerwiec',
+      'Lipiec', 'Sierpien', 'Wrzesien', 'Pazdziernik', 'Listopad', 'Grudzien'
     ];
     const monthStr = `${month.toString().padStart(2, '0')}-${monthNames[month - 1]}`;
     return `DoringConsulting/${year}/${monthStr}/${category}/${filename}`;
@@ -100,39 +63,6 @@ export async function saveFileToLocal(
     console.error('Failed to save file:', error);
     throw error;
   }
-}
-
-/**
- * Read file from local file system
- */
-export async function readFileFromLocal(
-  filename: string,
-  year: number,
-  month: number,
-  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
-): Promise<File> {
-  try {
-    const categoryFolder = await ensureDirectoryStructure(year, month, category);
-    const fileHandle = await categoryFolder.getFileHandle(filename);
-    return await fileHandle.getFile();
-  } catch (error) {
-    console.error('Failed to read file:', error);
-    throw error;
-  }
-}
-
-/**
- * Check if File System Access API is supported
- */
-export function isFileSystemAccessSupported(): boolean {
-  return 'showDirectoryPicker' in window;
-}
-
-/**
- * Check if user has already selected a directory
- */
-export function hasSelectedDirectory(): boolean {
-  return localStorage.getItem('hasSelectedDirectory') === 'true';
 }
 
 /**
@@ -147,4 +77,55 @@ export async function saveBackup(filename: string, content: string): Promise<str
     now.getMonth() + 1,
     'Kopie_zapasowe'
   );
+}
+
+/**
+ * Check if File System Access API is supported (always false for iframe compatibility)
+ */
+export function isFileSystemAccessSupported(): boolean {
+  return false; // Always use download-based approach for iframe compatibility
+}
+
+/**
+ * Check if user has already selected a directory (not needed for download approach)
+ */
+export function hasSelectedDirectory(): boolean {
+  return true; // Always return true to skip directory selection
+}
+
+/**
+ * Dummy function for compatibility (not needed for download approach)
+ */
+export async function selectRootDirectory(): Promise<void> {
+  // No-op for download-based approach
+}
+
+/**
+ * Dummy function for compatibility (not needed for download approach)
+ */
+export async function getRootDirectory(): Promise<void> {
+  // No-op for download-based approach
+}
+
+/**
+ * Dummy function for compatibility (not needed for download approach)
+ */
+export async function ensureDirectoryStructure(
+  year: number,
+  month: number,
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
+): Promise<void> {
+  // No-op for download-based approach
+}
+
+/**
+ * Read file from local file system (not supported in download approach)
+ */
+export async function readFileFromLocal(
+  filename: string,
+  year: number,
+  month: number,
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
+): Promise<File> {
+  throw new Error('Reading files is not supported in download-based approach. Files are downloaded to your browser\'s download folder.');
 }

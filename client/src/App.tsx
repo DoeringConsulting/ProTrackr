@@ -45,8 +45,9 @@ function App() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Check if directory setup is needed
-    if (isFileSystemAccessSupported() && !hasSelectedDirectory()) {
+    // Check if user has seen the info screen
+    const hasSeenInfo = localStorage.getItem('hasSeenDownloadInfo');
+    if (!hasSeenInfo) {
       setShowDirectorySetup(true);
     } else {
       setIsReady(true);
@@ -54,6 +55,7 @@ function App() {
   }, []);
 
   const handleDirectorySetupComplete = () => {
+    localStorage.setItem('hasSeenDownloadInfo', 'true');
     setShowDirectorySetup(false);
     setIsReady(true);
   };
