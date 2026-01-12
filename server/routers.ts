@@ -216,6 +216,10 @@ export const appRouter = router({
 
   // Exchange rates
   exchangeRates: router({
+    list: protectedProcedure.query(async () => {
+      const { getExchangeRates } = await import("./db");
+      return await getExchangeRates();
+    }),
     getByDate: protectedProcedure.input((val: unknown) => {
       return z.object({ date: z.string() }).parse(val);
     }).query(async ({ input }) => {
@@ -237,6 +241,41 @@ export const appRouter = router({
       }
       
       return rate;
+    }),
+    fetchRate: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        currencyCode: z.string(),
+        date: z.string(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { createExchangeRate } = await import("./db");
+      const { fetchNBPExchangeRate } = await import("./nbp");
+      
+      const date = new Date(input.date);
+      const nbpRate = await fetchNBPExchangeRate(input.currencyCode, date);
+      
+      return await createExchangeRate({
+        date,
+        currencyPair: `${input.currencyCode}/PLN`,
+        rate: Math.round(nbpRate * 10000),
+        source: "NBP",
+      });
+    }),
+    create: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        date: z.string(),
+        currencyPair: z.string(),
+        rate: z.number(),
+        source: z.string(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { createExchangeRate } = await import("./db");
+      return await createExchangeRate({
+        date: new Date(input.date),
+        currencyPair: input.currencyPair,
+        rate: Math.round(input.rate * 10000),
+        source: input.source,
+      });
     }),
   }),
 

@@ -205,6 +205,14 @@ export async function deleteExpense(id: number) {
 }
 
 // Exchange rate queries
+export async function getExchangeRates() {
+  const db = await getDb();
+  if (!db) return [];
+  const { exchangeRates } = await import("../drizzle/schema");
+  const { desc } = await import("drizzle-orm");
+  return await db.select().from(exchangeRates).orderBy(desc(exchangeRates.date)).limit(50);
+}
+
 export async function getExchangeRateByDate(date: Date) {
   const db = await getDb();
   if (!db) return undefined;

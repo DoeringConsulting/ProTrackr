@@ -19,15 +19,27 @@ export default function Backup() {
       const backup = await createBackupMutation.mutateAsync();
       
       // Download as JSON file
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `backup-${new Date().toISOString().split("T")[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const filename = `backup-${new Date().toISOString().split("T")[0]}.json`;
+      const content = JSON.stringify(backup, null, 2);
+      
+      // Try to save to local file system
+      try {
+        const { saveBackup } = await import("@/lib/fileSystem");
+        await saveBackup(filename, content);
+        toast.success("Backup im lokalen Ordner gespeichert");
+      } catch (error) {
+        // Fallback: Download as file
+        const blob = new Blob([content], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success("Backup heruntergeladen");
+      }
       
       toast.success("Backup erfolgreich erstellt und heruntergeladen");
     } catch (error) {

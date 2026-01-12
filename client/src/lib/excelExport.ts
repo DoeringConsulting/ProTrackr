@@ -31,7 +31,7 @@ interface CustomerReportData {
   grandTotal: number;
 }
 
-export function exportAccountingReportToExcel(data: AccountingReportData) {
+export async function exportAccountingReportToExcel(data: AccountingReportData) {
   const wb = XLSX.utils.book_new();
 
   // Create worksheet data
@@ -68,11 +68,26 @@ export function exportAccountingReportToExcel(data: AccountingReportData) {
   // Generate filename
   const filename = `Buchhaltungsbericht_${data.startDate}_${data.endDate}.xlsx`;
 
-  // Save file
-  XLSX.writeFile(wb, filename);
+  // Try to save to local file system
+  try {
+    const { saveFileToLocal } = await import("@/lib/fileSystem");
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const now = new Date();
+    await saveFileToLocal(
+      filename,
+      blob,
+      now.getFullYear(),
+      now.getMonth() + 1,
+      'Berichte'
+    );
+  } catch (error) {
+    // Fallback: Download as file
+    XLSX.writeFile(wb, filename);
+  }
 }
 
-export function exportCustomerReportToExcel(data: CustomerReportData) {
+export async function exportCustomerReportToExcel(data: CustomerReportData) {
   const wb = XLSX.utils.book_new();
 
   // Summary sheet
@@ -116,6 +131,21 @@ export function exportCustomerReportToExcel(data: CustomerReportData) {
   // Generate filename
   const filename = `Kundenbericht_${data.customerName}_${data.startDate}_${data.endDate}.xlsx`;
 
-  // Save file
-  XLSX.writeFile(wb, filename);
+  // Try to save to local file system
+  try {
+    const { saveFileToLocal } = await import("@/lib/fileSystem");
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const now = new Date();
+    await saveFileToLocal(
+      filename,
+      blob,
+      now.getFullYear(),
+      now.getMonth() + 1,
+      'Berichte'
+    );
+  } catch (error) {
+    // Fallback: Download as file
+    XLSX.writeFile(wb, filename);
+  }
 }

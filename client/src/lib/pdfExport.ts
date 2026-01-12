@@ -32,7 +32,7 @@ interface CustomerData {
   grandTotal: number;
 }
 
-export function exportAccountingReportToPDF(
+export async function exportAccountingReportToPDF(
   data: AccountingData,
   startDate: string,
   endDate: string
@@ -91,10 +91,27 @@ export function exportAccountingReportToPDF(
     );
   }
 
-  doc.save(`Buchhaltungsbericht_${startDate}_${endDate}.pdf`);
+  const filename = `Buchhaltungsbericht_${startDate}_${endDate}.pdf`;
+  
+  // Try to save to local file system
+  try {
+    const { saveFileToLocal } = await import("@/lib/fileSystem");
+    const pdfBlob = doc.output('blob');
+    const now = new Date();
+    await saveFileToLocal(
+      filename,
+      pdfBlob,
+      now.getFullYear(),
+      now.getMonth() + 1,
+      'Berichte'
+    );
+  } catch (error) {
+    // Fallback: Download as file
+    doc.save(filename);
+  }
 }
 
-export function exportCustomerReportToPDF(
+export async function exportCustomerReportToPDF(
   data: CustomerData,
   startDate: string,
   endDate: string
@@ -168,5 +185,22 @@ export function exportCustomerReportToPDF(
     );
   }
 
-  doc.save(`Kundenbericht_${data.customer.projectName}_${startDate}_${endDate}.pdf`);
+  const filename = `Kundenbericht_${data.customer.projectName}_${startDate}_${endDate}.pdf`;
+  
+  // Try to save to local file system
+  try {
+    const { saveFileToLocal } = await import("@/lib/fileSystem");
+    const pdfBlob = doc.output('blob');
+    const now = new Date();
+    await saveFileToLocal(
+      filename,
+      pdfBlob,
+      now.getFullYear(),
+      now.getMonth() + 1,
+      'Berichte'
+    );
+  } catch (error) {
+    // Fallback: Download as file
+    doc.save(filename);
+  }
 }

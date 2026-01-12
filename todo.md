@@ -183,3 +183,16 @@
 - [x] Download-Funktion für Backup-Dateien
 - [x] Automatisches Backup mit Zeitplan (via Cron-Job)
 - [x] Wiederherstellungs-Funktion (Import)
+
+## Vollständige Offline-Funktionalität
+- [x] Service Worker für Offline-Caching implementieren (vorbereitet)
+- [x] IndexedDB für lokale Datenspeicherung einrichten
+- [x] Lokales Dateisystem für Belege und Reports (File System Access API)
+- [x] Ordnerstruktur: Jahr/Monat/Kategorie (Rechnungen, Berichte, Reisekosten, Belege, Backups)
+- [x] Synchronisierungslogik für Online/Offline-Modus
+- [x] Offline-Indikator in UI anzeigen
+- [x] Ordnerauswahl-Dialog beim ersten Start
+- [x] Manuelle Währungsaktualisierung im Offline-Modus (Wechselkurs-Verwaltungsseite)
+- [x] Automatische Synchronisierung bei Internet-Verbindung
+- [x] Integration von lokalem Dateisystem in Backup, PDF-Export und Excel-Export
+- [ ] OneDrive-Synchronisierung (erfolgt automatisch wenn Ordner in OneDrive gewählt wird)
