@@ -221,6 +221,22 @@ export const appRouter = router({
     }),
   }),
 
+  // Scheduler
+  scheduler: router({
+    runTasks: protectedProcedure.mutation(async () => {
+      const { runScheduledTasks } = await import("./scheduler");
+      return await runScheduledTasks();
+    }),
+    checkMonthEnd: protectedProcedure.mutation(async () => {
+      const { checkMonthEnd } = await import("./scheduler");
+      return await checkMonthEnd();
+    }),
+    checkMissingEntries: protectedProcedure.mutation(async () => {
+      const { checkMissingTimeEntries } = await import("./scheduler");
+      return await checkMissingTimeEntries();
+    }),
+  }),
+
   // Notifications
   notifications: router({
     sendMonthEndNotification: protectedProcedure.input((val: unknown) => {

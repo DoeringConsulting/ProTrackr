@@ -140,3 +140,26 @@
 - [x] Excel-Parser für Reisekostendaten (vorbereitet)
 - [x] Validierung und Fehlerbehandlung
 - [x] Fortschrittsanzeige während Import
+
+## Automatische Benachrichtigungen
+- [x] Scheduler-Service für automatische Benachrichtigungen erstellen
+- [x] Monatliche Benachrichtigung am Monatsende
+- [x] Wöchentliche Prüfung auf fehlende Zeiterfassungen
+- [x] Benachrichtigung für anstehende Abrechnungsfristen
+- [x] Konfiguration für Benachrichtigungsintervalle
+
+## Mehrsprachigkeit
+- [x] i18n-Bibliothek integrieren
+- [x] Deutsche Übersetzungen erstellen
+- [x] Polnische Übersetzungen erstellen
+- [x] Sprachumschaltung in UI implementieren
+- [x] Automatische Spracherkennung basierend auf Browser-Einstellungen
+- [x] Berichte in gewählter Sprache generieren (vorbereitet)
+
+## Mobile Optimierung
+- [x] Touch-Targets vergrößern (min. 44x44px)
+- [x] Formulare für Touch-Bedienung optimieren
+- [x] Kalenderansicht für mobile Geräte anpassen
+- [x] Navigation für Smartphones optimieren
+- [x] Responsive Breakpoints überprüfen und anpassen
+- [x] Touch-Gesten für häufige Aktionen implementieren
