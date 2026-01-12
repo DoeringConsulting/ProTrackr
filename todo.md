@@ -88,3 +88,13 @@
 - [x] Berücksichtigung Exclusive/Inclusive Abrechnungsmodelle
 - [x] EUR/PLN Währungsumrechnung mit NBP-Integration (Backend vorbereitet)
 - [x] Tests für Berichtsfunktionen
+
+## Fixkosten-Verwaltung
+- [x] Fixkosten-Verwaltungsseite erstellen
+- [x] Tabelle mit allen Fixkosten-Posten
+- [x] Formular zum Hinzufügen neuer Fixkosten
+- [x] Bearbeiten-Funktion für bestehende Fixkosten
+- [x] Löschen-Funktion mit Bestätigung
+- [x] Kategorien: Auto, Telefon, Software, Buchhaltung, Sonstige
+- [x] Integration in Navigation (Settings-Bereich)
+- [x] Tests für Fixkosten-Verwaltung
