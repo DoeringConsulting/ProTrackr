@@ -27,6 +27,7 @@ export default function Reports() {
   const { data: customers = [] } = trpc.customers.list.useQuery();
   const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({ startDate, endDate });
   const { data: fixedCosts = [] } = trpc.fixedCosts.list.useQuery();
+  const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
   // Calculate accounting report data
   const calculateAccountingReport = () => {
@@ -48,18 +49,25 @@ export default function Reports() {
     // Variable costs (travel expenses)
     const variableCosts = totalExpenses;
 
-    // ZUS (Social security) - example calculation
-    const zusRate = 0.1952; // 19.52% for self-employed in Poland
-    const zus = Math.round(grossRevenue * zusRate);
+    // Use configured tax settings or defaults
+    const zusRate = taxSettings?.zusType === "percentage" ? taxSettings.zusValue / 10000 : 0.1952;
+    const zusFixed = taxSettings?.zusType === "fixed" ? taxSettings.zusValue : 0;
+    const healthRate = taxSettings?.healthInsuranceType === "percentage" ? taxSettings.healthInsuranceValue / 10000 : 0.09;
+    const healthFixed = taxSettings?.healthInsuranceType === "fixed" ? taxSettings.healthInsuranceValue : 0;
+    const taxRate = taxSettings?.taxType === "percentage" ? taxSettings.taxValue / 10000 : 0.19;
+    const taxFixed = taxSettings?.taxType === "fixed" ? taxSettings.taxValue : 0;
+    
+    // ZUS (Social security)
+    const zus = taxSettings?.zusType === "fixed" ? zusFixed : Math.round(grossRevenue * zusRate);
 
-    // Health insurance (9%)
-    const healthInsurance = Math.round(grossRevenue * 0.09);
+    // Health insurance
+    const healthInsurance = taxSettings?.healthInsuranceType === "fixed" ? healthFixed : Math.round(grossRevenue * healthRate);
 
     // Tax base
     const taxBase = grossRevenue - totalFixedCosts - variableCosts - zus;
 
-    // Tax (19%)
-    const tax = Math.round(Math.max(0, taxBase) * 0.19);
+    // Tax
+    const tax = taxSettings?.taxType === "fixed" ? taxFixed : Math.round(Math.max(0, taxBase) * taxRate);
 
     // Net profit
     const netProfit = grossRevenue - totalFixedCosts - variableCosts - zus - healthInsurance - tax;

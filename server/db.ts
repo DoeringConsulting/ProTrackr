@@ -374,3 +374,31 @@ export async function unarchiveCustomer(id: number) {
 
   await db.update(customers).set({ isArchived: 0 }).where(eq(customers.id, id));
 }
+
+// Tax settings queries
+export async function getTaxSettings(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { taxSettings } = await import("../drizzle/schema");
+  const result = await db.select().from(taxSettings).where(eq(taxSettings.userId, userId)).limit(1);
+  return result[0] || null;
+}
+
+export async function upsertTaxSettings(userId: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { taxSettings } = await import("../drizzle/schema");
+  
+  // Check if settings exist
+  const existing = await db.select().from(taxSettings).where(eq(taxSettings.userId, userId)).limit(1);
+  
+  if (existing.length > 0) {
+    // Update existing settings
+    await db.update(taxSettings).set(data).where(eq(taxSettings.userId, userId));
+    return await getTaxSettings(userId);
+  } else {
+    // Insert new settings
+    await db.insert(taxSettings).values({ userId, ...data });
+    return await getTaxSettings(userId);
+  }
+}

@@ -250,3 +250,13 @@
 - [x] Bug behoben: Wechselkurs wird jetzt angezeigt bei manueller Datumsänderung
 - [x] useEffect hinzugefügt um Daten bei Datums-/Währungsänderung neu zu laden
 - [x] currentRate-Berechnung funktioniert jetzt dynamisch
+
+## Bugfixes - Kunden & Steuern
+- [x] "Neuer Kunde" Button öffnet kein Dialog-Fenster - Pop-up für Kundenstammdatenanlage implementiert
+- [x] Steuerberechnung flexibel gestalten - variable Prozentsätze oder feste Beträge ermöglicht
+- [x] Steuerkonfiguration in Einstellungen implementiert
+- [x] taxSettings Tabelle in Datenbank erstellt
+- [x] Backend-Funktionen für Steuereinstellungen implementiert
+- [x] Steuereinstellungen-Seite mit UI erstellt
+- [x] Dashboard und Reports verwenden konfigurierbare Steuersätze
+- [x] Tests für taxSettings Router geschrieben und bestanden

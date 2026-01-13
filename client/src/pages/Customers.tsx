@@ -178,31 +178,30 @@ export default function Customers() {
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Kundenverwaltung</h1>
             <p className="text-muted-foreground mt-2">Verwalten Sie Ihre Kunden und Projekte</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
-            <DialogTrigger asChild>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={showArchived ? "outline" : "default"}
-                      onClick={() => setShowArchived(!showArchived)}
-                    >
-                      {showArchived ? (
-                        <>
-                          <ArchiveRestore className="h-4 w-4 mr-2" />
-                          Aktive anzeigen
-                        </>
-                      ) : (
-                        <>
-                          <Archive className="h-4 w-4 mr-2" />
-                          Archivierte anzeigen
-                        </>
-                      )}
-                    </Button>
-                    <Button onClick={() => setIsDialogOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Neuer Kunde
-                    </Button>
-                  </div>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Button
+              variant={showArchived ? "outline" : "default"}
+              onClick={() => setShowArchived(!showArchived)}
+            >
+              {showArchived ? (
+                <>
+                  <ArchiveRestore className="h-4 w-4 mr-2" />
+                  Aktive anzeigen
+                </>
+              ) : (
+                <>
+                  <Archive className="h-4 w-4 mr-2" />
+                  Archivierte anzeigen
+                </>
+              )}
+            </Button>
+            <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Neuer Kunde
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
@@ -334,7 +333,8 @@ export default function Customers() {
                 </DialogFooter>
               </form>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         </div>
 
         <Card>

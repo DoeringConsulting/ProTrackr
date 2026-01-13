@@ -8,6 +8,7 @@ export default function Dashboard() {
   const { data: customers, isLoading: customersLoading } = trpc.customers.list.useQuery();
   const { data: timeEntries, isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({});
   const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
+  const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
   // Calculate monthly revenue data for the last 6 months
   const getMonthlyRevenueData = () => {
@@ -45,9 +46,18 @@ export default function Dashboard() {
              entryDate.getFullYear() === now.getFullYear();
     }).reduce((sum, entry) => sum + entry.calculatedAmount, 0) || 0;
     
-    const zus = Math.round(thisMonthRevenue * 0.1952);
-    const healthInsurance = Math.round(thisMonthRevenue * 0.09);
-    const tax = Math.round(Math.max(0, thisMonthRevenue - totalFixed - zus) * 0.19);
+    // Use configured tax settings or defaults
+    const zusRate = taxSettings?.zusType === "percentage" ? taxSettings.zusValue / 10000 : 0.1952;
+    const zusFixed = taxSettings?.zusType === "fixed" ? taxSettings.zusValue : 0;
+    const healthRate = taxSettings?.healthInsuranceType === "percentage" ? taxSettings.healthInsuranceValue / 10000 : 0.09;
+    const healthFixed = taxSettings?.healthInsuranceType === "fixed" ? taxSettings.healthInsuranceValue : 0;
+    const taxRate = taxSettings?.taxType === "percentage" ? taxSettings.taxValue / 10000 : 0.19;
+    const taxFixed = taxSettings?.taxType === "fixed" ? taxSettings.taxValue : 0;
+    
+    const zus = taxSettings?.zusType === "fixed" ? zusFixed : Math.round(thisMonthRevenue * zusRate);
+    const healthInsurance = taxSettings?.healthInsuranceType === "fixed" ? healthFixed : Math.round(thisMonthRevenue * healthRate);
+    const taxBase = Math.max(0, thisMonthRevenue - totalFixed - zus);
+    const tax = taxSettings?.taxType === "fixed" ? taxFixed : Math.round(taxBase * taxRate);
     
     return [
       { name: 'Fixkosten', value: Math.round(totalFixed / 100), color: '#3b82f6' },

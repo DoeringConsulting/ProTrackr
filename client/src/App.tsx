@@ -18,6 +18,7 @@ import Import from "@/pages/Import";
 import ExchangeRates from "@/pages/ExchangeRates";
 import Backup from "./pages/Backup";
 import Settings from "./pages/Settings";
+import TaxSettings from "./pages/TaxSettings";
 
 function Router() {
   return (
@@ -28,7 +29,9 @@ function Router() {
       <Route path="/expenses" component={Expenses} />      <Route path={"/reports"} component={Reports} />
         <Route path="/import" component={Import} />
       <Route path="/exchange-rates" component={ExchangeRates} />
-      <Route path={"/backup"} component={Backup} />      <Route path="/settings" component={Settings} />
+      <Route path={"/backup"} component={Backup} />
+      <Route path="/settings" component={Settings} />
+      <Route path="/tax-settings" component={TaxSettings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

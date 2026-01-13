@@ -439,6 +439,26 @@ export const appRouter = router({
     }),
   }),
 
+  // Tax settings
+  taxSettings: router({    get: protectedProcedure.query(async ({ ctx }) => {
+      const { getTaxSettings } = await import("./db");
+      return await getTaxSettings(ctx.user.id);
+    }),
+    upsert: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        zusType: z.enum(["percentage", "fixed"]),
+        zusValue: z.number(),
+        healthInsuranceType: z.enum(["percentage", "fixed"]),
+        healthInsuranceValue: z.number(),
+        taxType: z.enum(["percentage", "fixed"]),
+        taxValue: z.number(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { upsertTaxSettings } = await import("./db");
+      return await upsertTaxSettings(ctx.user.id, input);
+    }),
+  }),
+
   // Backup
   backup: router({
     create: protectedProcedure.mutation(async () => {

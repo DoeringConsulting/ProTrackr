@@ -167,3 +167,22 @@ export const fixedCosts = mysqlTable("fixedCosts", {
 
 export type FixedCost = typeof fixedCosts.$inferSelect;
 export type InsertFixedCost = typeof fixedCosts.$inferInsert;
+
+/**
+ * Tax settings table - configurable tax rates and fixed amounts
+ */
+export const taxSettings = mysqlTable("taxSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(), // one setting per user
+  zusType: mysqlEnum("zusType", ["percentage", "fixed"]).notNull().default("percentage"),
+  zusValue: int("zusValue").notNull(), // percentage in basis points (1952 = 19.52%) or fixed amount in PLN cents
+  healthInsuranceType: mysqlEnum("healthInsuranceType", ["percentage", "fixed"]).notNull().default("percentage"),
+  healthInsuranceValue: int("healthInsuranceValue").notNull(), // percentage in basis points (900 = 9%) or fixed amount in PLN cents
+  taxType: mysqlEnum("taxType", ["percentage", "fixed"]).notNull().default("percentage"),
+  taxValue: int("taxValue").notNull(), // percentage in basis points (1900 = 19%) or fixed amount in PLN cents
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TaxSetting = typeof taxSettings.$inferSelect;
+export type InsertTaxSetting = typeof taxSettings.$inferInsert;
