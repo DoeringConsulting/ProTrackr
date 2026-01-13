@@ -172,6 +172,39 @@ export const appRouter = router({
       await deleteTimeEntry(input.id);
       return { success: true };
     }),
+    bulkCreate: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        sourceId: z.number(),
+        targetDates: z.array(z.string()),
+      }).parse(val);
+    }).mutation(async ({ input, ctx }) => {
+      const { getTimeEntryById, createTimeEntry } = await import("./db");
+      const sourceEntry = await getTimeEntryById(input.sourceId);
+      
+      if (!sourceEntry) {
+        throw new Error("Source entry not found");
+      }
+      
+      const createdEntries = [];
+      for (const targetDate of input.targetDates) {
+        const newEntry = await createTimeEntry({
+          userId: ctx.user.id,
+          customerId: sourceEntry.customerId,
+          date: new Date(targetDate),
+          weekday: new Date(targetDate).toLocaleDateString('de-DE', { weekday: 'long' }),
+          projectName: sourceEntry.projectName,
+          entryType: sourceEntry.entryType,
+          description: sourceEntry.description,
+          hours: sourceEntry.hours,
+          rate: sourceEntry.rate,
+          calculatedAmount: sourceEntry.calculatedAmount,
+          manDays: sourceEntry.manDays,
+        });
+        createdEntries.push(newEntry);
+      }
+      
+      return { success: true, count: createdEntries.length };
+    }),
   }),
 
   // Expenses

@@ -124,7 +124,9 @@ export async function deleteCustomer(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { customers } = await import("../drizzle/schema");
-  await db.delete(customers).where(eq(customers.id, id));
+  const result = await db.delete(customers).where(eq(customers.id, id));
+  console.log('[deleteCustomer] Deleted customer:', id, 'Result:', result);
+  return result;
 }
 
 // Time entry queries
@@ -171,7 +173,9 @@ export async function deleteTimeEntry(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { timeEntries } = await import("../drizzle/schema");
-  await db.delete(timeEntries).where(eq(timeEntries.id, id));
+  const result = await db.delete(timeEntries).where(eq(timeEntries.id, id));
+  console.log('[deleteTimeEntry] Deleted time entry:', id, 'Result:', result);
+  return result;
 }
 
 // Expense queries
@@ -201,7 +205,9 @@ export async function deleteExpense(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { expenses } = await import("../drizzle/schema");
-  await db.delete(expenses).where(eq(expenses.id, id));
+  const result = await db.delete(expenses).where(eq(expenses.id, id));
+  console.log('[deleteExpense] Deleted expense:', id, 'Result:', result);
+  return result;
 }
 
 // Exchange rate queries

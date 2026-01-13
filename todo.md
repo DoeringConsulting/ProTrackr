@@ -270,3 +270,18 @@
 - [x] handleDialogOpenChange und handleDialogClose getrennt für korrekte Dialog-Steuerung
 - [x] Datums-Vergleich ohne UTC-Konvertierung für korrekte Anzeige der Einträge
 - [ ] Löschungen werden bestätigt aber nicht ausgeführt - Backend-Funktionen korrekt, möglicherweise Caching-Problem in Produktion
+
+## Kritischer Bugfix - Löschfunktion
+- [x] Löschungen werden visuell bestätigt aber nicht in Datenbank ausgeführt - behoben
+- [x] Backend-Löschfunktionen mit Logging erweitert
+- [x] Optimistic Updates für Löschungen implementiert (Customers, TimeEntries)
+- [x] onMutate/onError/onSettled Pattern für robuste Löschungen
+- [x] Rollback-Mechanismus bei Fehlern implementiert
+
+## Feature - Bulk-Zeiterfassung
+- [x] Funktion zum Kopieren von Zeiteinträgen auf mehrere Tage implementiert
+- [x] UI mit Kalender-Auswahl für mehrere Tage
+- [x] Backend-Endpoint bulkCreate für Bulk-Erstellung von Zeiteinträgen
+- [x] Copy-Button bei jedem Zeiteintrag (erscheint bei Hover)
+- [x] Dialog zur Auswahl der Ziel-Tage mit visueller Bestätigung
+- [x] Validierung und Fehlerbehandlung für Bulk-Operationen

@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -69,6 +69,9 @@ export default function TimeTracking() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<number | null>(null);
   const [formData, setFormData] = useState<TimeEntryFormData>(initialFormData);
+  const [isBulkCopyDialogOpen, setIsBulkCopyDialogOpen] = useState(false);
+  const [bulkCopySourceId, setBulkCopySourceId] = useState<number | null>(null);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
 
   const utils = trpc.useUtils();
   const { data: customers } = trpc.customers.list.useQuery();
@@ -107,12 +110,53 @@ export default function TimeTracking() {
   });
 
   const deleteMutation = trpc.timeEntries.delete.useMutation({
+    onMutate: async (variables) => {
+      // Get query params
+      const queryParams = {
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+      };
+      
+      // Cancel outgoing refetches
+      await utils.timeEntries.list.cancel(queryParams);
+      
+      // Snapshot previous value
+      const previousEntries = utils.timeEntries.list.getData(queryParams);
+      
+      // Optimistically update
+      utils.timeEntries.list.setData(queryParams, (old) => {
+        if (!old) return old;
+        return old.filter(e => e.id !== variables.id);
+      });
+      
+      return { previousEntries, queryParams };
+    },
     onSuccess: () => {
-      utils.timeEntries.list.invalidate();
       toast.success("Zeiteintrag erfolgreich gelöscht");
     },
-    onError: (error) => {
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousEntries && context?.queryParams) {
+        utils.timeEntries.list.setData(context.queryParams, context.previousEntries);
+      }
       toast.error("Fehler beim Löschen: " + error.message);
+    },
+    onSettled: () => {
+      // Always refetch after error or success
+      utils.timeEntries.list.invalidate();
+    },
+  });
+
+  const bulkCreateMutation = trpc.timeEntries.bulkCreate.useMutation({
+    onSuccess: (data) => {
+      utils.timeEntries.list.invalidate();
+      setIsBulkCopyDialogOpen(false);
+      setBulkCopySourceId(null);
+      setSelectedDates([]);
+      toast.success(`${data.count} Zeiteinträge erfolgreich kopiert`);
+    },
+    onError: (error) => {
+      toast.error("Fehler beim Kopieren: " + error.message);
     },
   });
 
@@ -122,6 +166,33 @@ export default function TimeTracking() {
 
   const handleNextMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const handleBulkCopy = (entryId: number) => {
+    setBulkCopySourceId(entryId);
+    setSelectedDates([]);
+    setIsBulkCopyDialogOpen(true);
+  };
+
+  const handleBulkCopySubmit = () => {
+    if (!bulkCopySourceId || selectedDates.length === 0) {
+      toast.error("Bitte wählen Sie mindestens einen Tag aus");
+      return;
+    }
+    bulkCreateMutation.mutate({
+      sourceId: bulkCopySourceId,
+      targetDates: selectedDates,
+    });
+  };
+
+  const toggleDateSelection = (dateStr: string) => {
+    setSelectedDates(prev => {
+      if (prev.includes(dateStr)) {
+        return prev.filter(d => d !== dateStr);
+      } else {
+        return [...prev, dateStr];
+      }
+    });
   };
 
   const handleAddEntry = (date: Date) => {
@@ -349,12 +420,27 @@ export default function TimeTracking() {
                         {entries.map((entry) => (
                           <div
                             key={entry.id}
-                            className={`text-xs p-1 rounded border cursor-pointer ${WORK_TYPE_COLORS[entry.entryType as keyof typeof WORK_TYPE_COLORS]}`}
-                            onClick={() => handleEditEntry(entry)}
+                            className={`text-xs p-1 rounded border group ${WORK_TYPE_COLORS[entry.entryType as keyof typeof WORK_TYPE_COLORS]}`}
                           >
-                            <div className="font-medium truncate">{entry.projectName}</div>
-                            <div className="text-[10px]">
-                              {Math.floor(entry.hours / 60)}:{(entry.hours % 60).toString().padStart(2, '0')}h
+                            <div className="flex items-start justify-between gap-1">
+                              <div className="flex-1 cursor-pointer" onClick={() => handleEditEntry(entry)}>
+                                <div className="font-medium truncate">{entry.projectName}</div>
+                                <div className="text-[10px]">
+                                  {Math.floor(entry.hours / 60)}:{(entry.hours % 60).toString().padStart(2, '0')}h
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleBulkCopy(entry.id);
+                                }}
+                                title="Auf mehrere Tage kopieren"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
                             </div>
                           </div>
                         ))}
@@ -493,6 +579,72 @@ export default function TimeTracking() {
                 </Button>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Copy Dialog */}
+        <Dialog open={isBulkCopyDialogOpen} onOpenChange={setIsBulkCopyDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Zeiteintrag auf mehrere Tage kopieren</DialogTitle>
+              <DialogDescription>
+                Wählen Sie die Tage aus, auf die der Zeiteintrag kopiert werden soll.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="grid grid-cols-7 gap-2">
+                {/* Weekday headers */}
+                {WEEKDAYS_DE.map((day, idx) => (
+                  <div key={idx} className="text-center font-semibold text-sm p-2 text-muted-foreground">
+                    {day}
+                  </div>
+                ))}
+                
+                {/* Calendar days */}
+                {days.map((day, idx) => {
+                  if (!day) {
+                    return <div key={`empty-${idx}`} className="min-h-[60px]" />;
+                  }
+                  
+                  const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+                  const isSelected = selectedDates.includes(dateStr);
+                  const isToday = day.toDateString() === new Date().toDateString();
+                  
+                  return (
+                    <div
+                      key={idx}
+                      className={`min-h-[60px] p-2 border rounded-lg cursor-pointer transition-colors ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : isToday
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-muted"
+                      }`}
+                      onClick={() => toggleDateSelection(dateStr)}
+                    >
+                      <div className="text-center">
+                        <span className="text-sm font-medium">{day.getDate()}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 text-sm text-muted-foreground">
+                {selectedDates.length} Tag(e) ausgewählt
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsBulkCopyDialogOpen(false)}>
+                Abbrechen
+              </Button>
+              <Button 
+                type="button" 
+                onClick={handleBulkCopySubmit}
+                disabled={selectedDates.length === 0 || bulkCreateMutation.isPending}
+              >
+                {bulkCreateMutation.isPending ? "Kopiere..." : `Auf ${selectedDates.length} Tag(e) kopieren`}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

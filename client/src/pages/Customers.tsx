@@ -91,12 +91,34 @@ export default function Customers() {
   });
 
   const deleteMutation = trpc.customers.delete.useMutation({
+    onMutate: async (variables) => {
+      // Cancel outgoing refetches
+      await utils.customers.list.cancel();
+      
+      // Snapshot previous value
+      const previousCustomers = utils.customers.list.getData();
+      
+      // Optimistically update
+      utils.customers.list.setData(undefined, (old) => {
+        if (!old) return old;
+        return old.filter(c => c.id !== variables.id);
+      });
+      
+      return { previousCustomers };
+    },
     onSuccess: () => {
-      utils.customers.list.invalidate();
       toast.success("Kunde erfolgreich gelöscht");
     },
-    onError: (error) => {
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousCustomers) {
+        utils.customers.list.setData(undefined, context.previousCustomers);
+      }
       toast.error("Fehler beim Löschen: " + error.message);
+    },
+    onSettled: () => {
+      // Always refetch after error or success
+      utils.customers.list.invalidate();
     },
   });
 
