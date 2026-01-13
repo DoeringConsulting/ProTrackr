@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,15 +15,6 @@ const CURRENCIES = [
   { code: "USD", name: "US Dollar" },
   { code: "CHF", name: "Schweizer Franken" },
   { code: "GBP", name: "Britisches Pfund" },
-  { code: "AUD", name: "Australischer Dollar" },
-  { code: "CAD", name: "Kanadischer Dollar" },
-  { code: "CZK", name: "Tschechische Krone" },
-  { code: "DKK", name: "Dänische Krone" },
-  { code: "HUF", name: "Ungarischer Forint" },
-  { code: "JPY", name: "Japanischer Yen" },
-  { code: "NOK", name: "Norwegische Krone" },
-  { code: "SEK", name: "Schwedische Krone" },
-  { code: "XDR", name: "Sonderziehungsrechte" },
 ];
 
 export default function ExchangeRates() {
@@ -35,6 +26,11 @@ export default function ExchangeRates() {
   const { data: rates, refetch } = trpc.exchangeRates.list.useQuery();
   const fetchRateMutation = trpc.exchangeRates.fetchRate.useMutation();
   const createRateMutation = trpc.exchangeRates.create.useMutation();
+
+  // Reload rates when date or currency changes
+  useEffect(() => {
+    refetch();
+  }, [selectedDate, selectedCurrency]);
 
   // Get current rate for selected currency and date
   const currentRate = rates?.find(

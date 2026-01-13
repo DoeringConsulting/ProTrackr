@@ -244,3 +244,9 @@
 ## Features - Wechselkurse
 - [x] Aktuellen Wechselkurs neben Währungsauswahl anzeigen
 - [x] Kurs-Anzeige mit Quelle (NBP/Manuell) Badge
+
+## Anpassungen - Wechselkurse
+- [x] Währungsliste auf 4 Währungen reduziert (EUR, USD, CHF, GBP)
+- [x] Bug behoben: Wechselkurs wird jetzt angezeigt bei manueller Datumsänderung
+- [x] useEffect hinzugefügt um Daten bei Datums-/Währungsänderung neu zu laden
+- [x] currentRate-Berechnung funktioniert jetzt dynamisch
