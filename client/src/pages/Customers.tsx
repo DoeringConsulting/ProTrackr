@@ -164,6 +164,14 @@ export default function Customers() {
     }
   };
 
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingCustomer(null);
+      setFormData(initialFormData);
+    }
+  };
+
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setEditingCustomer(null);
@@ -195,7 +203,7 @@ export default function Customers() {
                 </>
               )}
             </Button>
-            <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
+            <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />

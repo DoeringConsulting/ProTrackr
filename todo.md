@@ -260,3 +260,13 @@
 - [x] Steuereinstellungen-Seite mit UI erstellt
 - [x] Dashboard und Reports verwenden konfigurierbare Steuersätze
 - [x] Tests für taxSettings Router geschrieben und bestanden
+
+## Kritische Bugfixes - Produktionsversion
+- [x] "Neuer Kunde" Button öffnet kein Fenster - Dialog Handler korrigiert
+- [x] Zeiteinträge werden am falschen Tag gespeichert - Timezone-Konvertierung behoben
+- [x] Datumsfeld in Zeiterfassung zeigt falsches Datum - entfernt
+- [x] Datumsfeld in Zeiterfassung entfernt - Datum wird in DialogDescription angezeigt
+- [x] Timezone/UTC-Konvertierung bei Datumsspeicherung korrigiert - lokale Zeitzone verwendet
+- [x] handleDialogOpenChange und handleDialogClose getrennt für korrekte Dialog-Steuerung
+- [x] Datums-Vergleich ohne UTC-Konvertierung für korrekte Anzeige der Einträge
+- [ ] Löschungen werden bestätigt aber nicht ausgeführt - Backend-Funktionen korrekt, möglicherweise Caching-Problem in Produktion

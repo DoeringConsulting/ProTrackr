@@ -126,9 +126,15 @@ export default function TimeTracking() {
 
   const handleAddEntry = (date: Date) => {
     const selectedCustomer = customers?.[0];
+    // Format date as YYYY-MM-DD in local timezone to avoid UTC conversion issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
     setFormData({
       ...initialFormData,
-      date: date.toISOString().split('T')[0],
+      date: dateStr,
       customerId: selectedCustomer?.id || null,
       projectName: selectedCustomer?.projectName || "",
     });
@@ -141,9 +147,12 @@ export default function TimeTracking() {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     
+    // Parse date string directly to avoid timezone conversion
+    const entryDate = typeof entry.date === 'string' ? entry.date.split('T')[0] : new Date(entry.date).toISOString().split('T')[0];
+    
     setFormData({
       customerId: entry.customerId,
-      date: new Date(entry.date).toISOString().split('T')[0],
+      date: entryDate,
       projectName: entry.projectName,
       entryType: entry.entryType,
       hours: hours.toString(),
@@ -230,9 +239,16 @@ export default function TimeTracking() {
 
   const getEntriesForDate = (date: Date) => {
     if (!timeEntries) return [];
-    const dateStr = date.toISOString().split('T')[0];
+    // Format date in local timezone
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
     return timeEntries.filter(entry => {
-      const entryDate = new Date(entry.date).toISOString().split('T')[0];
+      // Compare date strings directly without timezone conversion
+      const entryDateStr = entry.date as any;
+      const entryDate = typeof entryDateStr === 'string' ? entryDateStr.split('T')[0] : new Date(entryDateStr).toISOString().split('T')[0];
       return entryDate === dateStr;
     });
   };
@@ -363,47 +379,35 @@ export default function TimeTracking() {
                 {editingEntry ? "Zeiteintrag bearbeiten" : "Neuer Zeiteintrag"}
               </DialogTitle>
               <DialogDescription>
-                Erfassen Sie Ihre Arbeitszeit für den ausgewählten Tag
+                Erfassen Sie Ihre Arbeitszeit für {formData.date ? new Date(formData.date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'den ausgewählten Tag'}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
               <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Datum *</Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="customer">Kunde/Projekt *</Label>
-                    <Select
-                      value={formData.customerId?.toString() || ""}
-                      onValueChange={(value) => {
-                        const customer = customers?.find(c => c.id === parseInt(value));
-                        setFormData({
-                          ...formData,
-                          customerId: parseInt(value),
-                          projectName: customer?.projectName || "",
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Kunde wählen" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {customers?.map((customer) => (
-                          <SelectItem key={customer.id} value={customer.id.toString()}>
-                            {customer.projectName} ({customer.provider})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="customer">Kunde/Projekt *</Label>
+                  <Select
+                    value={formData.customerId?.toString() || ""}
+                    onValueChange={(value) => {
+                      const customer = customers?.find(c => c.id === parseInt(value));
+                      setFormData({
+                        ...formData,
+                        customerId: parseInt(value),
+                        projectName: customer?.projectName || "",
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Kunde wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers?.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id.toString()}>
+                          {customer.projectName} ({customer.provider})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
