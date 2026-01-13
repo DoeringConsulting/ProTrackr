@@ -285,3 +285,11 @@
 - [x] Copy-Button bei jedem Zeiteintrag (erscheint bei Hover)
 - [x] Dialog zur Auswahl der Ziel-Tage mit visueller Bestätigung
 - [x] Validierung und Fehlerbehandlung für Bulk-Operationen
+
+## Feature - Ordnerstruktur Erweiterung
+- [x] Neuen Ordner für Überweisungsbestätigungen/Zahlungseingänge hinzugefügt
+- [x] Polnischen Ordnernamen definiert: "Potwierdzenia_przelewow"
+- [x] Dateinamen-Logik für Zahlungsbestätigungen implementiert
+- [x] fileSystem.ts erweitert um neuen Ordner-Typ
+- [x] Kategorie in allen Funktionen hinzugefügt (generateStructuredFilename, saveFileToLocal, ensureDirectoryStructure, readFileFromLocal)
+- [x] TypeScript-Typen aktualisiert

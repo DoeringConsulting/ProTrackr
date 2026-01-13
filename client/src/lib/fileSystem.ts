@@ -8,7 +8,7 @@ function generateStructuredFilename(
   filename: string,
   year: number,
   month: number,
-  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Potwierdzenia_przelewow' | 'Dokumenty' | 'Kopie_zapasowe'
 ): string {
   const monthNames = [
     'Styczen', 'Luty', 'Marzec', 'Kwiecien', 'Maj', 'Czerwiec',
@@ -46,7 +46,7 @@ export async function saveFileToLocal(
   content: Blob | string,
   year: number,
   month: number,
-  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Potwierdzenia_przelewow' | 'Dokumenty' | 'Kopie_zapasowe'
 ): Promise<string> {
   try {
     const structuredFilename = generateStructuredFilename(filename, year, month, category);
@@ -113,7 +113,7 @@ export async function getRootDirectory(): Promise<void> {
 export async function ensureDirectoryStructure(
   year: number,
   month: number,
-  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Potwierdzenia_przelewow' | 'Dokumenty' | 'Kopie_zapasowe'
 ): Promise<void> {
   // No-op for download-based approach
 }
@@ -125,7 +125,7 @@ export async function readFileFromLocal(
   filename: string,
   year: number,
   month: number,
-  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Dokumenty' | 'Kopie_zapasowe'
+  category: 'Faktury' | 'Raporty' | 'Koszty_podrozy' | 'Potwierdzenia_przelewow' | 'Dokumenty' | 'Kopie_zapasowe'
 ): Promise<File> {
   throw new Error('Reading files is not supported in download-based approach. Files are downloaded to your browser\'s download folder.');
 }
