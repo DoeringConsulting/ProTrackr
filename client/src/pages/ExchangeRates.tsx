@@ -36,6 +36,12 @@ export default function ExchangeRates() {
   const fetchRateMutation = trpc.exchangeRates.fetchRate.useMutation();
   const createRateMutation = trpc.exchangeRates.create.useMutation();
 
+  // Get current rate for selected currency and date
+  const currentRate = rates?.find(
+    (r: any) => r.currencyPair === `${selectedCurrency}/PLN` && 
+    new Date(r.date).toDateString() === new Date(selectedDate).toDateString()
+  );
+
   const handleFetchRate = async () => {
     if (!isOnline) {
       toast.error("Keine Internetverbindung. Bitte geben Sie den Wechselkurs manuell ein.");
@@ -119,6 +125,18 @@ export default function ExchangeRates() {
                   ))}
                 </SelectContent>
               </Select>
+              {currentRate && (
+                <p className="text-sm text-muted-foreground">
+                  Aktueller Kurs: <span className="font-semibold text-foreground">{(currentRate.rate / 10000).toFixed(4)} PLN</span>
+                  <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                    currentRate.source === "manual" 
+                      ? "bg-yellow-100 text-yellow-800" 
+                      : "bg-green-100 text-green-800"
+                  }`}>
+                    {currentRate.source === "manual" ? "Manuell" : "NBP"}
+                  </span>
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -167,6 +185,18 @@ export default function ExchangeRates() {
                   ))}
                 </SelectContent>
               </Select>
+              {currentRate && (
+                <p className="text-sm text-muted-foreground">
+                  Aktueller Kurs: <span className="font-semibold text-foreground">{(currentRate.rate / 10000).toFixed(4)} PLN</span>
+                  <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                    currentRate.source === "manual" 
+                      ? "bg-yellow-100 text-yellow-800" 
+                      : "bg-green-100 text-green-800"
+                  }`}>
+                    {currentRate.source === "manual" ? "Manuell" : "NBP"}
+                  </span>
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

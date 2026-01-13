@@ -234,3 +234,13 @@
 - [x] OneDrive-Synchronisierung über Browser-Download-Ordner ermöglichen
 - [x] Ordnerauswahl-Dialog entfernen und durch Download-basierte Lösung ersetzen
 - [x] Info-Dialog für Download-basierte Speicherung implementiert
+
+## Bugfixes - Wechselkurse
+- [x] SQL INSERT-Fehler in exchangeRates Tabelle beheben (Upsert-Logik implementieren)
+- [x] Datenbankschema für exchangeRates überprüfen und korrigieren
+- [x] Unique constraint auf date+currencyPair statt nur date
+- [x] Upsert-Logik in createExchangeRate implementiert
+
+## Features - Wechselkurse
+- [x] Aktuellen Wechselkurs neben Währungsauswahl anzeigen
+- [x] Kurs-Anzeige mit Quelle (NBP/Manuell) Badge

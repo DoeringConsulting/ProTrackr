@@ -213,11 +213,17 @@ export async function getExchangeRates() {
   return await db.select().from(exchangeRates).orderBy(desc(exchangeRates.date)).limit(50);
 }
 
-export async function getExchangeRateByDate(date: Date) {
+export async function getExchangeRateByDate(date: Date, currencyPair: string = "EUR/PLN") {
   const db = await getDb();
   if (!db) return undefined;
   const { exchangeRates } = await import("../drizzle/schema");
-  const result = await db.select().from(exchangeRates).where(eq(exchangeRates.date, date)).limit(1);
+  const { and } = await import("drizzle-orm");
+  const result = await db.select().from(exchangeRates)
+    .where(and(
+      eq(exchangeRates.date, date),
+      eq(exchangeRates.currencyPair, currencyPair)
+    ))
+    .limit(1);
   return result[0];
 }
 
@@ -225,8 +231,27 @@ export async function createExchangeRate(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { exchangeRates } = await import("../drizzle/schema");
-  const result = await db.insert(exchangeRates).values(data);
-  return result;
+  const { and } = await import("drizzle-orm");
+  
+  // Check if exchange rate already exists for this date and currency pair
+  const existing = await db.select().from(exchangeRates)
+    .where(and(
+      eq(exchangeRates.date, data.date),
+      eq(exchangeRates.currencyPair, data.currencyPair)
+    ))
+    .limit(1);
+  
+  if (existing.length > 0) {
+    // Update existing rate
+    await db.update(exchangeRates)
+      .set({ rate: data.rate, source: data.source })
+      .where(eq(exchangeRates.id, existing[0].id));
+    return existing[0];
+  } else {
+    // Insert new rate
+    const result = await db.insert(exchangeRates).values(data);
+    return result;
+  }
 }
 
 // Fixed cost queries

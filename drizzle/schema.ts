@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, uniqueIndex } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -139,12 +139,15 @@ export type InsertDocument = typeof documents.$inferInsert;
  */
 export const exchangeRates = mysqlTable("exchangeRates", {
   id: int("id").autoincrement().primaryKey(),
-  date: timestamp("date").notNull().unique(),
+  date: timestamp("date").notNull(),
   currencyPair: varchar("currencyPair", { length: 10 }).notNull().default("EUR/PLN"),
   rate: int("rate").notNull(), // stored as ten-thousandths (e.g., 42369 = 4.2369)
   source: varchar("source", { length: 50 }).notNull().default("NBP"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Unique constraint on date + currencyPair combination to allow multiple currencies per date
+  dateAndCurrencyUnique: uniqueIndex("date_currency_unique").on(table.date, table.currencyPair),
+}));
 
 export type ExchangeRate = typeof exchangeRates.$inferSelect;
 export type InsertExchangeRate = typeof exchangeRates.$inferInsert;
