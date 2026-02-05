@@ -19,17 +19,29 @@ import ExchangeRates from "@/pages/ExchangeRates";
 import Backup from "./pages/Backup";
 import Settings from "./pages/Settings";
 import TaxSettings from "./pages/TaxSettings";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function Router() {
   return (
     <Switch>
+      {/* Auth routes - no layout */}
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
+      
+      {/* App routes - with DashboardLayout */}
       <Route path="/" component={Dashboard} />
       <Route path="/customers" component={Customers} />
       <Route path="/time-tracking" component={TimeTracking} />
-      <Route path="/expenses" component={Expenses} />      <Route path={"/reports"} component={Reports} />
-        <Route path="/import" component={Import} />
+      <Route path="/expenses" component={Expenses} />
+      <Route path="/reports" component={Reports} />
+      <Route path="/import" component={Import} />
       <Route path="/exchange-rates" component={ExchangeRates} />
-      <Route path={"/backup"} component={Backup} />
+      <Route path="/backup" component={Backup} />
       <Route path="/settings" component={Settings} />
       <Route path="/tax-settings" component={TaxSettings} />
       <Route path="/404" component={NotFound} />

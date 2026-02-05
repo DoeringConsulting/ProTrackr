@@ -2,12 +2,16 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import session from "express-session";
+import helmet from "helmet";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleCronRequest } from "../cronEndpoint";
+import passport from "../auth/passport";
+import authRouter from "../auth/authRouter";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,11 +35,39 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  
+  // Security headers
+  app.use(helmet({
+    contentSecurityPolicy: false, // Disable CSP for development
+    crossOriginEmbedderPolicy: false,
+  }));
+  
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  
+  // Session configuration
+  app.use(
+    session({
+      secret: process.env.JWT_SECRET || "fallback-secret-change-in-production",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      },
+    })
+  );
+  
+  // Passport initialization
+  app.use(passport.initialize());
+  app.use(passport.session());
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  
+  // Passport.js auth routes
+  app.use("/api/auth", authRouter);
   // Cron endpoint for scheduled tasks
   app.post("/api/cron/run-scheduler", handleCronRequest);
   // tRPC API

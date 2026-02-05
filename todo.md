@@ -293,3 +293,86 @@
 - [x] fileSystem.ts erweitert um neuen Ordner-Typ
 - [x] Kategorie in allen Funktionen hinzugefügt (generateStructuredFilename, saveFileToLocal, ensureDirectoryStructure, readFileFromLocal)
 - [x] TypeScript-Typen aktualisiert
+
+## Migration zu PHP-basierter Web-App für hoste.pl
+- [ ] Anforderungsanalyse für hoste.pl-Hosting durchgeführt
+- [ ] PHP-Technologie-Stack definieren (Laravel/Symfony vs. Vanilla PHP)
+- [ ] Datenbank bleibt MySQL (bereits kompatibel)
+- [ ] Backend von Node.js/Express zu PHP migrieren
+- [ ] REST-API in PHP erstellen (ersetzt tRPC)
+- [ ] Frontend von React zu PHP-Template-Engine oder behalten
+- [ ] Datei-Upload zu Server-Storage (hoste.pl) migrieren
+
+## Authentifizierungs-System
+- [ ] Open-Source Auth-Lösung auswählen (NextAuth.js, Passport.js, oder Auth.js)
+- [ ] Login/Registrierungs-Seite erstellen
+- [ ] Passwort-Hashing mit bcrypt/argon2
+- [ ] Session-Management implementieren
+- [ ] Passwort-Vergessen-Funktion mit E-Mail-Verifizierung
+- [ ] Passwort-Reset-Flow implementieren
+- [ ] 2FA (Two-Factor Authentication) optional hinzufügen
+- [ ] Rate-Limiting für Login-Versuche
+- [ ] HTTPS-Erzwingung konfigurieren
+
+## hoste.pl Deployment-Vorbereitung
+- [ ] Node.js-Version für hoste.pl prüfen
+- [ ] Build-Prozess für Produktion optimieren
+- [ ] Umgebungsvariablen-Konfiguration
+- [ ] Datenbank-Setup auf hoste.pl
+- [ ] SSL-Zertifikat-Konfiguration
+- [ ] Deployment-Dokumentation erstellen
+- [ ] Backup-Strategie für Produktion
+
+## Electron Desktop-App Entwicklung
+- [ ] Electron-Projekt-Struktur erstellen
+- [ ] Main Process implementieren (electron/main.ts)
+- [ ] Preload Script mit Context Isolation (electron/preload.ts)
+- [ ] IPC-Handler für Frontend-Backend-Kommunikation
+- [ ] SQLite-Datenbank-Integration (statt MySQL)
+- [ ] Dateisystem-Management mit Ordner-Auswahl-Dialog
+- [ ] Polnische Ordnerstruktur automatisch erstellen
+- [ ] OneDrive-Integration testen
+- [ ] React-Frontend anpassen für Electron
+- [ ] PDF/Excel-Export für Desktop
+- [ ] Auto-Update-Mechanismus (electron-updater)
+- [ ] Build-Konfiguration (electron-builder)
+- [ ] GitHub Repository erstellen
+- [ ] GitHub Actions für automatischen Build einrichten
+- [ ] Portable .exe Build-Workflow
+- [ ] Installer .exe Build-Workflow
+- [ ] Testing auf Windows 10/11
+- [ ] Dokumentation (README, BUILD, USER_GUIDE)
+
+## Node.js Hosting-Recherche
+- [ ] Polnische Hoster mit Node.js-Support recherchieren
+- [ ] Preise und Features vergleichen
+- [ ] SSL-Zertifikate prüfen
+- [ ] MySQL-Datenbank-Support prüfen
+- [ ] Deployment-Prozess dokumentieren
+
+## Authentifizierungs-System (Passport.js)
+- [x] Passport.js und Dependencies installieren
+- [x] User-Tabelle in Datenbank erweitern (email, password_hash, reset_token)
+- [x] Passport Local Strategy konfigurieren
+- [x] Session-Management mit express-session
+- [x] Login-Endpoint erstellen
+- [x] Registrierungs-Endpoint erstellen
+- [x] Logout-Endpoint erstellen
+- [x] Password-Reset-Endpoint erstellen
+- [ ] E-Mail-Versand für Password-Reset (TODO: Nodemailer konfigurieren)
+- [x] Login/Registrierung UI-Seiten erstellen
+- [x] Passwort-Vergessen UI erstellen
+- [x] Routen für Auth-Seiten in App.tsx hinzugefügt
+- [ ] Protected Routes implementieren (Auth-Check in DashboardLayout)
+- [x] Rate-Limiting für Login-Versuche
+- [x] CSRF-Protection (via Helmet)
+- [x] Security-Headers (Helmet.js)
+- [ ] Testing der Auth-Funktionen
+
+## Hosting-Recherche Polen
+- [x] Hostinger Polen recherchiert (Node.js VPS)
+- [x] OVHcloud Polen recherchiert (Web PaaS)
+- [x] home.pl recherchiert (VPS Linux)
+- [x] Preisvergleich erstellt
+- [x] Empfehlungen dokumentiert
+- [x] Dokumentation in Markdown erstellt

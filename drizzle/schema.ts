@@ -11,10 +11,18 @@ export const users = mysqlTable("users", {
    * Use this for relations between tables.
    */
   id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. Optional for Passport.js users. */
+  openId: varchar("openId", { length: 64 }).unique(),
   name: text("name"),
-  email: varchar("email", { length: 320 }),
+  email: varchar("email", { length: 320 }).unique(),
+  /** Password hash for Passport.js local authentication. NULL for OAuth users. */
+  passwordHash: varchar("passwordHash", { length: 255 }),
+  /** Password reset token for password recovery. */
+  resetToken: varchar("resetToken", { length: 255 }),
+  /** Password reset token expiration timestamp. */
+  resetTokenExpiry: timestamp("resetTokenExpiry"),
+  /** Email verification status. */
+  emailVerified: int("emailVerified").default(0).notNull(), // 0 = not verified, 1 = verified
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
