@@ -498,3 +498,16 @@
 - [x] Tastenkombination Strg+K / Cmd+K (useKeyboardShortcut-Hook)
 - [x] Omnibox in DashboardLayout integriert
 - [x] Mobile-Optimierung (Dialog responsive)
+
+## Aufgabe 13: Sichtbares Such-Icon im Header
+- [x] Such-Icon (Search) in DashboardLayout-Header hinzugefügt
+- [x] Icon öffnet Omnibox-Dialog (setOmniboxOpen)
+- [x] Tooltip "Suchen (Strg+K)" hinzugefügt
+- [x] Mobile-Optimierung (nur auf Mobile sichtbar im## Aufgabe 14: Reisekosten-Seite mit Analyse-Funktionen umbauen
+- [x] Expenses.tsx komplett umgebaut (Analyse statt Formular)
+- [x] Diagramme: Säulendiagramm und Kuchendiagramm nach Kostenart
+- [x] Filter: Monat, Jahr, Projektlaufzeit, Durchschnitt
+- [x] Summary Cards: Gesamtkosten, Durchschnitt pro Tag, Anzahl Einträge
+- [x] Tabelle mit allen Reisekosten
+- [x] Backend: expenses.list-Endpunkt erstellt
+- [x] Backend: getAllExpenses-Funktion in db.ts hinzugefügt (Join mit timeEntries)nen (nur über Kalender)

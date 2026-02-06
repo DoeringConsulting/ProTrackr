@@ -3,7 +3,9 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { generateInvoiceNumber, getInvoiceNumbers } from "./db";
+import { generateInvoiceNumber, getInvoiceNumbers, getDb } from "./db";
+import { sql } from "drizzle-orm";
+import { expenses } from "../drizzle/schema";
 
 export const appRouter = router({
   invoiceNumbers: router({
@@ -209,6 +211,15 @@ export const appRouter = router({
 
   // Expenses
   expenses: router({
+    list: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+      }).parse(val);
+    }).query(async ({ input }) => {
+      const { getAllExpenses } = await import("./db");
+      return await getAllExpenses(input.startDate, input.endDate);
+    }),
     listByTimeEntry: protectedProcedure.input((val: unknown) => {
       return z.object({ timeEntryId: z.number() }).parse(val);
     }).query(async ({ input }) => {

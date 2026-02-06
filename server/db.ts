@@ -179,6 +179,34 @@ export async function deleteTimeEntry(id: number) {
 }
 
 // Expense queries
+export async function getAllExpenses(startDate?: string, endDate?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const { expenses, timeEntries } = await import("../drizzle/schema");
+  const { and, gte, lte } = await import("drizzle-orm");
+  
+  const conditions = [];
+  if (startDate) conditions.push(gte(timeEntries.date, new Date(startDate)));
+  if (endDate) conditions.push(lte(timeEntries.date, new Date(endDate)));
+  
+  const result = await db
+    .select({
+      id: expenses.id,
+      timeEntryId: expenses.timeEntryId,
+      category: expenses.category,
+      amount: expenses.amount,
+      currency: expenses.currency,
+      comment: expenses.comment,
+      createdAt: expenses.createdAt,
+      date: timeEntries.date,
+    })
+    .from(expenses)
+    .innerJoin(timeEntries, eq(expenses.timeEntryId, timeEntries.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  
+  return result;
+}
+
 export async function getExpensesByTimeEntry(timeEntryId: number) {
   const db = await getDb();
   if (!db) return [];

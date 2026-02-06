@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Clock, Receipt, FileText, Settings, Upload, Database, DollarSign, Calculator } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Clock, Receipt, FileText, Settings, Upload, Database, DollarSign, Calculator, Search } from "lucide-react";
 import NavigationButtons from "@/components/NavigationButtons";
 import Omnibox from "@/components/Omnibox";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
@@ -273,6 +273,15 @@ function DashboardLayoutContent({
                 </div>
               </div>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => setOmniboxOpen(true)}
+              title="Suchen (Strg+K)"
+            >
+              <Search className="h-5 w-5" />
+            </Button>
           </div>
         )}
         <main className="flex-1 p-4">
