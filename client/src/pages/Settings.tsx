@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { Plus, Pencil, Trash2, Euro } from "lucide-react";
+import { Plus, Pencil, Trash2, Euro, CheckSquare, Square } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +25,7 @@ export default function Settings() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedCost, setSelectedCost] = useState<any>(null);
+  const [selectedCosts, setSelectedCosts] = useState<Set<number>>(new Set());
 
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
@@ -168,9 +169,26 @@ export default function Settings() {
                   Alle monatlichen Fixkosten für die Buchhaltung
                 </CardDescription>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-muted-foreground">Gesamt</p>
-                <p className="text-2xl font-bold">{formatCurrency(totalFixedCosts)}</p>
+              <div className="flex items-center gap-4">
+                {selectedCosts.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm(`${selectedCosts.size} Fixkosten wirklich löschen?`)) {
+                        selectedCosts.forEach(id => deleteMutation.mutate({ id }));
+                        setSelectedCosts(new Set());
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    {selectedCosts.size} löschen
+                  </Button>
+                )}
+                <div className="text-right">
+                  <p className="text-sm text-muted-foreground">Gesamt</p>
+                  <p className="text-2xl font-bold">{formatCurrency(totalFixedCosts)}</p>
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -197,6 +215,22 @@ export default function Settings() {
                     <TableHead>Kategorie</TableHead>
                     <TableHead>Beschreibung</TableHead>
                     <TableHead className="text-right">Betrag (monatlich)</TableHead>
+                    <TableHead className="w-12">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => {
+                          if (selectedCosts.size === fixedCosts.length) {
+                            setSelectedCosts(new Set());
+                          } else {
+                            setSelectedCosts(new Set(fixedCosts.map(c => c.id)));
+                          }
+                        }}
+                      >
+                        {selectedCosts.size > 0 ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                      </Button>
+                    </TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -209,6 +243,24 @@ export default function Settings() {
                       </TableCell>
                       <TableCell className="text-right font-semibold">
                         {formatCurrency(cost.amount)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            const newSelected = new Set(selectedCosts);
+                            if (newSelected.has(cost.id)) {
+                              newSelected.delete(cost.id);
+                            } else {
+                              newSelected.add(cost.id);
+                            }
+                            setSelectedCosts(newSelected);
+                          }}
+                        >
+                          {selectedCosts.has(cost.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                        </Button>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">

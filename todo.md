@@ -468,3 +468,22 @@
 - [x] HMR-Konfiguration mit Port 3000 angepasst
 - [x] Server neu gestartet
 - [ ] Browser-Cache leeren und testen (Benutzer muss Strg+Shift+R drücken)
+
+## Aufgabe 9: Massen-Auswahl mit Checkboxen
+- [x] Kunden-Tabelle: Checkbox-Spalte zwischen Modell und Aktionen hinzugefügt
+- [x] Einstellungen/Fixkosten: Checkbox-Spalte hinzugefügt
+- [x] State für ausgewählte Einträge verwaltet (selectedCustomers, selectedCosts)
+- [x] Massen-Archivierung-Button hinzugefügt (nur Kunden)
+- [x] Massen-Löschung-Button hinzugefügt (beide Seiten)
+- [x] "Alle auswählen"-Checkbox im Tabellen-Header (CheckSquare/Square Icons)
+
+## Aufgabe 10: Sidebar in Wechselkurse integrieren
+- [x] DashboardLayout zur ExchangeRates-Seite hinzugefügt
+- [x] Layout-Struktur angepasst (space-y-6)
+
+## Aufgabe 11: Navigation-Buttons auf allen Seiten
+- [x] NavigationButtons-Komponente erstellt
+- [x] "Zurück"-Button mit ArrowLeft-Icon und Tooltip
+- [x] "Startseite"-Button mit Home-Icon und Tooltip
+- [x] Buttons in DashboardLayout integriert (erscheinen auf allen Seiten)
+- [x] Tooltips mit Infotext implementiert

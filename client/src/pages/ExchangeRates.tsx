@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,7 +81,8 @@ export default function ExchangeRates() {
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <DashboardLayout>
+      <div className="space-y-6">
       <h1 className="text-3xl font-bold mb-6">Wechselkurse</h1>
 
       {!isOnline && (
@@ -275,6 +277,7 @@ export default function ExchangeRates() {
           </Table>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

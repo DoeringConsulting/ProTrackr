@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Archive, Building2, Edit, Plus, Trash2, ArchiveRestore, TrendingUp } from "lucide-react";
+import { Archive, Building2, Edit, Plus, Trash2, ArchiveRestore, TrendingUp, CheckSquare, Square } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -62,6 +62,7 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState<number | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [formData, setFormData] = useState<CustomerFormData>(initialFormData);
+  const [selectedCustomers, setSelectedCustomers] = useState<Set<number>>(new Set());
 
   const utils = trpc.useUtils();
   const { data: customers, isLoading } = trpc.customers.list.useQuery();
@@ -368,8 +369,40 @@ export default function Customers() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Kunden</CardTitle>
-            <CardDescription>Übersicht aller Kunden und Projekte</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Kunden</CardTitle>
+                <CardDescription>Übersicht aller Kunden und Projekte</CardDescription>
+              </div>
+              {selectedCustomers.size > 0 && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      selectedCustomers.forEach(id => archiveMutation.mutate({ id }));
+                      setSelectedCustomers(new Set());
+                    }}
+                  >
+                    <Archive className="h-4 w-4 mr-2" />
+                    {selectedCustomers.size} archivieren
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm(`${selectedCustomers.size} Kunden wirklich löschen?`)) {
+                        selectedCustomers.forEach(id => deleteMutation.mutate({ id }));
+                        setSelectedCustomers(new Set());
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    {selectedCustomers.size} löschen
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -386,6 +419,23 @@ export default function Customers() {
                       <TableHead className="text-right">Onsite</TableHead>
                       <TableHead className="text-right">Remote</TableHead>
                       <TableHead>Modell</TableHead>
+                      <TableHead className="w-12">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            const visibleCustomers = customers.filter(c => showArchived ? c.isArchived === 1 : c.isArchived === 0);
+                            if (selectedCustomers.size === visibleCustomers.length) {
+                              setSelectedCustomers(new Set());
+                            } else {
+                              setSelectedCustomers(new Set(visibleCustomers.map(c => c.id)));
+                            }
+                          }}
+                        >
+                          {selectedCustomers.size > 0 ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                        </Button>
+                      </TableHead>
                       <TableHead className="text-right">Aktionen</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -417,6 +467,24 @@ export default function Customers() {
                           >
                             {customer.costModel === "exclusive" ? "Exclusive" : "Inclusive"}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              const newSelected = new Set(selectedCustomers);
+                              if (newSelected.has(customer.id)) {
+                                newSelected.delete(customer.id);
+                              } else {
+                                newSelected.add(customer.id);
+                              }
+                              setSelectedCustomers(newSelected);
+                            }}
+                          >
+                            {selectedCustomers.has(customer.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                          </Button>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
