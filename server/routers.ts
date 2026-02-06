@@ -236,6 +236,34 @@ export const appRouter = router({
       const { createExpense } = await import("./db");
       return await createExpense(input);
     }),
+    createBatch: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        timeEntryId: z.number(),
+        expenses: z.array(z.object({
+          category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]),
+          distance: z.number().optional(),
+          rate: z.number().optional(),
+          amount: z.number(),
+          comment: z.string().optional(),
+          ticketNumber: z.string().optional(),
+          flightNumber: z.string().optional(),
+          departureTime: z.string().optional(),
+          arrivalTime: z.string().optional(),
+          checkInDate: z.string().optional(),
+          checkOutDate: z.string().optional(),
+          liters: z.number().optional(),
+          pricePerLiter: z.number().optional(),
+        })),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { createExpense } = await import("./db");
+      const results = [];
+      for (const expense of input.expenses) {
+        const result = await createExpense({ timeEntryId: input.timeEntryId, ...expense });
+        results.push(result);
+      }
+      return { success: true, count: results.length };
+    }),
     update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),

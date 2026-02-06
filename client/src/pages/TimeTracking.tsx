@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import ExpenseForm from "@/components/ExpenseForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { ChevronLeft, ChevronRight, Plus, Copy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Copy, Receipt } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -72,6 +73,8 @@ export default function TimeTracking() {
   const [isBulkCopyDialogOpen, setIsBulkCopyDialogOpen] = useState(false);
   const [bulkCopySourceId, setBulkCopySourceId] = useState<number | null>(null);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [isExpensesDialogOpen, setIsExpensesDialogOpen] = useState(false);
+  const [selectedExpenseDate, setSelectedExpenseDate] = useState<Date | null>(null);
 
   const utils = trpc.useUtils();
   const { data: customers } = trpc.customers.list.useQuery();
@@ -210,6 +213,11 @@ export default function TimeTracking() {
       projectName: selectedCustomer?.projectName || "",
     });
     setIsDialogOpen(true);
+  };
+
+  const handleAddExpenses = (date: Date) => {
+    setSelectedExpenseDate(date);
+    setIsExpensesDialogOpen(true);
   };
 
   const handleEditEntry = (entry: any) => {
@@ -413,14 +421,26 @@ export default function TimeTracking() {
                             </span>
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => handleAddEntry(day)}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleAddEntry(day)}
+                            title="Zeiteintrag hinzufügen"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleAddExpenses(day)}
+                            title="Reisekosten hinzufügen"
+                          >
+                            <Receipt className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                       
                       <div className="space-y-1">
@@ -652,6 +672,30 @@ export default function TimeTracking() {
                 {bulkCreateMutation.isPending ? "Kopiere..." : `Auf ${selectedDates.length} Tag(e) kopieren`}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reisekosten Dialog */}
+        <Dialog open={isExpensesDialogOpen} onOpenChange={setIsExpensesDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Reisekosten hinzufügen</DialogTitle>
+              <DialogDescription>
+                Fügen Sie Reisekosten für den ausgewählten Tag hinzu. Sie können mehrere Kostenarten gleichzeitig erfassen.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedExpenseDate && (
+              <ExpenseForm
+                date={selectedExpenseDate}
+                onSubmit={(expenses) => {
+                  // TODO: Implement expense submission
+                  console.log('Expenses:', expenses);
+                  toast.success(`${expenses.length} Reisekosten erfasst`);
+                  setIsExpensesDialogOpen(false);
+                }}
+                onCancel={() => setIsExpensesDialogOpen(false)}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </div>

@@ -405,3 +405,17 @@
 - [x] Frontend: Design-Optimierung (Card-basierte untereinander gelegte Zeilen)
 - [x] Mobile-Optimierung (responsive Grid-Layout)
 - [x] ExpenseForm-Komponente vollständig implementiert (Integration in Expenses.tsx erfolgt bei Bedarf)
+
+## Aufgabe 4: Reisekosten-Template umbauen (tagesbasiert)
+- [x] Excel-Screenshot analysiert (Spalten: AutoCar, Train, Flight, Transport, Per diem, Lump sum, Other, Hotel, Food, Fuel)
+- [x] TimeTracking: Reisekosten-Button (Receipt-Icon) pro Tag hinzugefügt
+- [x] Dialog öffnet sich für spezifischen Tag (handleAddExpenses)
+- [x] ExpenseForm: Startet mit einer Kostenart-Auswahl
+- [x] "Weitere Kostenart"-Button fügt neue Zeile hinzu
+- [x] Mehrere Kostenarten werden untereinander als Cards dargestellt
+- [x] Backend: Batch-Create-Endpoint für mehrere Expenses pro Tag (expenses.createBatch)
+- [x] ExpenseForm: Datum-Header hinzugefügt
+- [x] Dialog in TimeTracking.tsx integrieren (ExpenseForm importiert und eingebunden)
+- [ ] Expense-Submission-Logik implementieren (createBatch-Mutation)
+- [ ] Anzeige aller Reisekosten eines Tages in TimeTracking
+- [x] Mobile-Optimierung (bereits in ExpenseForm vorhanden)

@@ -42,12 +42,13 @@ const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
 };
 
 interface ExpenseFormProps {
-  timeEntryId: number;
+  date: Date;
+  timeEntryId?: number; // Optional: Falls bereits ein TimeEntry existiert
   onSubmit: (expenses: ExpenseItem[]) => void;
   onCancel: () => void;
 }
 
-export default function ExpenseForm({ timeEntryId, onSubmit, onCancel }: ExpenseFormProps) {
+export default function ExpenseForm({ date, timeEntryId, onSubmit, onCancel }: ExpenseFormProps) {
   const [expenses, setExpenses] = useState<ExpenseItem[]>([
     {
       id: crypto.randomUUID(),
@@ -306,8 +307,21 @@ export default function ExpenseForm({ timeEntryId, onSubmit, onCancel }: Expense
     }
   };
 
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat('de-DE', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    }).format(date);
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="text-center pb-4 border-b">
+        <h3 className="text-lg font-semibold">Reisekosten</h3>
+        <p className="text-sm text-muted-foreground">{formatDate(date)}</p>
+      </div>
       <div className="space-y-4">
         {expenses.map((expense, index) => (
           <Card key={expense.id} className="relative">
