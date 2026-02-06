@@ -24,6 +24,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import { LayoutDashboard, LogOut, PanelLeft, Users, Clock, Receipt, FileText, Settings, Upload, Database, DollarSign, Calculator, Search } from "lucide-react";
 import NavigationButtons from "@/components/NavigationButtons";
 import Omnibox from "@/components/Omnibox";
+import { SearchBar } from "@/components/SearchBar";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -261,6 +262,14 @@ function DashboardLayoutContent({
       </div>
 
       <SidebarInset>
+        {/* Desktop Header with SearchBar */}
+        {!isMobile && (
+          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+            <SearchBar />
+          </div>
+        )}
+        
+        {/* Mobile Header */}
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">

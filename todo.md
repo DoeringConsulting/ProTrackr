@@ -511,3 +511,11 @@
 - [x] Tabelle mit allen Reisekosten
 - [x] Backend: expenses.list-Endpunkt erstellt
 - [x] Backend: getAllExpenses-Funktion in db.ts hinzugefügt (Join mit timeEntries)nen (nur über Kalender)
+
+## Aufgabe 15: Permanent sichtbares Suchfeld mit Live-Dropdown
+- [x] SearchBar-Komponente mit Input-Feld erstellt
+- [x] Live-Ergebnis-Dropdown unter dem Suchfeld
+- [x] Kategorisierte Ergebnisse (Kunden, Zeiteinträge, Reisekosten)
+- [x] Click-to-Navigate zu Ergebnissen
+- [x] SearchBar in DashboardLayout-Header integriert (nur Desktop)
+- [x] Responsive Design (Mobile: Such-Icon, Desktop: Suchfeld)
