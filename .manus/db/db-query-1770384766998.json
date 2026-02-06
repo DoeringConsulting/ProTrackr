@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE customers \nADD COLUMN street VARCHAR(255),\nADD COLUMN postalCode VARCHAR(20),\nADD COLUMN city VARCHAR(100),\nADD COLUMN country VARCHAR(100),\nADD COLUMN vatId VARCHAR(50);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute ALTER TABLE customers \nADD COLUMN street VARCHAR(255),\nADD COLUMN postalCode VARCHAR(20),\nADD COLUMN city VARCHAR(100),\nADD COLUMN country VARCHAR(100),\nADD COLUMN vatId VARCHAR(50);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2628
+}

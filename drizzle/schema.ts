@@ -48,6 +48,12 @@ export const customers = mysqlTable("customers", {
   mealRate: int("mealRate").notNull(), // in EUR cents per day
   costModel: mysqlEnum("costModel", ["exclusive", "inclusive"]).notNull(),
   isArchived: int("isArchived").default(0).notNull(), // 0 = active, 1 = archived
+  // Billing address fields
+  street: varchar("street", { length: 255 }),
+  postalCode: varchar("postalCode", { length: 20 }),
+  city: varchar("city", { length: 100 }),
+  country: varchar("country", { length: 100 }),
+  vatId: varchar("vatId", { length: 50 }), // VAT/USt-ID
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

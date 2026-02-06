@@ -109,8 +109,11 @@ export async function createCustomer(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { customers } = await import("../drizzle/schema");
-  const result = await db.insert(customers).values(data);
-  return result;
+  const { desc } = await import("drizzle-orm");
+  await db.insert(customers).values(data);
+  // Return the created customer
+  const result = await db.select().from(customers).orderBy(desc(customers.id)).limit(1);
+  return result[0];
 }
 
 export async function updateCustomer(id: number, data: any) {

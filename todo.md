@@ -519,3 +519,26 @@
 - [x] Click-to-Navigate zu Ergebnissen
 - [x] SearchBar in DashboardLayout-Header integriert (nur Desktop)
 - [x] Responsive Design (Mobile: Such-Icon, Desktop: Suchfeld)
+
+## Aufgabe 16: Kundenanlage um Rechnungsadresse und USt-ID erweitern
+- [ ] Datenbankschema: Neue Felder zu customers-Tabelle hinzufügen
+  - [ ] street (Straße + Hausnummer)
+  - [ ] postalCode (PLZ)
+  - [ ] city (Stadt)
+  - [ ] country (Land)
+  - [ ] vatId (USt-ID)
+- [ ] Backend: create/update-Endpunkte mit neuen Feldern erweitern
+- [ ] Frontend: Adressfelder im Kunden-Formular hinzufügen
+- [ ] Validierung: USt-ID-Format prüfen (EU-Standard)
+- [ ] Anzeige: Adresse in Kunden-Tabelle/Detail-Ansicht
+
+## Aufgabe 16: Kundenanlage um Rechnungsadresse und USt-ID erweitern
+- [x] Datenbankschema: Neue Felder zu customers-Tabelle hinzugefügt
+  - [x] street (Straße + Hausnummer)
+  - [x] postalCode (PLZ)
+  - [x] city (Stadt)
+  - [x] country (Land)
+  - [x] vatId (USt-ID)
+- [x] Backend: create/update-Endpunkte mit neuen Feldern erweitert
+- [x] Frontend: Adressfelder im Kunden-Formular hinzugefügt
+- [x] Tests: Neue Tests für Adressfelder erstellt und bestanden (21 Tests)

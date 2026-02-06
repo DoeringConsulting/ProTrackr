@@ -43,6 +43,11 @@ type CustomerFormData = {
   kmRate: string;
   mealRate: string;
   costModel: "exclusive" | "inclusive";
+  street: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  vatId: string;
 };
 
 const initialFormData: CustomerFormData = {
@@ -55,6 +60,11 @@ const initialFormData: CustomerFormData = {
   kmRate: "",
   mealRate: "",
   costModel: "exclusive",
+  street: "",
+  postalCode: "",
+  city: "",
+  country: "",
+  vatId: "",
 };
 
 export default function Customers() {
@@ -155,6 +165,11 @@ export default function Customers() {
       kmRate: Math.round(parseFloat(formData.kmRate) * 100),
       mealRate: Math.round(parseFloat(formData.mealRate) * 100),
       costModel: formData.costModel,
+      street: formData.street || undefined,
+      postalCode: formData.postalCode || undefined,
+      city: formData.city || undefined,
+      country: formData.country || undefined,
+      vatId: formData.vatId || undefined,
     };
 
     if (editingCustomer) {
@@ -176,6 +191,11 @@ export default function Customers() {
       kmRate: (customer.kmRate / 100).toFixed(2),
       mealRate: (customer.mealRate / 100).toFixed(2),
       costModel: customer.costModel,
+      street: customer.street || "",
+      postalCode: customer.postalCode || "",
+      city: customer.city || "",
+      country: customer.country || "",
+      vatId: customer.vatId || "",
     });
     setIsDialogOpen(true);
   };
@@ -351,6 +371,63 @@ export default function Customers() {
                         <SelectItem value="inclusive">Inclusive (Pauschalsatz)</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Billing Address Section */}
+                  <div className="col-span-2 pt-4 border-t">
+                    <h3 className="text-lg font-semibold mb-4">Rechnungsadresse (optional)</h3>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="street">Straße + Hausnummer</Label>
+                    <Input
+                      id="street"
+                      value={formData.street}
+                      onChange={(e) => setFormData({ ...formData, street: e.target.value })}
+                      placeholder="Musterstraße 123"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="postalCode">PLZ</Label>
+                      <Input
+                        id="postalCode"
+                        value={formData.postalCode}
+                        onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                        placeholder="12345"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="city">Stadt</Label>
+                      <Input
+                        id="city"
+                        value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        placeholder="Berlin"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="country">Land</Label>
+                      <Input
+                        id="country"
+                        value={formData.country}
+                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                        placeholder="Deutschland"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="vatId">USt-ID</Label>
+                      <Input
+                        id="vatId"
+                        value={formData.vatId}
+                        onChange={(e) => setFormData({ ...formData, vatId: e.target.value })}
+                        placeholder="DE123456789"
+                      />
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>

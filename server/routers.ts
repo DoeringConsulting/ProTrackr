@@ -57,6 +57,11 @@ export const appRouter = router({
         kmRate: z.number(),
         mealRate: z.number(),
         costModel: z.enum(["exclusive", "inclusive"]),
+        street: z.string().optional(),
+        postalCode: z.string().optional(),
+        city: z.string().optional(),
+        country: z.string().optional(),
+        vatId: z.string().optional(),
       }).parse(val);
     }).mutation(async ({ input }) => {
       const { createCustomer } = await import("./db");
@@ -74,6 +79,11 @@ export const appRouter = router({
         kmRate: z.number().optional(),
         mealRate: z.number().optional(),
         costModel: z.enum(["exclusive", "inclusive"]).optional(),
+        street: z.string().optional(),
+        postalCode: z.string().optional(),
+        city: z.string().optional(),
+        country: z.string().optional(),
+        vatId: z.string().optional(),
       }).parse(val);
     }).mutation(async ({ input }) => {
       const { id, ...data } = input;
