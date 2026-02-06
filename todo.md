@@ -448,3 +448,8 @@
 - [x] Settings (FixedCosts): Optimistic Update hinzugefügt
 - [x] Expenses: Keine Liste vorhanden, Delete extern verwendet
 - [x] Alle Delete-Mutationen korrigiert
+
+## Aufgabe 8: Sidebar-Navigation zur Backup-Seite hinzufügen
+- [x] Backup.tsx analysiert
+- [x] DashboardLayout zur Backup-Seite hinzugefügt
+- [x] Layout korrigiert (space-y-6 für konsistentes Spacing)

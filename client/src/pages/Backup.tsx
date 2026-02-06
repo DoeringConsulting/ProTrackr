@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { Download, Upload, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import DashboardLayout from "@/components/DashboardLayout";
 
 export default function Backup() {
   const [isCreating, setIsCreating] = useState(false);
@@ -74,8 +75,9 @@ export default function Backup() {
   };
 
   return (
-    <div className="container mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Datensicherung</h1>
+    <DashboardLayout>
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold tracking-tight">Datensicherung</h1>
 
       <Alert className="mb-6">
         <AlertCircle className="h-4 w-4" />
@@ -149,6 +151,7 @@ export default function Backup() {
           </CardContent>
         </Card>
       </div>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
