@@ -7,6 +7,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 export default function Dashboard() {
   const { data: customers, isLoading: customersLoading } = trpc.customers.list.useQuery();
   const { data: timeEntries, isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({});
+  const { data: expenses } = trpc.expenses.list.useQuery({});
   const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
@@ -107,11 +108,11 @@ export default function Dashboard() {
       color: "text-emerald-600",
     },
     {
-      title: "Umsatz",
-      value: "€0",
+      title: "Reisekosten",
+      value: `€${Math.round((expenses?.reduce((sum, exp) => sum + exp.amount, 0) ?? 0) / 100).toLocaleString('de-DE')}`,
       icon: Euro,
-      description: "Diesen Monat",
-      color: "text-amber-600",
+      description: "Gesamt",
+      color: "text-purple-600",
     },
     {
       title: "Berichte",

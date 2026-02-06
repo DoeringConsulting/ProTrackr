@@ -87,6 +87,11 @@ export default function TimeTracking() {
     endDate: endDate.toISOString().split('T')[0],
   });
 
+  const { data: expenses } = trpc.expenses.list.useQuery({
+    startDate: startDate.toISOString().split('T')[0],
+    endDate: endDate.toISOString().split('T')[0],
+  });
+
   const createMutation = trpc.timeEntries.create.useMutation({
     onSuccess: () => {
       utils.timeEntries.list.invalidate();
@@ -330,6 +335,20 @@ export default function TimeTracking() {
     });
   };
 
+  const getExpensesForDate = (date: Date) => {
+    if (!expenses) return [];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
+    return expenses.filter(expense => {
+      const expenseDateStr = expense.date as any;
+      const expenseDate = typeof expenseDateStr === 'string' ? expenseDateStr.split('T')[0] : new Date(expenseDateStr).toISOString().split('T')[0];
+      return expenseDate === dateStr;
+    });
+  };
+
   const calculateDayTotal = (entries: any[]) => {
     const totalMinutes = entries.reduce((sum, entry) => sum + entry.hours, 0);
     const hours = Math.floor(totalMinutes / 60);
@@ -414,8 +433,13 @@ export default function TimeTracking() {
                             {day.getDate()}
                           </span>
                           {entries.length > 0 && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                              {entries.length} {entries.length === 1 ? "Entry" : "Entries"}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-medium">
+                              {entries.length} Pro
+                            </span>
+                          )}
+                          {getExpensesForDate(day).length > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-medium">
+                              {getExpensesForDate(day).length} RKE
                             </span>
                           )}
                         </div>

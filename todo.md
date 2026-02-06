@@ -548,3 +548,16 @@
 - [x] Vertikale Abstände zwischen Feldern vergrößert (space-y-6)
 - [x] Labels und Eingabefelder korrekt ausgerichtet
 - [x] Responsive Breakpoints für kleinere Bildschirme angepasst (md:grid-cols-2)
+
+## Aufgabe 18: Zeiterfassung - Entry-Anzeige verbessern
+- [x] Projektzeiten: Anzahl + "Pro" anzeigen (z.B. "2 Pro") - blaues Badge
+- [x] Reisekosteneinträge: Anzahl + "RKE" anzeigen (z.B. "3 RKE") - violettes Badge
+- [x] Logik implementieren um zwischen Projektzeiten und Reisekosten zu unterscheiden
+- [x] getExpensesForDate-Funktion hinzugefügt
+- [x] Expenses-Query in TimeTracking.tsx integriert
+
+## Aufgabe 19: Reisekosten-Summe im Dashboard reparieren
+- [x] Expenses-Query zum Dashboard hinzugefügt
+- [x] Reisekosten-Summe berechnen und anzeigen
+- [x] Neue Kachel "Reisekosten" mit Gesamtsumme im Dashboard
+- [x] Formatierung mit Euro-Symbol und deutscher Zahlenformatierung
