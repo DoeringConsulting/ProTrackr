@@ -463,3 +463,8 @@
 - [x] vite.config.ts HMR-Konfiguration geprüft
 - [x] HMR-Host auf Manus-Proxy-Domain gesetzt
 - [x] Server neu gestartet
+
+## Bugfix: WebSocket-Verbindungsfehler (Versuch 2)
+- [x] HMR-Konfiguration mit Port 3000 angepasst
+- [x] Server neu gestartet
+- [ ] Browser-Cache leeren und testen (Benutzer muss Strg+Shift+R drücken)
