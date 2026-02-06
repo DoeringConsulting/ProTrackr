@@ -487,3 +487,14 @@
 - [x] "Startseite"-Button mit Home-Icon und Tooltip
 - [x] Buttons in DashboardLayout integriert (erscheinen auf allen Seiten)
 - [x] Tooltips mit Infotext implementiert
+
+## Aufgabe 12: Omnibox-Suchfeld mit Live-Ergebnisvorschau
+- [x] Backend: Globaler Such-Endpunkt search.global erstellt
+- [x] Backend: Suche über Kunden, Zeiteinträge, Reisekosten (globalSearch.ts)
+- [x] Omnibox-Komponente mit cmdk Command-Dialog erstellt
+- [x] Live-Suche mit tRPC-Query (automatisches Debouncing)
+- [x] Kategorisierte Ergebnisanzeige mit Icons (Users, Clock, Receipt)
+- [x] Keyboard-Navigation (cmdk integriert)
+- [x] Tastenkombination Strg+K / Cmd+K (useKeyboardShortcut-Hook)
+- [x] Omnibox in DashboardLayout integriert
+- [x] Mobile-Optimierung (Dialog responsive)

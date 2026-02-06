@@ -23,6 +23,8 @@ import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { LayoutDashboard, LogOut, PanelLeft, Users, Clock, Receipt, FileText, Settings, Upload, Database, DollarSign, Calculator } from "lucide-react";
 import NavigationButtons from "@/components/NavigationButtons";
+import Omnibox from "@/components/Omnibox";
+import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -120,9 +122,16 @@ function DashboardLayoutContent({
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
+  const [omniboxOpen, setOmniboxOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
+
+  useKeyboardShortcut({
+    key: "k",
+    ctrl: true,
+    onKeyDown: () => setOmniboxOpen(true),
+  });
 
   useEffect(() => {
     if (isCollapsed) {
@@ -273,6 +282,7 @@ function DashboardLayoutContent({
           {children}
         </main>
       </SidebarInset>
+      <Omnibox open={omniboxOpen} onOpenChange={setOmniboxOpen} />
     </>
   );
 }

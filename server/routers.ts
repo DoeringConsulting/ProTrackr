@@ -562,6 +562,16 @@ export const appRouter = router({
       return await restoreBackup(input.backup);
     }),
   }),
+
+  // Global search
+  search: router({
+    global: protectedProcedure
+      .input(z.object({ query: z.string().min(1) }))
+      .query(async ({ input }) => {
+        const { globalSearch } = await import("./globalSearch");
+        return await globalSearch(input.query);
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
