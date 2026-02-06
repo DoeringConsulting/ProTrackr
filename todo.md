@@ -542,3 +542,9 @@
 - [x] Backend: create/update-Endpunkte mit neuen Feldern erweitert
 - [x] Frontend: Adressfelder im Kunden-Formular hinzugefügt
 - [x] Tests: Neue Tests für Adressfelder erstellt und bestanden (21 Tests)
+
+## Aufgabe 17: Layout-Bugfix - Kundenformular Eingabefelder überlappen
+- [x] Grid-Struktur im Formular optimiert (gap-6 statt gap-4)
+- [x] Vertikale Abstände zwischen Feldern vergrößert (space-y-6)
+- [x] Labels und Eingabefelder korrekt ausgerichtet
+- [x] Responsive Breakpoints für kleinere Bildschirme angepasst (md:grid-cols-2)

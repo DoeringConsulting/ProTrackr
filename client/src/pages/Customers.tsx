@@ -262,7 +262,7 @@ export default function Customers() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit}>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-6 py-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="provider">Provider/Firma *</Label>
@@ -374,59 +374,61 @@ export default function Customers() {
                   </div>
 
                   {/* Billing Address Section */}
-                  <div className="col-span-2 pt-4 border-t">
-                    <h3 className="text-lg font-semibold mb-4">Rechnungsadresse (optional)</h3>
-                  </div>
+                  <div className="pt-6 border-t mt-2">
+                    <h3 className="text-lg font-semibold mb-6">Rechnungsadresse (optional)</h3>
+                    
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="street">Straße + Hausnummer</Label>
+                        <Input
+                          id="street"
+                          value={formData.street}
+                          onChange={(e) => setFormData({ ...formData, street: e.target.value })}
+                          placeholder="Musterstraße 123"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="street">Straße + Hausnummer</Label>
-                    <Input
-                      id="street"
-                      value={formData.street}
-                      onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                      placeholder="Musterstraße 123"
-                    />
-                  </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="postalCode">PLZ</Label>
+                          <Input
+                            id="postalCode"
+                            value={formData.postalCode}
+                            onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                            placeholder="12345"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="city">Stadt</Label>
+                          <Input
+                            id="city"
+                            value={formData.city}
+                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                            placeholder="Berlin"
+                          />
+                        </div>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="postalCode">PLZ</Label>
-                      <Input
-                        id="postalCode"
-                        value={formData.postalCode}
-                        onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                        placeholder="12345"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="city">Stadt</Label>
-                      <Input
-                        id="city"
-                        value={formData.city}
-                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                        placeholder="Berlin"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="country">Land</Label>
-                      <Input
-                        id="country"
-                        value={formData.country}
-                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                        placeholder="Deutschland"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="vatId">USt-ID</Label>
-                      <Input
-                        id="vatId"
-                        value={formData.vatId}
-                        onChange={(e) => setFormData({ ...formData, vatId: e.target.value })}
-                        placeholder="DE123456789"
-                      />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="country">Land</Label>
+                          <Input
+                            id="country"
+                            value={formData.country}
+                            onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                            placeholder="Deutschland"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="vatId">USt-ID</Label>
+                          <Input
+                            id="vatId"
+                            value={formData.vatId}
+                            onChange={(e) => setFormData({ ...formData, vatId: e.target.value })}
+                            placeholder="DE123456789"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
