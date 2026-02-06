@@ -453,3 +453,13 @@
 - [x] Backup.tsx analysiert
 - [x] DashboardLayout zur Backup-Seite hinzugefügt
 - [x] Layout korrigiert (space-y-6 für konsistentes Spacing)
+
+## Bugfix: React Hook-Fehler beheben
+- [x] Vite-Cache geleert (node_modules/.vite + client/dist)
+- [x] Server neu gestartet
+- [x] Fehler behoben (Server läuft ohne Fehler)
+
+## Bugfix: WebSocket-Verbindungsfehler
+- [x] vite.config.ts HMR-Konfiguration geprüft
+- [x] HMR-Host auf Manus-Proxy-Domain gesetzt
+- [x] Server neu gestartet
