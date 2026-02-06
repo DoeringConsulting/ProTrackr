@@ -100,22 +100,32 @@ export const expenses = mysqlTable("expenses", {
   id: int("id").autoincrement().primaryKey(),
   timeEntryId: int("timeEntryId").notNull(),
   category: mysqlEnum("category", [
-    "car",
-    "train",
-    "flight",
-    "transport",
-    "meal",
-    "hotel",
-    "food",
-    "fuel",
-    "other"
+    "car",           // Mietwagen
+    "train",         // Zug
+    "flight",        // Flug
+    "taxi",          // Taxi
+    "transport",     // Transport (legacy, wird zu taxi migriert)
+    "hotel",         // Hotel
+    "fuel",          // Tanken
+    "meal",          // Bewirtung
+    "food",          // Food (legacy, wird zu meal migriert)
+    "other"          // Sonstiges
   ]).notNull(),
-  distance: int("distance"), // in km
+  distance: int("distance"), // in km (for car)
   rate: int("rate"), // in EUR cents per unit
   amount: int("amount").notNull(), // in EUR cents
   comment: text("comment"),
+  // Flight/Train specific
   ticketNumber: varchar("ticketNumber", { length: 100 }),
   flightNumber: varchar("flightNumber", { length: 100 }),
+  departureTime: varchar("departureTime", { length: 10 }), // HH:MM format
+  arrivalTime: varchar("arrivalTime", { length: 10 }), // HH:MM format
+  // Hotel specific
+  checkInDate: timestamp("checkInDate"),
+  checkOutDate: timestamp("checkOutDate"),
+  // Fuel specific
+  liters: int("liters"), // in milliliters (e.g., 45500 = 45.5L)
+  pricePerLiter: int("pricePerLiter"), // in EUR cents
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -1,0 +1,70 @@
+{
+  "query": "SELECT id, category, amount, comment FROM expenses LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute SELECT id, category, amount, comment FROM expenses LIMIT 10;",
+  "rows": [
+    {
+      "id": "1",
+      "category": "car",
+      "amount": "6000",
+      "comment": "Trip to customer"
+    },
+    {
+      "id": "2",
+      "category": "hotel",
+      "amount": "12000",
+      "comment": "Hotel stay"
+    },
+    {
+      "id": "3",
+      "category": "transport",
+      "amount": "2500",
+      "comment": "NULL"
+    },
+    {
+      "id": "4",
+      "category": "car",
+      "amount": "6000",
+      "comment": "Trip to customer"
+    },
+    {
+      "id": "5",
+      "category": "hotel",
+      "amount": "12000",
+      "comment": "Hotel stay"
+    },
+    {
+      "id": "6",
+      "category": "car",
+      "amount": "6000",
+      "comment": "Trip to customer"
+    },
+    {
+      "id": "7",
+      "category": "hotel",
+      "amount": "12000",
+      "comment": "Hotel stay"
+    },
+    {
+      "id": "8",
+      "category": "car",
+      "amount": "6000",
+      "comment": "Trip to customer"
+    },
+    {
+      "id": "9",
+      "category": "hotel",
+      "amount": "12000",
+      "comment": "Hotel stay"
+    },
+    {
+      "id": "10",
+      "category": "car",
+      "amount": "6000",
+      "comment": "Trip to customer"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tcategory\tamount\tcomment\n1\tcar\t6000\tTrip to customer\n2\thotel\t12000\tHotel stay\n3\ttransport\t2500\tNULL\n4\tcar\t6000\tTrip to customer\n5\thotel\t12000\tHotel stay\n6\tcar\t6000\tTrip to customer\n7\thotel\t12000\tHotel stay\n8\tcar\t6000\tTrip to customer\n9\thotel\t12000\tHotel stay\n10\tcar\t6000\tTrip to customer\n",
+  "stderr": "",
+  "execution_time_ms": 72
+}

@@ -218,13 +218,19 @@ export const appRouter = router({
     create: protectedProcedure.input((val: unknown) => {
       return z.object({
         timeEntryId: z.number(),
-        category: z.enum(["car", "train", "flight", "transport", "meal", "hotel", "food", "fuel", "other"]),
+        category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]),
         distance: z.number().optional(),
         rate: z.number().optional(),
         amount: z.number(),
         comment: z.string().optional(),
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
+        departureTime: z.string().optional(),
+        arrivalTime: z.string().optional(),
+        checkInDate: z.string().optional(),
+        checkOutDate: z.string().optional(),
+        liters: z.number().optional(),
+        pricePerLiter: z.number().optional(),
       }).parse(val);
     }).mutation(async ({ input }) => {
       const { createExpense } = await import("./db");
@@ -233,13 +239,19 @@ export const appRouter = router({
     update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
-        category: z.enum(["car", "train", "flight", "transport", "meal", "hotel", "food", "fuel", "other"]).optional(),
+        category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]).optional(),
         distance: z.number().optional(),
         rate: z.number().optional(),
         amount: z.number().optional(),
         comment: z.string().optional(),
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
+        departureTime: z.string().optional(),
+        arrivalTime: z.string().optional(),
+        checkInDate: z.string().optional(),
+        checkOutDate: z.string().optional(),
+        liters: z.number().optional(),
+        pricePerLiter: z.string().optional(),
       }).parse(val);
     }).mutation(async ({ input }) => {
       const { id, ...data } = input;

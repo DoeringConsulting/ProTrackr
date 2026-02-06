@@ -403,9 +403,16 @@ export default function TimeTracking() {
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className={`text-sm font-medium ${isToday ? "text-primary" : ""}`}>
-                          {day.getDate()}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium ${isToday ? "text-primary" : ""}`}>
+                            {day.getDate()}
+                          </span>
+                          {entries.length > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                              {entries.length} {entries.length === 1 ? "Entry" : "Entries"}
+                            </span>
+                          )}
+                        </div>
                         <Button
                           variant="ghost"
                           size="sm"

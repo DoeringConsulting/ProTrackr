@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE expenses \nADD COLUMN departureTime varchar(10) DEFAULT NULL,\nADD COLUMN arrivalTime varchar(10) DEFAULT NULL,\nADD COLUMN checkInDate timestamp DEFAULT NULL,\nADD COLUMN checkOutDate timestamp DEFAULT NULL,\nADD COLUMN liters int DEFAULT NULL,\nADD COLUMN pricePerLiter int DEFAULT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute ALTER TABLE expenses \nADD COLUMN departureTime varchar(10) DEFAULT NULL,\nADD COLUMN arrivalTime varchar(10) DEFAULT NULL,\nADD COLUMN checkInDate timestamp DEFAULT NULL,\nADD COLUMN checkOutDate timestamp DEFAULT NULL,\nADD COLUMN liters int DEFAULT NULL,\nADD COLUMN pricePerLiter int DEFAULT NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2790
+}

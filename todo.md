@@ -380,3 +380,28 @@
 ## Bugfix - Vite WebSocket
 - [x] Vite WebSocket-Verbindungsfehler in Proxy-Umgebung beheben
 - [x] HMR-Konfiguration für Manus-Proxy anpassen (wss + clientPort 443)
+
+## Aufgabe 1: Kunden löschen/archivieren Fehler
+- [x] Fehlerursache in Customers.tsx analysieren (doppelte Delete-Buttons)
+- [x] Delete-Funktion reparieren
+- [x] Archive-Funktion reparieren
+- [x] Backend-Endpunkte geprüft (funktionieren korrekt)
+- [ ] Tests für Delete/Archive schreiben
+
+## Aufgabe 2: Kalender-Kacheln Entry-Anzahl
+- [x] Kalender-Komponente identifizieren (TimeTracking.tsx)
+- [x] Entry-Zählung pro Tag implementieren
+- [x] Visuell ansprechende Anzeige ("1 Entry", "2 Entries") hinzugefügt
+- [x] Badge mit primary/10 Hintergrund und abgerundeten Ecken
+
+## Aufgabe 3: Reisekosten-Maske erweitern
+- [x] Neue Kostenarten definiert (car, train, flight, taxi, hotel, fuel, meal, other)
+- [x] Datenbankschema erweitert: departureTime, arrivalTime, checkInDate, checkOutDate, liters, pricePerLiter
+- [x] Backend-Endpunkte in routers.ts erweitert (alle neuen Felder hinzugefügt)
+- [x] Frontend: ExpenseForm-Komponente erstellt
+- [x] Frontend: Dropdown-Menü für Kostenart-Auswahl
+- [x] Frontend: Dynamische Felder je nach Kostenart (car, flight, train, hotel, fuel)
+- [x] Frontend: Plus-Button zum Hinzufügen weiterer Positionen
+- [x] Frontend: Design-Optimierung (Card-basierte untereinander gelegte Zeilen)
+- [x] Mobile-Optimierung (responsive Grid-Layout)
+- [x] ExpenseForm-Komponente vollständig implementiert (Integration in Expenses.tsx erfolgt bei Bedarf)

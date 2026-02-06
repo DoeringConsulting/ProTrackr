@@ -443,14 +443,8 @@ export default function Customers() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => deleteMutation.mutate({ id: customer.id })}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
                               onClick={() => handleDelete(customer.id)}
+                              title="Löschen"
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
