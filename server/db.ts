@@ -186,6 +186,39 @@ export async function getExpensesByTimeEntry(timeEntryId: number) {
   return await db.select().from(expenses).where(eq(expenses.timeEntryId, timeEntryId));
 }
 
+export async function getExpensesByCustomer(userId: number, customerId: number, startDate?: Date, endDate?: Date) {
+  const db = await getDb();
+  if (!db) return [];
+  const { expenses, timeEntries } = await import("../drizzle/schema");
+  const { and, gte, lte } = await import("drizzle-orm");
+  
+  // Join expenses with timeEntries to filter by customerId and userId
+  const conditions = [
+    eq(timeEntries.userId, userId),
+    eq(timeEntries.customerId, customerId),
+  ];
+  
+  if (startDate) conditions.push(gte(timeEntries.date, startDate));
+  if (endDate) conditions.push(lte(timeEntries.date, endDate));
+  
+  const result = await db
+    .select({
+      id: expenses.id,
+      timeEntryId: expenses.timeEntryId,
+      category: expenses.category,
+      amount: expenses.amount,
+      currency: expenses.currency,
+      comment: expenses.comment,
+      createdAt: expenses.createdAt,
+      date: timeEntries.date,
+    })
+    .from(expenses)
+    .innerJoin(timeEntries, eq(expenses.timeEntryId, timeEntries.id))
+    .where(and(...conditions));
+  
+  return result;
+}
+
 export async function createExpense(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

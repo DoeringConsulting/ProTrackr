@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE expenses ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'EUR' AFTER amount;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute ALTER TABLE expenses ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'EUR' AFTER amount;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 563
+}

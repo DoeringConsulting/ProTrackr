@@ -222,6 +222,7 @@ export const appRouter = router({
         distance: z.number().optional(),
         rate: z.number().optional(),
         amount: z.number(),
+        currency: z.string().length(3).optional().default("EUR"),
         comment: z.string().optional(),
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
@@ -244,6 +245,7 @@ export const appRouter = router({
           distance: z.number().optional(),
           rate: z.number().optional(),
           amount: z.number(),
+          currency: z.string().length(3).optional().default("EUR"),
           comment: z.string().optional(),
           ticketNumber: z.string().optional(),
           flightNumber: z.string().optional(),
@@ -271,6 +273,7 @@ export const appRouter = router({
         distance: z.number().optional(),
         rate: z.number().optional(),
         amount: z.number().optional(),
+        currency: z.string().length(3).optional(),
         comment: z.string().optional(),
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
@@ -293,6 +296,18 @@ export const appRouter = router({
       const { deleteExpense } = await import("./db");
       await deleteExpense(input.id);
       return { success: true };
+    }),
+    aggregateByCustomer: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        customerId: z.number(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+      }).parse(val);
+    }).query(async ({ ctx, input }) => {
+      const { getExpensesByCustomer } = await import("./db");
+      const startDate = input.startDate ? new Date(input.startDate) : undefined;
+      const endDate = input.endDate ? new Date(input.endDate) : undefined;
+      return await getExpensesByCustomer(ctx.user.id, input.customerId, startDate, endDate);
     }),
   }),
 

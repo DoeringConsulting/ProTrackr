@@ -113,7 +113,8 @@ export const expenses = mysqlTable("expenses", {
   ]).notNull(),
   distance: int("distance"), // in km (for car)
   rate: int("rate"), // in EUR cents per unit
-  amount: int("amount").notNull(), // in EUR cents
+  amount: int("amount").notNull(), // in currency cents
+  currency: varchar("currency", { length: 3 }).notNull().default("EUR"), // ISO 4217 currency code
   comment: text("comment"),
   // Flight/Train specific
   ticketNumber: varchar("ticketNumber", { length: 100 }),

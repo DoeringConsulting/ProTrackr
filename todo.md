@@ -419,3 +419,32 @@
 - [ ] Expense-Submission-Logik implementieren (createBatch-Mutation)
 - [ ] Anzeige aller Reisekosten eines Tages in TimeTracking
 - [x] Mobile-Optimierung (bereits in ExpenseForm vorhanden)
+
+## Aufgabe 5: Währungsauswahl für Reisekosten
+- [x] Datenbankschema erweitert: currency VARCHAR(3) zu expenses-Tabelle hinzugefügt
+- [x] Backend: currency-Feld in create/update/createBatch-Endpunkten
+- [x] ExpenseForm: Währungs-Dropdown zu jedem Betrag hinzugefügt (EUR, PLN, USD, CHF, GBP)
+- [x] CURRENCIES-Konstante mit Währungssymbolen erstellt
+- [ ] Währungsanzeige in Reisekosten-Listen (TODO: Expenses.tsx Liste)
+
+## Aufgabe 6: Reisekosten-Aggregation und Visualisierung
+- [x] Backend: Aggregations-Endpunkt expenses.aggregateByCustomer erstellt
+- [x] Backend: getExpensesByCustomer-Funktion in db.ts hinzugefügt
+- [x] Recharts für Visualisierung installiert
+- [x] ProjectDetail-Seite erstellt mit Diagramm-Visualisierung
+- [x] Diagramme: Säulendiagramm und Kuchendiagramm nach Kostenart
+- [x] Filter: Monat, Jahr, Projektlaufzeit, Durchschnitt implementiert
+- [x] Summary Cards: Gesamtkosten, Durchschnitt pro Tag, Anzahl Einträge
+- [x] Einzelposten-Tabelle mit allen Reisekosten
+- [x] Link von Customers-Seite zu ProjectDetail (TrendingUp-Icon)
+- [ ] Sidebar: Reisekosten-Summe je Projekt anzeigen (TODO)
+
+## Aufgabe 7: Lösch-/Archivierungsfehler beheben
+- [x] Kunden-Löschfehler analysiert (Race Condition durch onSettled)
+- [x] Optimistic Update-Logik in Customers.tsx geprüft
+- [x] onSettled aus Delete-Mutation entfernt (invalidate nur bei Fehler)
+- [x] Backend-Delete-Funktion verifiziert (korrekt implementiert)
+- [x] TimeTracking: onSettled entfernt, nur bei Fehler invalidate
+- [x] Settings (FixedCosts): Optimistic Update hinzugefügt
+- [x] Expenses: Keine Liste vorhanden, Delete extern verwendet
+- [x] Alle Delete-Mutationen korrigiert

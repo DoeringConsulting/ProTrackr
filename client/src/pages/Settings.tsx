@@ -58,14 +58,26 @@ export default function Settings() {
   });
 
   const deleteMutation = trpc.fixedCosts.delete.useMutation({
+    onMutate: async (variables) => {
+      await utils.fixedCosts.list.cancel();
+      const previousCosts = utils.fixedCosts.list.getData();
+      utils.fixedCosts.list.setData(undefined, (old) => {
+        if (!old) return old;
+        return old.filter(c => c.id !== variables.id);
+      });
+      return { previousCosts };
+    },
     onSuccess: () => {
-      utils.fixedCosts.list.invalidate();
       toast.success("Fixkosten erfolgreich gelöscht");
       setIsDeleteDialogOpen(false);
       setSelectedCost(null);
     },
-    onError: (error) => {
+    onError: (error, variables, context) => {
+      if (context?.previousCosts) {
+        utils.fixedCosts.list.setData(undefined, context.previousCosts);
+      }
       toast.error(`Fehler beim Löschen: ${error.message}`);
+      utils.fixedCosts.list.invalidate();
     },
   });
 

@@ -80,6 +80,7 @@ export default function Expenses() {
       distance: distance ? parseInt(distance) : undefined,
       rate: rate ? Math.round(parseFloat(rate) * 100) : undefined,
       amount: amountInCents,
+      currency: "EUR",
       comment: comment || undefined,
       ticketNumber: ticketNumber || undefined,
       flightNumber: flightNumber || undefined,

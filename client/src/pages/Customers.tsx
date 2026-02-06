@@ -28,9 +28,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Archive, Building2, Edit, Plus, Trash2, ArchiveRestore } from "lucide-react";
+import { Archive, Building2, Edit, Plus, Trash2, ArchiveRestore, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 
 type CustomerFormData = {
   provider: string;
@@ -115,9 +116,7 @@ export default function Customers() {
         utils.customers.list.setData(undefined, context.previousCustomers);
       }
       toast.error("Fehler beim Löschen: " + error.message);
-    },
-    onSettled: () => {
-      // Always refetch after error or success
+      // Refetch only on error to restore correct state
       utils.customers.list.invalidate();
     },
   });
@@ -421,6 +420,23 @@ export default function Customers() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Link href={`/customers/${customer.id}`}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Reisekosten-Analyse"
+                              >
+                                <TrendingUp className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(customer)}
+                              title="Bearbeiten"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
                             {customer.isArchived === 0 ? (
                               <Button
                                 variant="ghost"

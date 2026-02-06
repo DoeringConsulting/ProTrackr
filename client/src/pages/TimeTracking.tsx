@@ -143,9 +143,7 @@ export default function TimeTracking() {
         utils.timeEntries.list.setData(context.queryParams, context.previousEntries);
       }
       toast.error("Fehler beim Löschen: " + error.message);
-    },
-    onSettled: () => {
-      // Always refetch after error or success
+      // Refetch only on error to restore correct state
       utils.timeEntries.list.invalidate();
     },
   });

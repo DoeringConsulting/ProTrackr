@@ -1,0 +1,1 @@
+ALTER TABLE `expenses` ADD `currency` varchar(3) DEFAULT 'EUR' NOT NULL;

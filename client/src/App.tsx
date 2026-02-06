@@ -23,6 +23,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import ProjectDetail from "./pages/ProjectDetail";
 
 function Router() {
   return (
@@ -36,6 +37,7 @@ function Router() {
       {/* App routes - with DashboardLayout */}
       <Route path="/" component={Dashboard} />
       <Route path="/customers" component={Customers} />
+      <Route path="/customers/:id" component={ProjectDetail} />
       <Route path="/time-tracking" component={TimeTracking} />
       <Route path="/expenses" component={Expenses} />
       <Route path="/reports" component={Reports} />

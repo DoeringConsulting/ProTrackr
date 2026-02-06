@@ -13,6 +13,7 @@ type ExpenseItem = {
   id: string;
   category: ExpenseCategory;
   amount: string;
+  currency: string;
   comment: string;
   // Car specific
   distance?: string;
@@ -41,6 +42,14 @@ const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   other: "Sonstiges",
 };
 
+const CURRENCIES = [
+  { value: "EUR", label: "€ EUR" },
+  { value: "PLN", label: "zł PLN" },
+  { value: "USD", label: "$ USD" },
+  { value: "CHF", label: "CHF" },
+  { value: "GBP", label: "£ GBP" },
+];
+
 interface ExpenseFormProps {
   date: Date;
   timeEntryId?: number; // Optional: Falls bereits ein TimeEntry existiert
@@ -54,6 +63,7 @@ export default function ExpenseForm({ date, timeEntryId, onSubmit, onCancel }: E
       id: crypto.randomUUID(),
       category: "car",
       amount: "",
+      currency: "EUR",
       comment: "",
     },
   ]);
@@ -65,6 +75,7 @@ export default function ExpenseForm({ date, timeEntryId, onSubmit, onCancel }: E
         id: crypto.randomUUID(),
         category: "car",
         amount: "",
+        currency: "EUR",
         comment: "",
       },
     ]);
@@ -96,6 +107,7 @@ export default function ExpenseForm({ date, timeEntryId, onSubmit, onCancel }: E
             id: e.id,
             category,
             amount: e.amount,
+            currency: e.currency,
             comment: e.comment,
           };
         }
@@ -362,17 +374,37 @@ export default function ExpenseForm({ date, timeEntryId, onSubmit, onCancel }: E
 
               {renderCategoryFields(expense)}
 
-              <div className="space-y-2">
-                <Label htmlFor={`amount-${expense.id}`}>Betrag (€)</Label>
-                <Input
-                  id={`amount-${expense.id}`}
-                  type="number"
-                  step="0.01"
-                  placeholder="z.B. 45.50"
-                  value={expense.amount}
-                  onChange={(e) => updateExpense(expense.id, "amount", e.target.value)}
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor={`amount-${expense.id}`}>Betrag</Label>
+                  <Input
+                    id={`amount-${expense.id}`}
+                    type="number"
+                    step="0.01"
+                    placeholder="z.B. 45.50"
+                    value={expense.amount}
+                    onChange={(e) => updateExpense(expense.id, "amount", e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`currency-${expense.id}`}>Währung</Label>
+                  <Select
+                    value={expense.currency}
+                    onValueChange={(value) => updateExpense(expense.id, "currency", value)}
+                  >
+                    <SelectTrigger id={`currency-${expense.id}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((curr) => (
+                        <SelectItem key={curr.value} value={curr.value}>
+                          {curr.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="space-y-2">
