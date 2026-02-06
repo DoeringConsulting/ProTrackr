@@ -376,3 +376,7 @@
 - [x] Preisvergleich erstellt
 - [x] Empfehlungen dokumentiert
 - [x] Dokumentation in Markdown erstellt
+
+## Bugfix - Vite WebSocket
+- [x] Vite WebSocket-Verbindungsfehler in Proxy-Umgebung beheben
+- [x] HMR-Konfiguration für Manus-Proxy anpassen (wss + clientPort 443)

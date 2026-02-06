@@ -40,5 +40,9 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    hmr: {
+      protocol: "wss",
+      clientPort: 443,
+    },
   },
 });
