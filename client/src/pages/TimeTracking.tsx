@@ -748,9 +748,9 @@ export default function TimeTracking() {
                         rate: 0,
                         calculatedAmount: 0,
                         manDays: 0,
-                        description: "Automatisch erstellt f\u00fcr Reisekosten",
+                        description: "Automatisch erstellt für Reisekosten",
                       });
-                      timeEntryId = newEntry.id;
+                      timeEntryId = (newEntry as any).insertId || (newEntry as any).id;
                     }
                     
                     // Convert expenses to the format expected by the API

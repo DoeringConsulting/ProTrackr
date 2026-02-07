@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE exchangeRates ADD COLUMN isManual INT DEFAULT 0 NOT NULL AFTER source;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute ALTER TABLE exchangeRates ADD COLUMN isManual INT DEFAULT 0 NOT NULL AFTER source;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 584
+}

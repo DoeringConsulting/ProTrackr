@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS customerRateHistory (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  customerId INT NOT NULL,\n  onsiteRate INT NOT NULL,\n  onsiteRateCurrency VARCHAR(3) NOT NULL,\n  remoteRate INT NOT NULL,\n  remoteRateCurrency VARCHAR(3) NOT NULL,\n  kmRate INT NOT NULL,\n  kmRateCurrency VARCHAR(3) NOT NULL,\n  mealRate INT NOT NULL,\n  mealRateCurrency VARCHAR(3) NOT NULL,\n  costModel ENUM('exclusive', 'inclusive') NOT NULL,\n  validFrom TIMESTAMP NOT NULL,\n  validUntil TIMESTAMP NULL,\n  changedBy VARCHAR(255),\n  changeReason TEXT,\n  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,\n  FOREIGN KEY (customerId) REFERENCES customers(id) ON DELETE CASCADE,\n  INDEX customerId_idx (customerId),\n  INDEX validFrom_idx (validFrom)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute CREATE TABLE IF NOT EXISTS customerRateHistory (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  customerId INT NOT NULL,\n  onsiteRate INT NOT NULL,\n  onsiteRateCurrency VARCHAR(3) NOT NULL,\n  remoteRate INT NOT NULL,\n  remoteRateCurrency VARCHAR(3) NOT NULL,\n  kmRate INT NOT NULL,\n  kmRateCurrency VARCHAR(3) NOT NULL,\n  mealRate INT NOT NULL,\n  mealRateCurrency VARCHAR(3) NOT NULL,\n  costModel ENUM('exclusive', 'inclusive') NOT NULL,\n  validFrom TIMESTAMP NOT NULL,\n  validUntil TIMESTAMP NULL,\n  changedBy VARCHAR(255),\n  changeReason TEXT,\n  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,\n  FOREIGN KEY (customerId) REFERENCES customers(id) ON DELETE CASCADE,\n  INDEX customerId_idx (customerId),\n  INDEX validFrom_idx (validFrom)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1546
+}

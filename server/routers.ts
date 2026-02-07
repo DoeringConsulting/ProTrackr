@@ -234,9 +234,9 @@ export const appRouter = router({
         startDate: z.string().optional(),
         endDate: z.string().optional(),
       }).parse(val);
-    }).query(async ({ input }) => {
+    }).query(async ({ ctx }) => {
       const { getAllExpenses } = await import("./db");
-      return await getAllExpenses(input.startDate, input.endDate);
+      return await getAllExpenses(ctx.user.id);
     }),
     listByTimeEntry: protectedProcedure.input((val: unknown) => {
       return z.object({ timeEntryId: z.number() }).parse(val);
@@ -372,7 +372,7 @@ export const appRouter = router({
       const { fetchNBPExchangeRate } = await import("./nbp");
       
       const date = new Date(input.date);
-      let rate = await getExchangeRateByDate(date);
+      let rate = await getExchangeRateByDate("EUR/PLN", date);
       
       if (!rate) {
         const nbpRate = await fetchNBPExchangeRate("EUR", date);
@@ -382,7 +382,7 @@ export const appRouter = router({
           rate: Math.round(nbpRate * 10000),
           source: "NBP",
         });
-        rate = await getExchangeRateByDate(date);
+        rate = await getExchangeRateByDate("EUR/PLN", date);
       }
       
       return rate;
@@ -517,9 +517,9 @@ export const appRouter = router({
 
   // Fixed costs
   fixedCosts: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
+    list: protectedProcedure.query(async () => {
       const { getFixedCosts } = await import("./db");
-      return await getFixedCosts(ctx.user.id);
+      return await getFixedCosts();
     }),
     create: protectedProcedure.input((val: unknown) => {
       return z.object({
@@ -559,9 +559,9 @@ export const appRouter = router({
   }),
 
   // Tax settings
-  taxSettings: router({    get: protectedProcedure.query(async ({ ctx }) => {
+  taxSettings: router({    get: protectedProcedure.query(async () => {
       const { getTaxSettings } = await import("./db");
-      return await getTaxSettings(ctx.user.id);
+      return await getTaxSettings();
     }),
     upsert: protectedProcedure.input((val: unknown) => {
       return z.object({
@@ -572,9 +572,9 @@ export const appRouter = router({
         taxType: z.enum(["percentage", "fixed"]),
         taxValue: z.number(),
       }).parse(val);
-    }).mutation(async ({ ctx, input }) => {
+    }).mutation(async ({ input }) => {
       const { upsertTaxSettings } = await import("./db");
-      return await upsertTaxSettings(ctx.user.id, input);
+      return await upsertTaxSettings(input);
     }),
   }),
 

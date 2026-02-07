@@ -627,3 +627,25 @@
 - [x] Position anpassen für Mobile (unten, zentriert)
 - [x] Slide-Up-Animation implementiert
 - [x] Close-Button oben rechts auf Mobile
+
+## Aufgabe 27: Tarif-Historie für Kundentarife
+- [x] Datenbank-Tabelle für Tarif-Historie erstellt (customerRateHistory)
+- [x] Trigger/Logic: Bei Tarif-Änderung alte Werte in Historie speichern (updateCustomer erweitert)
+- [x] Backend: getRateHistory(customerId) und getRateForDate(customerId, date) implementiert
+- [ ] Frontend: Tarif-Historie-Anzeige im Kunden-Detail - noch offen
+- [ ] Historische Abrechnungen verwenden korrekte Tarife zum Zeitpunkt der Leistung - noch offen
+
+## Aufgabe 28: Währungsumrechnung-System
+- [x] Konzept analysieren und Lösung entwerfen (WAEHRUNGSUMRECHNUNG_KONZEPT.md erstellt)
+  - [x] Multi-Währungs-Umrechnung in Zielwährung (Default: PLN, konfigurierbar)
+  - [x] Bulk-Wechselkurs-Aktualisierung für €, $, £, CHF, PLN
+  - [x] Weitere Logik-Komponenten identifiziert (historische Kurse, manuelle Überschreibung, Fallback, Transparenz)
+- [x] exchangeRates-Tabelle erweitert (isManual-Feld hinzugefügt)
+- [x] NBP API Integration bereits vorhanden (server/nbp.ts)
+- [x] Backend: Umrechnungs-Helper-Funktionen erstellt (server/currency.ts)
+- [x] Alle TypeScript-Fehler behoben (32 → 0 Fehler)
+- [x] Fehlende Funktionen in db.ts hinzugefügt
+- [ ] Backend: Endpunkt für Bulk-Wechselkurs-Aktualisierung - noch offen
+- [ ] Frontend: Wechselkurs-Verwaltung in Einstellungen - noch offen
+- [ ] Frontend: "Kurse aktualisieren"-Button - noch offen
+- [ ] Automatische Umrechnung in Reports und Dashboard - noch offen

@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, uniqueIndex } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, uniqueIndex, index } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -63,6 +63,33 @@ export const customers = mysqlTable("customers", {
 });
 
 export type Customer = typeof customers.$inferSelect;
+
+/**
+ * Customer Rate History table - tracks changes to customer rates over time
+ */
+export const customerRateHistory = mysqlTable("customerRateHistory", {
+  id: int("id").autoincrement().primaryKey(),
+  customerId: int("customerId").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  onsiteRate: int("onsiteRate").notNull(), // in cents
+  onsiteRateCurrency: varchar("onsiteRateCurrency", { length: 3 }).notNull(),
+  remoteRate: int("remoteRate").notNull(), // in cents
+  remoteRateCurrency: varchar("remoteRateCurrency", { length: 3 }).notNull(),
+  kmRate: int("kmRate").notNull(), // in cents per km
+  kmRateCurrency: varchar("kmRateCurrency", { length: 3 }).notNull(),
+  mealRate: int("mealRate").notNull(), // in cents per day
+  mealRateCurrency: varchar("mealRateCurrency", { length: 3 }).notNull(),
+  costModel: mysqlEnum("costModel", ["exclusive", "inclusive"]).notNull(),
+  validFrom: timestamp("validFrom").notNull(), // When this rate became effective
+  validUntil: timestamp("validUntil"), // When this rate was replaced (NULL = current)
+  changedBy: varchar("changedBy", { length: 255 }), // User who made the change
+  changeReason: text("changeReason"), // Optional reason for the change
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  customerIdIdx: index("customerId_idx").on(table.customerId),
+  validFromIdx: index("validFrom_idx").on(table.validFrom),
+}));
+
+export type CustomerRateHistory = typeof customerRateHistory.$inferSelect;
 export type InsertCustomer = typeof customers.$inferInsert;
 
 /**
@@ -172,6 +199,7 @@ export const exchangeRates = mysqlTable("exchangeRates", {
   currencyPair: varchar("currencyPair", { length: 10 }).notNull().default("EUR/PLN"),
   rate: int("rate").notNull(), // stored as ten-thousandths (e.g., 42369 = 4.2369)
   source: varchar("source", { length: 50 }).notNull().default("NBP"),
+  isManual: int("isManual").default(0).notNull(), // 0 = auto, 1 = manual override
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   // Unique constraint on date + currencyPair combination to allow multiple currencies per date
