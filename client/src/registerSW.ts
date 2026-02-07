@@ -56,7 +56,8 @@ function showUpdateNotification(version: string) {
     container.style.cssText = `
       position: fixed;
       bottom: 20px;
-      right: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       background: #1a1a1a;
       color: white;
       padding: 16px 20px;
@@ -68,21 +69,53 @@ function showUpdateNotification(version: string) {
       gap: 12px;
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 14px;
-      max-width: 400px;
-      animation: slideIn 0.3s ease-out;
+      max-width: calc(100vw - 40px);
+      width: 400px;
+      animation: slideUp 0.3s ease-out;
     `;
+    
+    // Responsive adjustments for mobile
+    if (window.innerWidth < 640) {
+      container.style.flexDirection = 'column';
+      container.style.alignItems = 'stretch';
+      container.style.padding = '12px 16px';
+      container.style.fontSize = '13px';
+      container.style.width = 'calc(100vw - 40px)';
+    }
     
     // Add animation
     const style = document.createElement('style');
     style.textContent = `
-      @keyframes slideIn {
+      @keyframes slideUp {
         from {
-          transform: translateX(120%);
+          transform: translateX(-50%) translateY(100px);
           opacity: 0;
         }
         to {
-          transform: translateX(0);
+          transform: translateX(-50%) translateY(0);
           opacity: 1;
+        }
+      }
+      
+      @media (max-width: 640px) {
+        #sw-update-notification {
+          flex-direction: column !important;
+          align-items: stretch !important;
+          padding: 12px 16px !important;
+          font-size: 13px !important;
+          width: calc(100vw - 40px) !important;
+        }
+        
+        #sw-update-notification button {
+          width: 100%;
+          margin-top: 8px;
+        }
+        
+        #sw-update-notification .close-btn {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          margin-top: 0 !important;
         }
       }
     `;
@@ -100,11 +133,14 @@ function showUpdateNotification(version: string) {
       background: #3b82f6;
       color: white;
       border: none;
-      padding: 8px 16px;
+      padding: 10px 16px;
       border-radius: 6px;
       cursor: pointer;
       font-weight: 500;
       transition: background 0.2s;
+      min-height: 44px;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     `;
     updateBtn.onmouseover = () => {
       updateBtn.style.background = '#2563eb';
@@ -122,6 +158,7 @@ function showUpdateNotification(version: string) {
     
     // Close button
     const closeBtn = document.createElement('button');
+    closeBtn.className = 'close-btn';
     closeBtn.textContent = '×';
     closeBtn.style.cssText = `
       background: transparent;
@@ -130,11 +167,13 @@ function showUpdateNotification(version: string) {
       font-size: 24px;
       cursor: pointer;
       padding: 0;
-      width: 24px;
-      height: 24px;
+      width: 44px;
+      height: 44px;
       line-height: 24px;
       opacity: 0.7;
       transition: opacity 0.2s;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     `;
     closeBtn.onmouseover = () => {
       closeBtn.style.opacity = '1';

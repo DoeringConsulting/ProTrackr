@@ -601,3 +601,29 @@
 - [x] Automatischer Reload bei Controller-Wechsel
 - [x] Dokumentation vollständig ergänzt (PROJEKTDOKUMENTATION.md, ENTWICKLUNGSHISTORIE.md)
 - [x] Bekanntes Problem als behoben markiert
+
+## Aufgabe 24: APP_VERSION automatisch aktualisieren
+- [x] Build-Script erstellen das APP_VERSION mit Git-Commit-Hash aktualisiert (scripts/update-version.js)
+- [x] package.json Scripts erweitern (prebuild-Hook)
+- [x] sw.js automatisch mit aktueller Version patchen
+- [x] Fallback für lokale Entwicklung ohne Git (Timestamp-basiert)
+- [x] Script erfolgreich getestet (APP_VERSION: 2dbfac0f → cb155f6d)
+
+## Aufgabe 25: Währungsfelder für Kundentarife
+- [x] Datenbankschema: currency-Felder zu customers-Tabelle hinzugefügt
+  - [x] onsiteRateCurrency (VARCHAR(3) DEFAULT 'EUR')
+  - [x] remoteRateCurrency (VARCHAR(3) DEFAULT 'EUR')
+  - [x] kmRateCurrency (VARCHAR(3) DEFAULT 'EUR')
+  - [x] mealRateCurrency (VARCHAR(3) DEFAULT 'EUR')
+- [x] Backend: customers.create und update mit Währungsfeldern erweitert
+- [x] Frontend: Währungsauswahl im Kunden-Formular für alle Tarife (EUR, PLN, USD, GBP)
+- [x] Default-Währung: EUR
+- [x] Kompaktes Design: Betrag + Währung in einer Zeile
+
+## Aufgabe 26: Mobile Update-Benachrichtigung optimieren
+- [x] Responsive Design für Update-Benachrichtigung (Media Query <640px)
+- [x] Kompaktere Darstellung auf kleinen Bildschirmen (vertikales Layout)
+- [x] Touch-optimierte Buttons (min-height: 44px, touch-action: manipulation)
+- [x] Position anpassen für Mobile (unten, zentriert)
+- [x] Slide-Up-Animation implementiert
+- [x] Close-Button oben rechts auf Mobile

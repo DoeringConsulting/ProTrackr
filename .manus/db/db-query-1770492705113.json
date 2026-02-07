@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE customers \nADD COLUMN onsiteRateCurrency VARCHAR(3) DEFAULT 'EUR' NOT NULL AFTER onsiteRate,\nADD COLUMN remoteRateCurrency VARCHAR(3) DEFAULT 'EUR' NOT NULL AFTER remoteRate,\nADD COLUMN kmRateCurrency VARCHAR(3) DEFAULT 'EUR' NOT NULL AFTER kmRate,\nADD COLUMN mealRateCurrency VARCHAR(3) DEFAULT 'EUR' NOT NULL AFTER mealRate;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute ALTER TABLE customers \nADD COLUMN onsiteRateCurrency VARCHAR(3) DEFAULT 'EUR' NOT NULL AFTER onsiteRate,\nADD COLUMN remoteRateCurrency VARCHAR(3) DEFAULT 'EUR' NOT NULL AFTER remoteRate,\nADD COLUMN kmRateCurrency VARCHAR(3) DEFAULT 'EUR' NOT NULL AFTER kmRate,\nADD COLUMN mealRateCurrency VARCHAR(3) DEFAULT 'EUR' NOT NULL AFTER mealRate;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2556
+}

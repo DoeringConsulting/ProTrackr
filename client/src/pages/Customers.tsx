@@ -39,9 +39,13 @@ type CustomerFormData = {
   projectName: string;
   location: string;
   onsiteRate: string;
+  onsiteRateCurrency: string;
   remoteRate: string;
+  remoteRateCurrency: string;
   kmRate: string;
+  kmRateCurrency: string;
   mealRate: string;
+  mealRateCurrency: string;
   costModel: "exclusive" | "inclusive";
   street: string;
   postalCode: string;
@@ -56,9 +60,13 @@ const initialFormData: CustomerFormData = {
   projectName: "",
   location: "",
   onsiteRate: "",
+  onsiteRateCurrency: "EUR",
   remoteRate: "",
+  remoteRateCurrency: "EUR",
   kmRate: "",
+  kmRateCurrency: "EUR",
   mealRate: "",
+  mealRateCurrency: "EUR",
   costModel: "exclusive",
   street: "",
   postalCode: "",
@@ -161,9 +169,13 @@ export default function Customers() {
       projectName: formData.projectName,
       location: formData.location,
       onsiteRate: Math.round(parseFloat(formData.onsiteRate) * 100),
+      onsiteRateCurrency: formData.onsiteRateCurrency,
       remoteRate: Math.round(parseFloat(formData.remoteRate) * 100),
+      remoteRateCurrency: formData.remoteRateCurrency,
       kmRate: Math.round(parseFloat(formData.kmRate) * 100),
+      kmRateCurrency: formData.kmRateCurrency,
       mealRate: Math.round(parseFloat(formData.mealRate) * 100),
+      mealRateCurrency: formData.mealRateCurrency,
       costModel: formData.costModel,
       street: formData.street || undefined,
       postalCode: formData.postalCode || undefined,
@@ -187,9 +199,13 @@ export default function Customers() {
       projectName: customer.projectName,
       location: customer.location,
       onsiteRate: (customer.onsiteRate / 100).toFixed(2),
+      onsiteRateCurrency: customer.onsiteRateCurrency || "EUR",
       remoteRate: (customer.remoteRate / 100).toFixed(2),
+      remoteRateCurrency: customer.remoteRateCurrency || "EUR",
       kmRate: (customer.kmRate / 100).toFixed(2),
+      kmRateCurrency: customer.kmRateCurrency || "EUR",
       mealRate: (customer.mealRate / 100).toFixed(2),
+      mealRateCurrency: customer.mealRateCurrency || "EUR",
       costModel: customer.costModel,
       street: customer.street || "",
       postalCode: customer.postalCode || "",
@@ -307,51 +323,119 @@ export default function Customers() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="onsiteRate">Onsite-Tagessatz (EUR) *</Label>
-                      <Input
-                        id="onsiteRate"
-                        type="number"
-                        step="0.01"
-                        value={formData.onsiteRate}
-                        onChange={(e) => setFormData({ ...formData, onsiteRate: e.target.value })}
-                        required
-                      />
+                      <Label htmlFor="onsiteRate">Onsite-Tagessatz *</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="onsiteRate"
+                          type="number"
+                          step="0.01"
+                          value={formData.onsiteRate}
+                          onChange={(e) => setFormData({ ...formData, onsiteRate: e.target.value })}
+                          required
+                          className="flex-1"
+                        />
+                        <Select
+                          value={formData.onsiteRateCurrency}
+                          onValueChange={(value) => setFormData({ ...formData, onsiteRateCurrency: value })}
+                        >
+                          <SelectTrigger className="w-[100px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="EUR">EUR</SelectItem>
+                            <SelectItem value="PLN">PLN</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="GBP">GBP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="remoteRate">Remote-Tagessatz (EUR) *</Label>
-                      <Input
-                        id="remoteRate"
-                        type="number"
-                        step="0.01"
-                        value={formData.remoteRate}
-                        onChange={(e) => setFormData({ ...formData, remoteRate: e.target.value })}
-                        required
-                      />
+                      <Label htmlFor="remoteRate">Remote-Tagessatz *</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="remoteRate"
+                          type="number"
+                          step="0.01"
+                          value={formData.remoteRate}
+                          onChange={(e) => setFormData({ ...formData, remoteRate: e.target.value })}
+                          required
+                          className="flex-1"
+                        />
+                        <Select
+                          value={formData.remoteRateCurrency}
+                          onValueChange={(value) => setFormData({ ...formData, remoteRateCurrency: value })}
+                        >
+                          <SelectTrigger className="w-[100px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="EUR">EUR</SelectItem>
+                            <SelectItem value="PLN">PLN</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="GBP">GBP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="kmRate">Kilometerpauschale (EUR/km) *</Label>
-                      <Input
-                        id="kmRate"
-                        type="number"
-                        step="0.01"
-                        value={formData.kmRate}
-                        onChange={(e) => setFormData({ ...formData, kmRate: e.target.value })}
-                        required
-                      />
+                      <Label htmlFor="kmRate">Kilometerpauschale *</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="kmRate"
+                          type="number"
+                          step="0.01"
+                          value={formData.kmRate}
+                          onChange={(e) => setFormData({ ...formData, kmRate: e.target.value })}
+                          required
+                          className="flex-1"
+                        />
+                        <Select
+                          value={formData.kmRateCurrency}
+                          onValueChange={(value) => setFormData({ ...formData, kmRateCurrency: value })}
+                        >
+                          <SelectTrigger className="w-[100px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="EUR">EUR</SelectItem>
+                            <SelectItem value="PLN">PLN</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="GBP">GBP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="mealRate">Verpflegungspauschale (EUR/Tag) *</Label>
-                      <Input
-                        id="mealRate"
-                        type="number"
-                        step="0.01"
-                        value={formData.mealRate}
-                        onChange={(e) => setFormData({ ...formData, mealRate: e.target.value })}
-                        required
-                      />
+                      <Label htmlFor="mealRate">Verpflegungspauschale *</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="mealRate"
+                          type="number"
+                          step="0.01"
+                          value={formData.mealRate}
+                          onChange={(e) => setFormData({ ...formData, mealRate: e.target.value })}
+                          required
+                          className="flex-1"
+                        />
+                        <Select
+                          value={formData.mealRateCurrency}
+                          onValueChange={(value) => setFormData({ ...formData, mealRateCurrency: value })}
+                        >
+                          <SelectTrigger className="w-[100px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="EUR">EUR</SelectItem>
+                            <SelectItem value="PLN">PLN</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="GBP">GBP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
 

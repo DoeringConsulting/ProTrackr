@@ -42,10 +42,14 @@ export const customers = mysqlTable("customers", {
   mandatenNr: varchar("mandatenNr", { length: 50 }).notNull().unique(),
   projectName: varchar("projectName", { length: 255 }).notNull(),
   location: varchar("location", { length: 255 }).notNull(),
-  onsiteRate: int("onsiteRate").notNull(), // in EUR cents
-  remoteRate: int("remoteRate").notNull(), // in EUR cents
-  kmRate: int("kmRate").notNull(), // in EUR cents per km
-  mealRate: int("mealRate").notNull(), // in EUR cents per day
+  onsiteRate: int("onsiteRate").notNull(), // in cents
+  onsiteRateCurrency: varchar("onsiteRateCurrency", { length: 3 }).default("EUR").notNull(),
+  remoteRate: int("remoteRate").notNull(), // in cents
+  remoteRateCurrency: varchar("remoteRateCurrency", { length: 3 }).default("EUR").notNull(),
+  kmRate: int("kmRate").notNull(), // in cents per km
+  kmRateCurrency: varchar("kmRateCurrency", { length: 3 }).default("EUR").notNull(),
+  mealRate: int("mealRate").notNull(), // in cents per day
+  mealRateCurrency: varchar("mealRateCurrency", { length: 3 }).default("EUR").notNull(),
   costModel: mysqlEnum("costModel", ["exclusive", "inclusive"]).notNull(),
   isArchived: int("isArchived").default(0).notNull(), // 0 = active, 1 = archived
   // Billing address fields
