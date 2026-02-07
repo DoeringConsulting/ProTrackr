@@ -517,6 +517,7 @@ export const appRouter = router({
       return z.object({
         category: z.string(),
         amount: z.number(),
+        currency: z.string().length(3).default("PLN"),
         description: z.string().optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
@@ -531,6 +532,7 @@ export const appRouter = router({
         id: z.number(),
         category: z.string().optional(),
         amount: z.number().optional(),
+        currency: z.string().length(3).optional(),
         description: z.string().optional(),
       }).parse(val);
     }).mutation(async ({ input }) => {

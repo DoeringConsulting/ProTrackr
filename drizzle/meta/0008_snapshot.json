@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "981fc7aa-288e-47c4-918d-5ae229f97b63",
-  "prevId": "6675309f-99cf-45a6-a4f0-fa09291820c3",
+  "id": "bf86e597-5a50-431b-84a9-4ba075a273ba",
+  "prevId": "0f7283b5-04dc-43d4-8a42-2ef01e41ceb8",
   "tables": {
     "customers": {
       "name": "customers",
@@ -84,6 +84,41 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "street": {
+          "name": "street",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "postalCode": {
+          "name": "postalCode",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "city": {
+          "name": "city",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "country": {
+          "name": "country",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "vatId": {
+          "name": "vatId",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "createdAt": {
           "name": "createdAt",
@@ -327,6 +362,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'EUR'"
+        },
         "comment": {
           "name": "comment",
           "type": "text",
@@ -451,6 +494,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'PLN'"
         },
         "description": {
           "name": "description",

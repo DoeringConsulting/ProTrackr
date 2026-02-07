@@ -1,0 +1,1 @@
+ALTER TABLE `fixedCosts` ADD `currency` varchar(3) DEFAULT 'PLN' NOT NULL;

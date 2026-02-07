@@ -104,6 +104,13 @@ export default function TimeTracking() {
     },
   });
 
+  const createExpensesBatchMutation = trpc.expenses.createBatch.useMutation({
+    onSuccess: () => {
+      utils.expenses.list.invalidate();
+      utils.timeEntries.list.invalidate();
+    },
+  });
+
   const updateMutation = trpc.timeEntries.update.useMutation({
     onSuccess: () => {
       utils.timeEntries.list.invalidate();
@@ -709,11 +716,72 @@ export default function TimeTracking() {
             {selectedExpenseDate && (
               <ExpenseForm
                 date={selectedExpenseDate}
-                onSubmit={(expenses) => {
-                  // TODO: Implement expense submission
-                  console.log('Expenses:', expenses);
-                  toast.success(`${expenses.length} Reisekosten erfasst`);
-                  setIsExpensesDialogOpen(false);
+                onSubmit={async (expenses) => {
+                  try {
+                    // Find or create a time entry for this date
+                    const dateStr = selectedExpenseDate.toISOString().split('T')[0];
+                    const existingEntries = getEntriesForDate(selectedExpenseDate);
+                    
+                    let timeEntryId: number;
+                    
+                    if (existingEntries.length > 0) {
+                      // Use the first existing entry
+                      timeEntryId = existingEntries[0].id;
+                    } else {
+                      // Create a dummy off-duty entry for expenses-only days
+                      const firstCustomer = customers?.[0];
+                      if (!firstCustomer) {
+                        toast.error("Bitte legen Sie zuerst einen Kunden an");
+                        return;
+                      }
+                      
+                      const weekdayNames = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+                      const weekday = weekdayNames[selectedExpenseDate.getDay()];
+                      
+                      const newEntry = await createMutation.mutateAsync({
+                        customerId: firstCustomer.id,
+                        date: dateStr,
+                        weekday,
+                        projectName: "Reisekosten",
+                        entryType: "off_duty",
+                        hours: 0,
+                        rate: 0,
+                        calculatedAmount: 0,
+                        manDays: 0,
+                        description: "Automatisch erstellt f\u00fcr Reisekosten",
+                      });
+                      timeEntryId = newEntry.id;
+                    }
+                    
+                    // Convert expenses to the format expected by the API
+                    const expensesToCreate = expenses.map(exp => ({
+                      category: exp.category as any,
+                      amount: Math.round(parseFloat(exp.amount) * 100),
+                      currency: exp.currency,
+                      comment: exp.comment || undefined,
+                      distance: exp.distance ? parseInt(exp.distance) : undefined,
+                      rate: exp.rate ? Math.round(parseFloat(exp.rate) * 100) : undefined,
+                      ticketNumber: exp.ticketNumber || undefined,
+                      flightNumber: exp.flightNumber || undefined,
+                      departureTime: exp.departureTime || undefined,
+                      arrivalTime: exp.arrivalTime || undefined,
+                      checkInDate: exp.checkInDate || undefined,
+                      checkOutDate: exp.checkOutDate || undefined,
+                      liters: exp.liters ? Math.round(parseFloat(exp.liters) * 1000) : undefined,
+                      pricePerLiter: exp.pricePerLiter ? Math.round(parseFloat(exp.pricePerLiter) * 100) : undefined,
+                    }));
+                    
+                    // Create expenses via batch endpoint
+                    await createExpensesBatchMutation.mutateAsync({
+                      timeEntryId,
+                      expenses: expensesToCreate,
+                    });
+                    
+                    toast.success(`${expenses.length} Reisekosten erfolgreich erfasst`);
+                    setIsExpensesDialogOpen(false);
+                  } catch (error: any) {
+                    toast.error(`Fehler beim Speichern: ${error.message}`);
+                  }
                 }}
                 onCancel={() => setIsExpensesDialogOpen(false)}
               />

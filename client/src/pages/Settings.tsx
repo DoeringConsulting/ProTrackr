@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -29,6 +30,7 @@ export default function Settings() {
 
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState("PLN");
   const [description, setDescription] = useState("");
 
   const utils = trpc.useUtils();
@@ -85,6 +87,7 @@ export default function Settings() {
   const resetForm = () => {
     setCategory("");
     setAmount("");
+    setCurrency("PLN");
     setDescription("");
     setSelectedCost(null);
   };
@@ -98,6 +101,7 @@ export default function Settings() {
     const amountInCents = Math.round(parseFloat(amount) * 100);
 
     createMutation.mutate({
+      currency,
       category,
       amount: amountInCents,
       description: description || undefined,
@@ -307,16 +311,32 @@ export default function Settings() {
                   onChange={(e) => setCategory(e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="amount">Betrag (EUR) *</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Betrag *</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currency">Währung *</Label>
+                  <Select value={currency} onValueChange={setCurrency}>
+                    <SelectTrigger id="currency">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EUR">EUR (€)</SelectItem>
+                      <SelectItem value="PLN">PLN (zł)</SelectItem>
+                      <SelectItem value="USD">USD ($)</SelectItem>
+                      <SelectItem value="GBP">GBP (£)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Beschreibung</Label>

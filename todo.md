@@ -561,3 +561,20 @@
 - [x] Reisekosten-Summe berechnen und anzeigen
 - [x] Neue Kachel "Reisekosten" mit Gesamtsumme im Dashboard
 - [x] Formatierung mit Euro-Symbol und deutscher Zahlenformatierung
+
+## Aufgabe 20: Währungswahlmöglichkeit überall implementieren
+- [x] Bestehende Währungsfelder analysiert (Reisekosten: vorhanden, Fixkosten: fehlte)
+- [x] Fixkosten: Währungsfeld hinzugefügt (currency VARCHAR(3) DEFAULT 'PLN')
+- [x] Backend: fixedCosts.create und update mit currency erweitert
+- [x] Frontend: Währungsauswahl im Fixkosten-Formular (EUR, PLN, USD, GBP)
+- [x] Select-Import in Settings.tsx hinzugefügt
+- [ ] Kunden: Währungsfelder für Tarife (onsiteRate, remoteRate, etc.) - noch offen
+- [ ] Zeiterfassung: Währungsfeld für rate/calculatedAmount - noch offen
+
+## Aufgabe 21: Reisekosten-Anzeige reparieren
+- [x] Problem identifiziert: onSubmit-Handler war nur TODO-Kommentar
+- [x] Reisekosten-Speicherung implementiert mit createBatch-Mutation
+- [x] Automatische Off-Duty TimeEntry-Erstellung für reine Reisekosten-Tage
+- [x] Cache-Invalidierung nach Reisekosten-Eintrag implementiert
+- [x] Aggregierte Reisekosten-Posten im Dashboard vorhanden (bereits in Aufgabe 19 implementiert)
+- [x] RKE-Badge-Anzeige in Zeiterfassung vorhanden (bereits in Aufgabe 18 implementiert)

@@ -184,7 +184,8 @@ export const fixedCosts = mysqlTable("fixedCosts", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   category: varchar("category", { length: 100 }).notNull(),
-  amount: int("amount").notNull(), // in PLN cents
+  amount: int("amount").notNull(), // in currency cents
+  currency: varchar("currency", { length: 3 }).notNull().default("PLN"), // ISO 4217 currency code
   description: text("description"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
