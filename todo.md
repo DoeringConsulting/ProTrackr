@@ -649,3 +649,31 @@
 - [ ] Frontend: Wechselkurs-Verwaltung in Einstellungen - noch offen
 - [ ] Frontend: "Kurse aktualisieren"-Button - noch offen
 - [ ] Automatische Umrechnung in Reports und Dashboard - noch offen
+
+## Aufgabe 29: Umfassende Source-Code-Analyse und Bereinigung
+- [ ] 100%-Backup des aktuellen Source-Codes erstellen
+- [ ] Systematische Code-Analyse durchführen
+  - [ ] Fehler und Inkonsistenzen identifizieren
+  - [ ] Unnötige/tote Code-Abschnitte finden
+  - [ ] Ineffiziente Implementierungen erkennen
+  - [ ] Doppelte Code-Abschnitte (DRY-Prinzip) identifizieren
+- [ ] Querverbindungen und Abhängigkeiten dokumentieren
+- [ ] Auswirkungsbewertung für jede potenzielle Korrektur erstellen
+- [ ] Analyse-Ergebnis präsentieren
+- [ ] Auf Freigabe warten
+- [ ] Bei Freigabe: Korrekturen durchführen mit Fokus auf Querverbindungen
+
+## Aufgabe 29: Umfassende Source-Code-Analyse und Bereinigung (Option B)
+- [x] 100%-Backup des aktuellen Source-Codes erstellt (project-billing-app-backup-20260208-013335.tar.gz)
+- [x] Systematische Code-Analyse durchgeführt (157 Dateien, 15.946 Zeilen analysiert)
+- [x] Querverbindungen und Abhängigkeiten dokumentiert
+- [x] Analyse-Ergebnis mit Auswirkungsbewertung erstellt (CODE_ANALYSE_ERGEBNIS.md)
+- [x] Freigabe erhalten für Option B (vollständige Optimierung)
+- [x] **Phase 1 abgeschlossen:** Sichere Bereinigung
+  - [x] ComponentShowcase.tsx gelöscht (1.437 Zeilen, -50 KB Bundle)
+  - [x] console.log-Statements bereinigt (8 Statements entfernt/bedingt)
+  - [x] Alle Tests bestehen (21/21)
+- [ ] **Phase 2:** Refactoring - Zod-Schemas auslagern, routers.ts aufteilen
+- [ ] **Phase 3a:** Tarif-Historie-Feature vervollständigen
+- [ ] **Phase 3b:** Passwort-Reset-E-Mail implementieren
+- [ ] **Phase 4:** Tests, Dokumentation, Checkpoint

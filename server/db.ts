@@ -182,7 +182,7 @@ export async function deleteCustomer(id: number) {
   if (!db) throw new Error("Database not available");
   const { customers } = await import("../drizzle/schema");
   const result = await db.delete(customers).where(eq(customers.id, id));
-  console.log('[deleteCustomer] Deleted customer:', id, 'Result:', result);
+  // Customer deleted successfully
   return result;
 }
 
@@ -360,7 +360,7 @@ export async function deleteDocument(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   // Implement document deletion logic here
-  console.log('[deleteDocument] Document deletion not yet implemented:', id);
+  // TODO: Implement document deletion
 }
 
 // User queries
@@ -376,7 +376,7 @@ export async function createDocument(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   // Implement document creation logic here
-  console.log('[createDocument] Document creation not yet implemented:', data);
+  // TODO: Implement document creation
   return { id: 1 }; // Placeholder return
 }
 
@@ -384,7 +384,7 @@ export async function getDocumentsByExpense(expenseId: number) {
   const db = await getDb();
   if (!db) return [];
   // Implement document retrieval logic here
-  console.log('[getDocumentsByExpense] Document retrieval not yet implemented:', expenseId);
+  // TODO: Implement document retrieval
   return []; // Placeholder return
 }
 
