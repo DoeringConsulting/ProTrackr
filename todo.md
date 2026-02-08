@@ -771,3 +771,18 @@
   - [ ] Test-E-Mail senden
   - [ ] Kompletten Reset-Flow testen
   - [ ] E-Mail-Template prüfen
+
+## Aufgabe 33: Safari-Cookie-Problem beheben ✅
+- [x] Problem analysiert
+  - [x] Cookie-Konfiguration in OAuth-Flow geprüft (bereits korrekt: sameSite: "none")
+  - [x] Session-Cookie-Einstellungen geprüft (fehlte sameSite)
+  - [x] SameSite-Attribut identifiziert als Problem
+- [x] Cookie-Einstellungen angepasst
+  - [x] Session-Cookie: sameSite auf "none" (Produktion) / "lax" (Dev) gesetzt
+  - [x] Secure-Flag korrekt konfiguriert (true in Produktion)
+  - [x] httpOnly: true beibehalten (Sicherheit)
+- [ ] Änderungen testen (nach Deployment)
+  - [ ] Safari Desktop testen
+  - [ ] Safari iOS testen
+  - [ ] Chrome/Edge zur Sicherheit testen
+- [x] Dokumentation aktualisiert
