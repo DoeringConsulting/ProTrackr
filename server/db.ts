@@ -133,48 +133,10 @@ export async function createCustomer(data: any) {
 export async function updateCustomer(id: number, data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { customers, customerRateHistory } = await import("../drizzle/schema");
+  const { customers } = await import("../drizzle/schema");
   
-  // Check if rate fields are being updated
-  const rateFields = ['onsiteRate', 'onsiteRateCurrency', 'remoteRate', 'remoteRateCurrency', 'kmRate', 'kmRateCurrency', 'mealRate', 'mealRateCurrency', 'costModel'];
-  const hasRateChanges = rateFields.some(field => data[field] !== undefined);
-  
-  if (hasRateChanges) {
-    // Get current customer data
-    const currentCustomer = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
-    if (currentCustomer[0]) {
-      const current = currentCustomer[0];
-      
-      // Close previous rate history entry (set validUntil to now)
-      await db.update(customerRateHistory)
-        .set({ validUntil: new Date() })
-        .where(and(
-          eq(customerRateHistory.customerId, id),
-          isNull(customerRateHistory.validUntil)
-        ));
-      
-      // Create new rate history entry with old values
-      await db.insert(customerRateHistory).values({
-        customerId: id,
-        onsiteRate: current.onsiteRate,
-        onsiteRateCurrency: current.onsiteRateCurrency,
-        remoteRate: current.remoteRate,
-        remoteRateCurrency: current.remoteRateCurrency,
-        kmRate: current.kmRate,
-        kmRateCurrency: current.kmRateCurrency,
-        mealRate: current.mealRate,
-        mealRateCurrency: current.mealRateCurrency,
-        costModel: current.costModel,
-        validFrom: current.updatedAt,
-        validUntil: new Date(),
-        changedBy: data.changedBy || 'system',
-        changeReason: data.changeReason
-      });
-    }
-  }
-  
-  // Update customer
-  await db.update(customers).set(data).where(eq(customers.id, id));
+  const result = await db.update(customers).set(data).where(eq(customers.id, id));
+  return result;
 }
 
 export async function deleteCustomer(id: number) {
@@ -186,40 +148,6 @@ export async function deleteCustomer(id: number) {
   return result;
 }
 
-export async function getRateHistory(customerId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  const { customerRateHistory } = await import("../drizzle/schema");
-  return await db
-    .select()
-    .from(customerRateHistory)
-    .where(eq(customerRateHistory.customerId, customerId))
-    .orderBy(desc(customerRateHistory.validFrom));
-}
-
-export async function getRateForDate(customerId: number, date: Date) {
-  const db = await getDb();
-  if (!db) return null;
-  const { customers, customerRateHistory } = await import("../drizzle/schema");
-  
-  // First try to find in history
-  const history = await db
-    .select()
-    .from(customerRateHistory)
-    .where(and(
-      eq(customerRateHistory.customerId, customerId),
-      // validFrom <= date AND (validUntil IS NULL OR validUntil > date)
-    ))
-    .limit(1);
-  
-  if (history[0]) {
-    return history[0];
-  }
-  
-  // Fallback to current customer rates
-  const customer = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
-  return customer[0] || null;
-}
 
 // Time entry queries
 export async function getTimeEntries(userId: number, startDate?: Date, endDate?: Date) {

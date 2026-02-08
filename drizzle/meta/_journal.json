@@ -5,64 +5,8 @@
     {
       "idx": 0,
       "version": "5",
-      "when": 1768123970326,
-      "tag": "0000_nostalgic_santa_claus",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1768124117331,
-      "tag": "0001_normal_timeslip",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1768256896575,
-      "tag": "0002_wise_texas_twister",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1768257012935,
-      "tag": "0003_small_storm",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1768320571976,
-      "tag": "0004_equal_skaar",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1768322048595,
-      "tag": "0005_hesitant_leopardon",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "5",
-      "when": 1770323439655,
-      "tag": "0006_broad_ravenous",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "5",
-      "when": 1770485124224,
-      "tag": "0009_amused_vulcan",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "5",
-      "when": 1770485390334,
-      "tag": "0008_sparkling_xavin",
+      "when": 1770561620216,
+      "tag": "0000_zippy_gwen_stacy",
       "breakpoints": true
     }
   ]

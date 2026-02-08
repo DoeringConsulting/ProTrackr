@@ -32,6 +32,44 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+    requestPasswordReset: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ input, ctx }) => {
+        const { createPasswordResetToken } = await import("./passwordReset");
+        const { sendPasswordResetEmail } = await import("./email");
+        
+        // Token erstellen
+        const resetToken = await createPasswordResetToken(input.email);
+        
+        if (!resetToken) {
+          // Aus Sicherheitsgründen immer success zurückgeben
+          // (verhindert E-Mail-Enumeration)
+          return { success: true };
+        }
+        
+        // E-Mail senden
+        const baseUrl = `${ctx.req.protocol}://${ctx.req.get('host')}`;
+        await sendPasswordResetEmail(input.email, resetToken, baseUrl);
+        
+        return { success: true };
+      }),
+    verifyResetToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const { verifyPasswordResetToken } = await import("./passwordReset");
+        const userId = await verifyPasswordResetToken(input.token);
+        return { valid: userId !== null };
+      }),
+    resetPassword: publicProcedure
+      .input(z.object({ 
+        token: z.string(),
+        newPassword: z.string().min(8)
+      }))
+      .mutation(async ({ input }) => {
+        const { resetPasswordWithToken } = await import("./passwordReset");
+        const success = await resetPasswordWithToken(input.token, input.newPassword);
+        return { success };
+      }),
   }),
 
   // Customer management

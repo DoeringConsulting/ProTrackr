@@ -677,3 +677,69 @@
 - [ ] **Phase 3a:** Tarif-Historie-Feature vervollständigen
 - [ ] **Phase 3b:** Passwort-Reset-E-Mail implementieren
 - [ ] **Phase 4:** Tests, Dokumentation, Checkpoint
+
+## Aufgabe 30: Tarif-Historie zurückbauen und Passwort-Reset implementieren
+- [x] RateHistoryTimeline.tsx Komponente gelöscht
+- [x] Tarif-Historie-Endpunkte aus routers.ts entfernt
+- [x] customerRateHistory-Tabelle aus Schema entfernt
+- [x] Tarif-Historie-Funktionen aus db.ts entfernt (getRateHistory, getRateForDate, updateCustomer-Logik)
+- [x] Datenbank-Tabelle gelöscht (DROP TABLE customerRateHistory)
+- [x] Code auf lose Enden geprüft (keine Referenzen mehr gefunden)
+- [x] TypeScript-Check: 0 Fehler
+- [x] Alle 21 Tests bestehen
+- [ ] Passwort-Reset-E-Mail implementieren - **NÄCHSTER SCHRITT**
+  - [ ] E-Mail-Integration (Nodemailer oder SendGrid)
+  - [ ] Token-System für Reset-Links
+  - [ ] Reset-Flow (Request → E-Mail → Verify → Update)
+  - [ ] Tests für E-Mail-Funktionalität
+
+## Aufgabe 31: Passwort-Reset-E-Mail vollständig implementiert ✅
+- [x] Nodemailer installiert und konfiguriert
+- [x] E-Mail-Modul erstellt (server/email.ts)
+  - [x] SMTP-Konfiguration über Umgebungsvariablen
+  - [x] Unterstützung für Gmail, Outlook, SendGrid
+  - [x] HTML-E-Mail-Templates
+  - [x] sendPasswordResetEmail-Funktion
+  - [x] Test-E-Mail-Funktion
+- [x] Token-System implementiert (server/passwordReset.ts)
+  - [x] Sichere Token-Generierung (crypto.randomBytes)
+  - [x] createPasswordResetToken-Funktion
+  - [x] verifyPasswordResetToken-Funktion
+  - [x] resetPasswordWithToken-Funktion
+  - [x] clearPasswordResetToken-Funktion
+  - [x] 1-Stunden-Gültigkeit für Tokens
+- [x] tRPC-Endpunkte erstellt
+  - [x] auth.requestPasswordReset (Token erstellen & E-Mail senden)
+  - [x] auth.verifyResetToken (Token validieren)
+  - [x] auth.resetPassword (Passwort zurücksetzen)
+- [x] Tests geschrieben und bestanden
+  - [x] 12 neue Tests für Passwort-Reset-System
+  - [x] Alle 33 Tests bestehen erfolgreich
+- [x] Sicherheitsfeatures implementiert
+  - [x] Schutz vor E-Mail-Enumeration
+  - [x] Bcrypt-Passwort-Hashing
+  - [x] Token-Ablauf-Prüfung
+  - [x] Nur für Passport.js-Benutzer (OAuth ausgeschlossen)
+
+**Verwendung:**
+1. Umgebungsvariablen setzen:
+   - SMTP_HOST (z.B. smtp.gmail.com)
+   - SMTP_PORT (z.B. 587)
+   - SMTP_USER (E-Mail-Adresse)
+   - SMTP_PASS (App-Passwort)
+   - SMTP_FROM (Absender-Adresse, optional)
+
+2. Passwort-Reset anfordern:
+   ```typescript
+   await trpc.auth.requestPasswordReset.mutate({ email: 'user@example.com' });
+   ```
+
+3. Token validieren:
+   ```typescript
+   const { valid } = await trpc.auth.verifyResetToken.query({ token });
+   ```
+
+4. Passwort zurücksetzen:
+   ```typescript
+   await trpc.auth.resetPassword.mutate({ token, newPassword: 'NewPass123!' });
+   ```
