@@ -743,3 +743,31 @@
    ```typescript
    await trpc.auth.resetPassword.mutate({ token, newPassword: 'NewPass123!' });
    ```
+
+## Aufgabe 32: SMTP-Konfiguration und Passwort-Reset-UI ✅
+- [x] SMTP-Secrets über webdev_request_secrets konfigurieren
+  - [x] SMTP_HOST (doeringconsulting.hoste.pl)
+  - [x] SMTP_PORT (587)
+  - [x] SMTP_USER
+  - [x] SMTP_PASS
+  - [x] SMTP_FROM (optional)
+  - [x] SMTP_SECURE (false für TLS)
+- [x] Passwort-Reset-Seite erstellt (/reset-password)
+  - [x] Token aus URL-Parameter extrahieren
+  - [x] Token-Validierung beim Laden mit tRPC
+  - [x] Passwort-Eingabe-Formular mit Show/Hide
+  - [x] Passwort-Bestätigung mit Show/Hide
+  - [x] Passwort-Stärke-Anzeige (Schwach/Mittel/Stark)
+  - [x] Erfolgs-/Fehler-Meldungen
+  - [x] Token-Ablauf-Prüfung (1 Stunde)
+  - [x] Automatische Weiterleitung nach Erfolg
+- [x] Passwort-Vergessen-Seite erstellt (/forgot-password)
+  - [x] E-Mail-Eingabe-Formular
+  - [x] tRPC-Integration (auth.requestPasswordReset)
+  - [x] Bestätigungsmeldung mit Anleitung
+  - [x] Sicherheitshinweise
+- [x] Login-Seite hat bereits "Passwort vergessen?"-Link
+- [ ] E-Mail-Versand testen (nach Deployment)
+  - [ ] Test-E-Mail senden
+  - [ ] Kompletten Reset-Flow testen
+  - [ ] E-Mail-Template prüfen
