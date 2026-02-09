@@ -125,6 +125,15 @@ export default function TimeTracking() {
     endDate: endDate.toISOString().split('T')[0],
   });
 
+  const createExpenseMutation = trpc.expenses.create.useMutation({
+    onSuccess: () => {
+      utils.expenses.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Fehler beim Speichern: ${error.message}`);
+    },
+  });
+
   const createMutation = trpc.timeEntries.create.useMutation({
     onSuccess: () => {
       utils.timeEntries.list.invalidate();
@@ -736,11 +745,23 @@ export default function TimeTracking() {
             {selectedExpenseDate && (
               <ExpenseForm
                 date={selectedExpenseDate}
-                onSubmit={(expenses) => {
-                  // TODO: Implement expense submission
-                  toast.success(`${expenses.length} Reisekosten erfolgreich gespeichert`);
-                  setIsExpensesDialogOpen(false);
-                  utils.expenses.list.invalidate();
+                onSubmit={async (expenses) => {
+                  try {
+                    // Create expense entries in the database
+                    for (const expense of expenses) {
+                      await createExpenseMutation.mutateAsync({
+                        category: expense.category as any,
+                        amount: Math.round(parseFloat(expense.amount) * 100), // Convert to cents
+                        currency: expense.currency,
+                        comment: expense.comment || undefined,
+                        date: selectedExpenseDate!.toISOString().split('T')[0],
+                      });
+                    }
+                    toast.success(`${expenses.length} Reisekosten erfolgreich gespeichert`);
+                    setIsExpensesDialogOpen(false);
+                  } catch (error: any) {
+                    toast.error(`Fehler beim Speichern: ${error.message}`);
+                  }
                 }}
                 onCancel={() => setIsExpensesDialogOpen(false)}
               />

@@ -79,7 +79,8 @@ export type InsertTimeEntry = typeof timeEntries.$inferInsert;
  */
 export const expenses = mysqlTable("expenses", {
   id: int("id").autoincrement().primaryKey(),
-  timeEntryId: int("timeEntryId").notNull(),
+  timeEntryId: int("timeEntryId"),
+  date: timestamp("date").notNull(), // Direct date for standalone expenses
   category: mysqlEnum("category", [
     "car",           // Mietwagen
     "train",         // Zug

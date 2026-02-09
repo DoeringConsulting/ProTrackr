@@ -1004,3 +1004,11 @@
 - [x] Scroll-Funktion für vergrößerte Kacheln mit vielen Einträgen
 - [x] Responsive Design für mobile Geräte (Grid-Layout passt sich an)
 - [x] Tests für neue Backend-Funktionen schreiben
+
+
+## Bugfix: Kalender-Kacheln und Einstellungen-Struktur
+
+- [ ] Fehler 1: Reisekosten werden nur im Januar angezeigt, nicht im Februar (Datumsfilterung prüfen)
+- [ ] Fehler 1: Kachel-Vergrößerung funktioniert nicht im Februar (vermutlich wegen fehlender Einträge)
+- [x] Fehler 2: Einstellungen-Struktur korrigieren - bestehende Sidebar-Reiter (Fixkosten, Steuern, Wechselkurse) als Tabs in Einstellungen verschieben
+- [x] Fehler 2: Sidebar-Navigation bereinigen (nur noch Dashboard, Zeiterfassung, Kunden, Rechnungen, Einstellungen)

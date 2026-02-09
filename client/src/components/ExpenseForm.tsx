@@ -132,13 +132,17 @@ export default function ExpenseForm({ date, timeEntryId, onSubmit, onCancel }: E
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[ExpenseForm] handleSubmit called', expenses);
     
     // Validate that all expenses have required fields
     const isValid = expenses.every((e) => e.category && e.amount);
+    console.log('[ExpenseForm] isValid:', isValid, expenses);
     if (!isValid) {
+      console.log('[ExpenseForm] Validation failed!');
       return;
     }
 
+    console.log('[ExpenseForm] Calling onSubmit with:', expenses);
     onSubmit(expenses);
   };
 
@@ -436,7 +440,14 @@ export default function ExpenseForm({ date, timeEntryId, onSubmit, onCancel }: E
         <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
           Abbrechen
         </Button>
-        <Button type="submit" className="flex-1">
+        <Button 
+          type="button" 
+          className="flex-1"
+          onClick={(e) => {
+            e.preventDefault();
+            handleSubmit(e as any);
+          }}
+        >
           Speichern
         </Button>
       </div>

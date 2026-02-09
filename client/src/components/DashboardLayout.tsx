@@ -37,10 +37,6 @@ const menuItems = [
   { icon: Clock, label: "Zeiterfassung", path: "/time-tracking" },
   { icon: Receipt, label: "Reisekosten", path: "/expenses" },
   { icon: FileText, label: "Berichte", path: "/reports" },
-  { icon: DollarSign, label: "Wechselkurse", path: "/exchange-rates" },
-  { icon: Calculator, label: "Steuern", path: "/tax-settings" },
-  { icon: Upload, label: "Datenimport", path: "/import" },
-  { icon: Database, label: "Datensicherung", path: "/backup" },
   { icon: Settings, label: "Einstellungen", path: "/settings" },
 ];
 

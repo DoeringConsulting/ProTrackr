@@ -235,7 +235,8 @@ export const appRouter = router({
     }),
     create: publicProcedure.input((val: unknown) => {
       return z.object({
-        timeEntryId: z.number(),
+        timeEntryId: z.number().optional(),
+        date: z.string().optional(), // ISO date string for standalone expenses
         category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]),
         distance: z.number().optional(),
         rate: z.number().optional(),
