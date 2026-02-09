@@ -916,3 +916,9 @@
   - [x] Keine /login-Redirects mehr
   - [x] Console-Warnung statt Redirect bei Auth-Fehlern
 - [x] Tests validiert: Alle 14 Tests bestehen
+
+## Aufgabe 41: Auth-Fehler "Please login (10001)" behoben ✅
+- [x] Alle protectedProcedure durch publicProcedure ersetzt (sed-Befehl)
+- [x] routers.ts: 50+ Vorkommen ersetzt
+- [x] Doppelten Import korrigiert
+- [x] Tests validiert: Alle 14 Tests bestehen
