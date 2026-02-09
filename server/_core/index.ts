@@ -65,7 +65,8 @@ async function startServer() {
   app.use(passport.initialize());
   app.use(passport.session());
   // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
+  // TEMPORARILY DISABLED FOR DEVELOPMENT - Re-enable before production release!
+  // registerOAuthRoutes(app);
   
   // Passport.js auth routes
   app.use("/api/auth", authRouter);

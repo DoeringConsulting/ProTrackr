@@ -786,3 +786,22 @@
   - [ ] Safari iOS testen
   - [ ] Chrome/Edge zur Sicherheit testen
 - [x] Dokumentation aktualisiert
+
+## Aufgabe 34: OAuth temporär deaktivieren für Entwicklungsphase
+- [x] OAuth-Authentifizierung deaktiviert
+  - [x] OAuth-Routen in server/_core/index.ts auskommentiert
+  - [x] DashboardLayout leitet zu /login statt OAuth
+  - [x] Passport.js-Login als primäre Auth-Methode gesetzt
+- [x] Login-Seite bereits konfiguriert
+  - [x] E-Mail/Passwort-Login vorhanden
+  - [x] Registrierungs-Link vorhanden
+- [x] Tests validiert
+  - [x] Alle 34 Tests bestehen
+- [ ] Deployment durchführen
+  - [ ] Checkpoint erstellen
+  - [ ] App deployen
+  - [ ] Login-Flow testen
+- [ ] ⚠️ **WICHTIG: OAuth vor Release reaktivieren!**
+  - [ ] OAuth-Routen wieder aktivieren (registerOAuthRoutes)
+  - [ ] DashboardLayout OAuth-Login wiederherstellen
+  - [ ] Kompletten OAuth-Flow testen

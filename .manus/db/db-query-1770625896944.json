@@ -1,0 +1,40 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "customers"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "documents"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "exchangeRates"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "expenses"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "fixedCosts"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "invoiceNumbers"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "taxSettings"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "timeEntries"
+    },
+    {
+      "Tables_in_8yGpDpC3cK44EWrvsrxLR6": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_8yGpDpC3cK44EWrvsrxLR6\n__drizzle_migrations\ncustomers\ndocuments\nexchangeRates\nexpenses\nfixedCosts\ninvoiceNumbers\ntaxSettings\ntimeEntries\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 342
+}
