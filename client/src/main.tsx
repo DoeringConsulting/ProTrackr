@@ -12,22 +12,16 @@ import { registerServiceWorker } from "./registerSW";
 
 const queryClient = new QueryClient();
 
+// Auth disabled - no redirects
 const redirectToLoginIfUnauthorized = (error: unknown) => {
-  if (!(error instanceof TRPCClientError)) return;
-  if (typeof window === "undefined") return;
-
-  const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
-  if (!isUnauthorized) return;
-
-  // OAuth temporarily disabled - redirect to login page instead
-  window.location.href = "/login";
+  // Auth disabled during development - no redirects
+  console.warn("[Auth Disabled] Unauthorized error ignored:", error);
 };
 
+// Auth disabled - error logging only
 queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
-    redirectToLoginIfUnauthorized(error);
     console.error("[API Query Error]", error);
   }
 });
@@ -35,7 +29,6 @@ queryClient.getQueryCache().subscribe(event => {
 queryClient.getMutationCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.mutation.state.error;
-    redirectToLoginIfUnauthorized(error);
     console.error("[API Mutation Error]", error);
   }
 });

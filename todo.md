@@ -904,3 +904,15 @@
   - [ ] ctx.user wiederherstellen
   - [ ] Alle userId=1 durch ctx.user.id ersetzen
   - [ ] Frische Implementierung ohne Legacy-Code
+
+## Aufgabe 40: 404-Fehler beheben - Login-Redirects entfernen ✅
+- [x] Login-Redirects gefunden und entfernt
+  - [x] main.tsx: redirectToLoginIfUnauthorized deaktiviert
+  - [x] main.tsx: Error-Subscriber nur noch Logging, keine Redirects
+  - [x] DashboardLayout.tsx: Bereits keine Redirects
+  - [x] App.tsx: Bereits keine Auth-Routen
+- [x] App-Routing korrigiert
+  - [x] Direkt zum Dashboard (/) ohne Redirects
+  - [x] Keine /login-Redirects mehr
+  - [x] Console-Warnung statt Redirect bei Auth-Fehlern
+- [x] Tests validiert: Alle 14 Tests bestehen
