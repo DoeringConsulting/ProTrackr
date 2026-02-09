@@ -816,3 +816,20 @@
   - [x] Home.tsx: getLoginUrl-Import und Kommentar aktualisiert
   - [x] Login/Register-Seiten: Keine OAuth-Referenzen gefunden
 - [x] Tests validiert: Alle 34 Tests bestehen
+
+## Aufgabe 36: Authentifizierung KOMPLETT deaktiviert für Entwicklung ✅
+- [x] Auth-Middleware entfernt
+  - [x] Session-Middleware deaktiviert (server/_core/index.ts)
+  - [x] Passport.js-Middleware deaktiviert (server/_core/index.ts)
+  - [x] Auth-Routes deaktiviert (/api/auth)
+  - [x] Auth-Checks in tRPC-Context entfernt (context.ts - user: null)
+- [x] DashboardLayout geöffnet
+  - [x] Auth-Check komplett auskommentiert
+  - [x] Direkt zur App ohne Login-Zwang
+- [x] Tests validiert: Alle 34 Tests bestehen
+- [ ] ⚠️ **KRITISCH: Authentifizierung VOR FINALEM RELEASE reaktivieren!**
+  - [ ] server/_core/index.ts: Session & Passport uncommentieren
+  - [ ] server/_core/context.ts: sdk.authenticateRequest wiederherstellen
+  - [ ] DashboardLayout.tsx: Auth-Check wiederherstellen
+  - [ ] OAuth-Routen reaktivieren
+  - [ ] Kompletten Auth-Flow testen

@@ -46,30 +46,33 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   
-  // Session configuration
-  app.use(
-    session({
-      secret: process.env.JWT_SECRET || "fallback-secret-change-in-production",
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        secure: process.env.NODE_ENV === "production",
-        httpOnly: true,
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // Safari compatibility
-        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      },
-    })
-  );
+  // ⚠️ AUTHENTICATION COMPLETELY DISABLED FOR DEVELOPMENT
+  // Re-enable before final release!
   
-  // Passport initialization
-  app.use(passport.initialize());
-  app.use(passport.session());
+  // Session configuration - DISABLED
+  // app.use(
+  //   session({
+  //     secret: process.env.JWT_SECRET || "fallback-secret-change-in-production",
+  //     resave: false,
+  //     saveUninitialized: false,
+  //     cookie: {
+  //       secure: process.env.NODE_ENV === "production",
+  //       httpOnly: true,
+  //       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  //       maxAge: 1000 * 60 * 60 * 24 * 7,
+  //     },
+  //   })
+  // );
+  
+  // Passport initialization - DISABLED
+  // app.use(passport.initialize());
+  // app.use(passport.session());
   // OAuth callback under /api/oauth/callback
   // TEMPORARILY DISABLED FOR DEVELOPMENT - Re-enable before production release!
   // registerOAuthRoutes(app);
   
-  // Passport.js auth routes
-  app.use("/api/auth", authRouter);
+  // Passport.js auth routes - DISABLED FOR DEVELOPMENT
+  // app.use("/api/auth", authRouter);
   // Cron endpoint for scheduled tasks
   app.post("/api/cron/run-scheduler", handleCronRequest);
   // tRPC API
