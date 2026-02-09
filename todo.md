@@ -805,3 +805,14 @@
   - [ ] OAuth-Routen wieder aktivieren (registerOAuthRoutes)
   - [ ] DashboardLayout OAuth-Login wiederherstellen
   - [ ] Kompletten OAuth-Flow testen
+
+## Aufgabe 35: Passwort zurücksetzen und OAuth-UI entfernen ✅
+- [x] Passwort für a.doering@doering-consulting.eu zurückgesetzt
+  - [x] Neues Passwort: "Password"
+  - [x] Passwort-Hash in Datenbank aktualisiert
+- [x] OAuth-Referenzen aus UI entfernt
+  - [x] main.tsx: getLoginUrl-Import auskommentiert, Redirect zu /login
+  - [x] DashboardLayout.tsx: getLoginUrl-Import auskommentiert
+  - [x] Home.tsx: getLoginUrl-Import und Kommentar aktualisiert
+  - [x] Login/Register-Seiten: Keine OAuth-Referenzen gefunden
+- [x] Tests validiert: Alle 34 Tests bestehen

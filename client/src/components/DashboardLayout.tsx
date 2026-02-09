@@ -19,7 +19,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { getLoginUrl } from "@/const";
+// OAuth temporarily disabled - import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { LayoutDashboard, LogOut, PanelLeft, Users, Clock, Receipt, FileText, Settings, Upload, Database, DollarSign, Calculator, Search } from "lucide-react";
 import NavigationButtons from "@/components/NavigationButtons";

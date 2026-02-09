@@ -5,7 +5,7 @@ import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
-import { getLoginUrl } from "./const";
+// OAuth temporarily disabled - import { getLoginUrl } from "./const";
 import "./index.css";
 import "./i18n";
 import { registerServiceWorker } from "./registerSW";
@@ -20,7 +20,8 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
-  window.location.href = getLoginUrl();
+  // OAuth temporarily disabled - redirect to login page instead
+  window.location.href = "/login";
 };
 
 queryClient.getQueryCache().subscribe(event => {
