@@ -54,24 +54,27 @@ describe("Settings API Tests", () => {
       expect(result !== undefined || result === undefined).toBe(true);
     });
 
-    it("should delete exchange rate", async () => {
-      const testDate = new Date().toISOString();
+    it("should update exchange rates from NBP", async () => {
+      const result = await caller.exchangeRatesManagement.updateFromNBP({
+        currencies: ["EUR", "USD"],
+      });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(2);
+      expect(result[0]).toHaveProperty("currency");
+      expect(result[0]).toHaveProperty("success");
+    });
+
+    it("should create manual exchange rate", async () => {
+      const testDate = "2026-01-15";
       
-      // First create a rate
-      await caller.exchangeRatesManagement.upsert({
+      const result = await caller.exchangeRatesManagement.createManual({
         date: testDate,
-        currencyPair: "USD/PLN",
-        rate: 4.0,
-        source: "Test Delete",
+        currencyPair: "CHF/PLN",
+        rate: 4.5,
       });
 
-      // Then delete it
-      const result = await caller.exchangeRatesManagement.delete({
-        currencyPair: "USD/PLN",
-        date: testDate,
-      });
-
-      expect(result.success).toBe(true);
+      expect(result).toBeDefined();
     });
   });
 

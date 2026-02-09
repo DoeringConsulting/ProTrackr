@@ -1055,3 +1055,38 @@
 - [x] Löschen-Button mit Bestätigungs-Dialog implementieren (confirm() vor deleteExpenseMutation)
 - [x] Tests für Update und Delete schreiben (Backend bereits getestet)
 - [x] Checkpoint erstellen
+
+
+## Aufgabe 47: Währungsauswahl in Reisekosten und Wechselkurse-Tab
+
+### 47.1: Währungsauswahl in Reisekosten-Formular
+- [x] Datenbank-Schema: currency-Feld zu expenses-Tabelle hinzufügen (bereits vorhanden)
+- [x] Backend: expenses.create und update mit Währungsfeld erweitern (bereits vorhanden)
+- [x] Frontend: Währungsauswahl im Reisekosten-Formular (PLN, EUR, CHF, GBP, USD)
+- [x] Default-Währung: EUR
+- [x] Kompaktes Design: Betrag + Währung in einer Zeile
+
+### 47.2: Wechselk### 47.2: Wechselkurse-Tab mit NBP-API
+- [x] NBP-API Integration für alle verfügbaren Währungen (bereits vorhanden in server/nbp.ts)
+- [x] ExchangeRatesTab funktionsfähig machen (vollständig implementiert)
+- [x] Tabelle mit allen gespeicherten Wechselkursen (PLN als Basis: 1,0000 PLN = X EUR)
+- [x] Filterfunktion nach Währung und Zeitraum
+- [x] "Kurse aktualisieren"-Button (NBP-API abrufen mit updateFromNBP)
+- [x] Manuelle Kurs-Eingabe mit Überschreiben-Funktion (createManual)
+- [x] Standardwährungen: PLN, EUR, CHF, GBP, USDeiben von NBP-Kursen
+- [ ] Historische Kurse anzeigen
+
+### 47.3: Währungsumrechnung in Berichten
+- [ ] Berichte analysieren (Dashboard, Buchhaltungsbericht, Kundenbericht)
+- [ ] Währungsumrechnung in Dashboard integrieren (Umsatz, Kosten)
+- [ ] Währungsumrechnung in Buchhaltungsbericht integrieren
+- [ ] Währungsumrechnung in Kundenbericht integrieren
+- [ ] Zielwährung konfigurierbar machen (Default: PLN)
+- [ ] Historische Wechselkurse für korrekte Umrechnung verwenden
+- [ ] Transparenz: Originalwährung + umgerechneter Betrag anzeigen
+
+### Tests und Checkpoint
+- [ ] Tests für Währungsauswahl in Reisekosten schreiben
+- [ ] Tests für Wechselkurse-Tab schreiben
+- [ ] Tests für Währungsumrechnung in Berichten schreiben
+- [ ] Checkpoint erstellen

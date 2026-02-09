@@ -111,6 +111,7 @@ export default function TimeTracking() {
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
   const [tempExpenseAmount, setTempExpenseAmount] = useState('');
   const [tempExpenseCategory, setTempExpenseCategory] = useState('car');
+  const [tempExpenseCurrency, setTempExpenseCurrency] = useState('EUR');
   const [tempExpenseComment, setTempExpenseComment] = useState('');
   const [editingExpense, setEditingExpense] = useState<number | null>(null);
 
@@ -592,6 +593,7 @@ export default function TimeTracking() {
                                   setEditingExpense(expense.id);
                                   setTempExpenseAmount((expense.amount / 100).toString());
                                   setTempExpenseCategory(expense.category);
+                                  setTempExpenseCurrency(expense.currency || 'EUR');
                                   setTempExpenseComment(expense.comment || '');
                                   setSelectedExpenseDate(expense.date ? new Date(expense.date) : day);
                                   setIsExpensesDialogOpen(true);
@@ -838,6 +840,7 @@ export default function TimeTracking() {
                     setEditingExpense(null);
                     setTempExpenseAmount('');
                     setTempExpenseCategory('car');
+                    setTempExpenseCurrency('EUR');
                     setTempExpenseComment('');
                   } catch (error: any) {
                     console.error('[TimeTracking] Error:', error);
@@ -847,15 +850,30 @@ export default function TimeTracking() {
               >
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="expense-amount">Betrag (EUR)</Label>
-                    <Input
-                      id="expense-amount"
-                      type="number"
-                      step="0.01"
-                      placeholder="z.B. 45.50"
-                      value={tempExpenseAmount}
-                      onChange={(e) => setTempExpenseAmount(e.target.value)}
-                    />
+                    <Label htmlFor="expense-amount">Betrag</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="expense-amount"
+                        type="number"
+                        step="0.01"
+                        placeholder="z.B. 45.50"
+                        value={tempExpenseAmount}
+                        onChange={(e) => setTempExpenseAmount(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Select value={tempExpenseCurrency} onValueChange={setTempExpenseCurrency}>
+                        <SelectTrigger className="w-[100px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PLN">PLN</SelectItem>
+                          <SelectItem value="EUR">EUR</SelectItem>
+                          <SelectItem value="CHF">CHF</SelectItem>
+                          <SelectItem value="GBP">GBP</SelectItem>
+                          <SelectItem value="USD">USD</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="expense-category">Kategorie</Label>
@@ -893,6 +911,7 @@ export default function TimeTracking() {
                     setEditingExpense(null);
                     setTempExpenseAmount('');
                     setTempExpenseCategory('car');
+                    setTempExpenseCurrency('EUR');
                     setTempExpenseComment('');
                   }} className="flex-1">
                     Abbrechen

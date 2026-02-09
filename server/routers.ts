@@ -660,15 +660,45 @@ export const appRouter = router({
         source: input.source,
       });
     }),
-    delete: publicProcedure.input((val: unknown) => {
+    updateFromNBP: publicProcedure.input((val: unknown) => {
       return z.object({
-        currencyPair: z.string(),
-        date: z.string(),
+        currencies: z.array(z.string()),
       }).parse(val);
     }).mutation(async ({ input }) => {
-      const { deleteExchangeRate } = await import("./db");
-      await deleteExchangeRate(input.currencyPair, new Date(input.date));
-      return { success: true };
+      const { fetchNBPExchangeRate } = await import("./nbp");
+      const { upsertExchangeRate } = await import("./db");
+      
+      const results = [];
+      for (const currency of input.currencies) {
+        try {
+          const rate = await fetchNBPExchangeRate(currency);
+          await upsertExchangeRate({
+            date: new Date(),
+            currencyPair: `${currency}/PLN`,
+            rate: Math.round(rate * 10000),
+            source: "NBP",
+          });
+          results.push({ currency, success: true, rate });
+        } catch (error: any) {
+          results.push({ currency, success: false, error: error.message });
+        }
+      }
+      return results;
+    }),
+    createManual: publicProcedure.input((val: unknown) => {
+      return z.object({
+        date: z.string(),
+        currencyPair: z.string(),
+        rate: z.number(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { upsertExchangeRate } = await import("./db");
+      return await upsertExchangeRate({
+        date: new Date(input.date),
+        currencyPair: input.currencyPair,
+        rate: Math.round(input.rate * 10000),
+        source: "Manual",
+      });
     }),
   }),
 
