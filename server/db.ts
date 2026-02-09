@@ -369,3 +369,156 @@ export async function archiveCustomer(id: number) {
   const { customers } = await import("../drizzle/schema");
   await db.update(customers).set({ isArchived: 1 }).where(eq(customers.id, id));
 }
+
+// Account settings queries
+export async function getAccountSettings(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { accountSettings } = await import("../drizzle/schema");
+  const result = await db.select().from(accountSettings).where(eq(accountSettings.userId, userId)).limit(1);
+  return result[0] || null;
+}
+
+export async function upsertAccountSettings(userId: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { accountSettings } = await import("../drizzle/schema");
+  
+  // Check if settings exist
+  const existing = await getAccountSettings(userId);
+  
+  if (existing) {
+    await db.update(accountSettings).set(data).where(eq(accountSettings.userId, userId));
+  } else {
+    await db.insert(accountSettings).values({ ...data, userId });
+  }
+  
+  // Return updated settings
+  return await getAccountSettings(userId);
+}
+
+// Manual exchange rate management
+export async function upsertExchangeRate(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { exchangeRates } = await import("../drizzle/schema");
+  
+  // Check if rate exists for this date and currency pair
+  const existing = await getExchangeRateByDate(data.currencyPair, data.date);
+  
+  if (existing) {
+    await db.update(exchangeRates)
+      .set({ ...data, isManual: 1 })
+      .where(and(
+        eq(exchangeRates.currencyPair, data.currencyPair),
+        eq(exchangeRates.date, data.date)
+      ));
+  } else {
+    await db.insert(exchangeRates).values({ ...data, isManual: 1 });
+  }
+  
+  return await getExchangeRateByDate(data.currencyPair, data.date);
+}
+
+export async function deleteExchangeRate(currencyPair: string, date: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { exchangeRates } = await import("../drizzle/schema");
+  
+  await db.delete(exchangeRates).where(and(
+    eq(exchangeRates.currencyPair, currencyPair),
+    eq(exchangeRates.date, date)
+  ));
+}
+
+// Database backup and restore
+export async function exportDatabase() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const { customers, timeEntries, expenses, documents, exchangeRates, fixedCosts, taxSettings, accountSettings, invoiceNumbers } = await import("../drizzle/schema");
+  
+  // Export all tables
+  const backup = {
+    version: "1.0",
+    exportDate: new Date().toISOString(),
+    data: {
+      customers: await db.select().from(customers),
+      timeEntries: await db.select().from(timeEntries),
+      expenses: await db.select().from(expenses),
+      documents: await db.select().from(documents),
+      exchangeRates: await db.select().from(exchangeRates),
+      fixedCosts: await db.select().from(fixedCosts),
+      taxSettings: await db.select().from(taxSettings),
+      accountSettings: await db.select().from(accountSettings),
+      invoiceNumbers: await db.select().from(invoiceNumbers),
+    },
+  };
+  
+  return backup;
+}
+
+export async function importDatabase(backup: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Validate backup structure
+  if (!backup.version || !backup.data) {
+    throw new Error("Invalid backup format");
+  }
+  
+  const { customers, timeEntries, expenses, documents, exchangeRates, fixedCosts, taxSettings, accountSettings, invoiceNumbers } = await import("../drizzle/schema");
+  
+  // Import data (this will overwrite existing data)
+  // In production, you might want to add more sophisticated merge logic
+  
+  if (backup.data.customers && backup.data.customers.length > 0) {
+    for (const customer of backup.data.customers) {
+      await db.insert(customers).values(customer).onDuplicateKeyUpdate({ set: customer });
+    }
+  }
+  
+  if (backup.data.timeEntries && backup.data.timeEntries.length > 0) {
+    for (const entry of backup.data.timeEntries) {
+      await db.insert(timeEntries).values(entry).onDuplicateKeyUpdate({ set: entry });
+    }
+  }
+  
+  if (backup.data.expenses && backup.data.expenses.length > 0) {
+    for (const expense of backup.data.expenses) {
+      await db.insert(expenses).values(expense).onDuplicateKeyUpdate({ set: expense });
+    }
+  }
+  
+  if (backup.data.exchangeRates && backup.data.exchangeRates.length > 0) {
+    for (const rate of backup.data.exchangeRates) {
+      await db.insert(exchangeRates).values(rate).onDuplicateKeyUpdate({ set: rate });
+    }
+  }
+  
+  if (backup.data.fixedCosts && backup.data.fixedCosts.length > 0) {
+    for (const cost of backup.data.fixedCosts) {
+      await db.insert(fixedCosts).values(cost).onDuplicateKeyUpdate({ set: cost });
+    }
+  }
+  
+  if (backup.data.taxSettings && backup.data.taxSettings.length > 0) {
+    for (const setting of backup.data.taxSettings) {
+      await db.insert(taxSettings).values(setting).onDuplicateKeyUpdate({ set: setting });
+    }
+  }
+  
+  if (backup.data.accountSettings && backup.data.accountSettings.length > 0) {
+    for (const setting of backup.data.accountSettings) {
+      await db.insert(accountSettings).values(setting).onDuplicateKeyUpdate({ set: setting });
+    }
+  }
+  
+  if (backup.data.invoiceNumbers && backup.data.invoiceNumbers.length > 0) {
+    for (const invoice of backup.data.invoiceNumbers) {
+      await db.insert(invoiceNumbers).values(invoice).onDuplicateKeyUpdate({ set: invoice });
+    }
+  }
+  
+  return { success: true, message: "Database imported successfully" };
+}

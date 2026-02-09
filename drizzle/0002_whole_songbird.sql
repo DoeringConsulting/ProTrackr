@@ -1,0 +1,20 @@
+CREATE TABLE `accountSettings` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`companyName` varchar(255),
+	`companyLogoUrl` varchar(1000),
+	`companyLogoKey` varchar(500),
+	`street` varchar(255),
+	`postalCode` varchar(20),
+	`city` varchar(100),
+	`country` varchar(100),
+	`vatId` varchar(50),
+	`taxNumber` varchar(50),
+	`bankName` varchar(255),
+	`iban` varchar(50),
+	`swift` varchar(20),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `accountSettings_id` PRIMARY KEY(`id`),
+	CONSTRAINT `accountSettings_userId_unique` UNIQUE(`userId`)
+);

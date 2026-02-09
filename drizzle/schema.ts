@@ -188,3 +188,30 @@ export const taxSettings = mysqlTable("taxSettings", {
 
 export type TaxSetting = typeof taxSettings.$inferSelect;
 export type InsertTaxSetting = typeof taxSettings.$inferInsert;
+
+/**
+ * Account settings table - company logo and user preferences
+ * Note: Multi-user functionality is planned but not yet implemented
+ */
+export const accountSettings = mysqlTable("accountSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(), // one setting per user
+  companyName: varchar("companyName", { length: 255 }),
+  companyLogoUrl: varchar("companyLogoUrl", { length: 1000 }),
+  companyLogoKey: varchar("companyLogoKey", { length: 500 }),
+  // Billing address (can override per invoice)
+  street: varchar("street", { length: 255 }),
+  postalCode: varchar("postalCode", { length: 20 }),
+  city: varchar("city", { length: 100 }),
+  country: varchar("country", { length: 100 }),
+  vatId: varchar("vatId", { length: 50 }), // VAT/USt-ID
+  taxNumber: varchar("taxNumber", { length: 50 }), // Polish NIP or other tax ID
+  bankName: varchar("bankName", { length: 255 }),
+  iban: varchar("iban", { length: 50 }),
+  swift: varchar("swift", { length: 20 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AccountSetting = typeof accountSettings.$inferSelect;
+export type InsertAccountSetting = typeof accountSettings.$inferInsert;

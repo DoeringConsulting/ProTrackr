@@ -922,3 +922,66 @@
 - [x] routers.ts: 50+ Vorkommen ersetzt
 - [x] Doppelten Import korrigiert
 - [x] Tests validiert: Alle 14 Tests bestehen
+
+
+## Aufgabe 42: Einstellungen-Bereich mit 6 Unterseiten erweitern
+- [ ] Datenbank-Schema für neue Einstellungen erweitern
+- [ ] Backend-API für alle 6 Einstellungs-Bereiche implementieren
+- [ ] Einstellungen-Navigation mit Tabs erstellen
+- [ ] Routing für alle 6 Unterseiten einrichten
+
+### 42.1: Fixkosten-Verwaltung (bereits vorhanden - verschieben)
+- [ ] Bestehende Fixkosten-Seite in Einstellungen integrieren
+- [ ] Navigation anpassen (von /fixed-costs zu /settings/fixed-costs)
+
+### 42.2: Steuersätze-Verwaltung (bereits vorhanden - verschieben)
+- [ ] Bestehende Steuereinstellungen-Seite in Einstellungen integrieren
+- [ ] Navigation anpassen (von /tax-settings zu /settings/taxes)
+
+### 42.3: Wechselkurse-Verwaltung
+- [ ] UI für manuelle Wechselkurs-Eingabe erstellen
+- [ ] Anzeige aktueller NBP-Kurse
+- [ ] Überschreiben von NBP-Kursen mit manuellen Werten
+- [ ] Historien-Ansicht für Wechselkurse
+- [ ] CRUD-Operationen für manuelle Kurse
+
+### 42.4: Datensicherung
+- [ ] Export-Funktion für komplette Datenbank (JSON)
+- [ ] Download-Button für Backup-Datei
+- [ ] Automatische Backup-Benennung (Datum + Uhrzeit)
+- [ ] Backup-Historie anzeigen (letzte 10 Backups)
+
+### 42.5: Datenimport
+- [ ] Upload-Funktion für Backup-Dateien
+- [ ] Validierung der Import-Daten
+- [ ] Vorschau vor Import
+- [ ] Import-Bestätigung mit Überschreib-Warnung
+- [ ] Fehlerbehandlung bei ungültigen Daten
+
+### 42.6: Konto für Nutzer (Platzhalter)
+- [ ] Platzhalter-Seite mit Hinweis erstellen
+- [ ] "Funktion in Entwicklung" Nachricht
+- [ ] Link zur Konzept-Dokumentation
+
+## Aufgabe 43: Konzept für Konto-Verwaltung erstellen (NUR KONZEPT - NICHT UMSETZEN)
+- [ ] Firmenlogo-Upload-Konzept ausarbeiten
+- [ ] Mehrbenutzer-Verwaltung konzipieren (Admin/Benutzer-Rollen)
+- [ ] Rechteverwaltung definieren (Lesen/Schreiben/Löschen pro Feature)
+- [ ] Praktische Umsetzungsvorschläge ohne Firlefanz
+- [ ] Markdown-Dokument mit Konzept erstellen (KONZEPT_KONTO_VERWALTUNG.md)
+
+
+## Aufgabe 42: Einstellungen-Bereich erweitern (ERLEDIGT)
+
+- [x] Datenbank-Schema für accountSettings-Tabelle erweitern
+- [x] Backend-API für accountSettings, exchangeRatesManagement, database implementieren
+- [x] Settings-Hauptseite mit Tab-Navigation erstellen
+- [x] FixedCostsTab erstellen (bestehende Funktionalität integrieren)
+- [x] TaxesTab erstellen (bestehende TaxSettings-Seite integrieren)
+- [x] ExchangeRatesTab erstellen (Platzhalter für manuelle Wechselkurs-Verwaltung)
+- [x] BackupTab erstellen (Datensicherung mit Export-Funktion)
+- [x] ImportTab erstellen (Datenimport mit Validierung)
+- [x] AccountTab erstellen (Platzhalter für Konto-Verwaltung)
+- [x] Konzept-Dokument für Konto-Verwaltung erstellen (Firmenlogo, Mehrbenutzer, Rechte)
+- [x] Tests für neue Backend-Funktionen schreiben
+- [x] Alle Tests erfolgreich bestanden (25/25)

@@ -592,6 +592,93 @@ export const appRouter = router({
         return await globalSearch(input.query);
       }),
   }),
+
+  // Account settings
+  accountSettings: router({
+    get: publicProcedure.query(async () => {
+      const { getAccountSettings } = await import("./db");
+      return await getAccountSettings(1); // Hardcoded user ID (auth disabled)
+    }),
+    upsert: publicProcedure.input((val: unknown) => {
+      return z.object({
+        companyName: z.string().optional(),
+        companyLogoUrl: z.string().optional(),
+        companyLogoKey: z.string().optional(),
+        street: z.string().optional(),
+        postalCode: z.string().optional(),
+        city: z.string().optional(),
+        country: z.string().optional(),
+        vatId: z.string().optional(),
+        taxNumber: z.string().optional(),
+        bankName: z.string().optional(),
+        iban: z.string().optional(),
+        swift: z.string().optional(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { upsertAccountSettings } = await import("./db");
+      return await upsertAccountSettings(1, input); // Hardcoded user ID (auth disabled)
+    }),
+  }),
+
+  // Exchange rates management
+  exchangeRatesManagement: router({
+    list: publicProcedure.input((val: unknown) => {
+      return z.object({
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        currency: z.string().optional(),
+      }).parse(val);
+    }).query(async ({ input }) => {
+      const { getExchangeRates } = await import("./db");
+      return await getExchangeRates({
+        startDate: input.startDate ? new Date(input.startDate) : undefined,
+        endDate: input.endDate ? new Date(input.endDate) : undefined,
+        currency: input.currency,
+      });
+    }),
+    upsert: publicProcedure.input((val: unknown) => {
+      return z.object({
+        date: z.string(),
+        currencyPair: z.string(),
+        rate: z.number(),
+        source: z.string().default("Manual"),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { upsertExchangeRate } = await import("./db");
+      return await upsertExchangeRate({
+        date: new Date(input.date),
+        currencyPair: input.currencyPair,
+        rate: Math.round(input.rate * 10000),
+        source: input.source,
+      });
+    }),
+    delete: publicProcedure.input((val: unknown) => {
+      return z.object({
+        currencyPair: z.string(),
+        date: z.string(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { deleteExchangeRate } = await import("./db");
+      await deleteExchangeRate(input.currencyPair, new Date(input.date));
+      return { success: true };
+    }),
+  }),
+
+  // Database export/import
+  database: router({
+    export: publicProcedure.mutation(async () => {
+      const { exportDatabase } = await import("./db");
+      return await exportDatabase();
+    }),
+    import: publicProcedure.input((val: unknown) => {
+      return z.object({
+        backup: z.any(),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { importDatabase } = await import("./db");
+      return await importDatabase(input.backup);
+    }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

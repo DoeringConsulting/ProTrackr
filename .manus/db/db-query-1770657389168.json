@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `accountSettings` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `userId` int NOT NULL,\n  `companyName` varchar(255),\n  `companyLogoUrl` varchar(1000),\n  `companyLogoKey` varchar(500),\n  `street` varchar(255),\n  `postalCode` varchar(20),\n  `city` varchar(100),\n  `country` varchar(100),\n  `vatId` varchar(50),\n  `taxNumber` varchar(50),\n  `bankName` varchar(255),\n  `iban` varchar(50),\n  `swift` varchar(20),\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  CONSTRAINT `accountSettings_id` PRIMARY KEY(`id`),\n  CONSTRAINT `accountSettings_userId_unique` UNIQUE(`userId`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute CREATE TABLE IF NOT EXISTS `accountSettings` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `userId` int NOT NULL,\n  `companyName` varchar(255),\n  `companyLogoUrl` varchar(1000),\n  `companyLogoKey` varchar(500),\n  `street` varchar(255),\n  `postalCode` varchar(20),\n  `city` varchar(100),\n  `country` varchar(100),\n  `vatId` varchar(50),\n  `taxNumber` varchar(50),\n  `bankName` varchar(255),\n  `iban` varchar(50),\n  `swift` varchar(20),\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  CONSTRAINT `accountSettings_id` PRIMARY KEY(`id`),\n  CONSTRAINT `accountSettings_userId_unique` UNIQUE(`userId`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 556
+}
