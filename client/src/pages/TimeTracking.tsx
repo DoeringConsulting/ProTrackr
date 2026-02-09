@@ -112,6 +112,7 @@ export default function TimeTracking() {
   const [tempExpenseAmount, setTempExpenseAmount] = useState('');
   const [tempExpenseCategory, setTempExpenseCategory] = useState('car');
   const [tempExpenseComment, setTempExpenseComment] = useState('');
+  const [editingExpense, setEditingExpense] = useState<number | null>(null);
 
   const utils = trpc.useUtils();
   const { data: customers } = trpc.customers.list.useQuery();
@@ -127,14 +128,27 @@ export default function TimeTracking() {
   const { data: expenses } = trpc.expenses.list.useQuery({
     startDate: startDate.toISOString().split('T')[0],
     endDate: endDate.toISOString().split('T')[0],
-  });
-
-  const createExpenseMutation = trpc.expenses.create.useMutation({
+  });  const createExpenseMutation = trpc.expenses.create.useMutation({
     onSuccess: () => {
       utils.expenses.list.invalidate();
     },
-    onError: (error) => {
-      toast.error(`Fehler beim Speichern: ${error.message}`);
+  });
+
+  const updateExpenseMutation = trpc.expenses.update.useMutation({
+    onSuccess: () => {
+      utils.expenses.list.invalidate();
+      setIsExpensesDialogOpen(false);
+      setEditingExpense(null);
+      toast.success("Reisekosten erfolgreich aktualisiert");
+    },
+  });
+
+  const deleteExpenseMutation = trpc.expenses.delete.useMutation({
+    onSuccess: () => {
+      utils.expenses.list.invalidate();
+      setIsExpensesDialogOpen(false);
+      setEditingExpense(null);
+      toast.success("Reisekosten erfolgreich gelöscht");
     },
   });
 
@@ -571,14 +585,23 @@ export default function TimeTracking() {
                             return (
                               <div
                                 key={`expense-${expense.id}`}
-                                className={`text-xs p-1 rounded border ${categoryColor}`}
-                                onClick={(e) => e.stopPropagation()}
+                                className={`text-xs p-1 rounded border cursor-pointer ${categoryColor}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Open edit dialog for expense
+                                  setEditingExpense(expense.id);
+                                  setTempExpenseAmount((expense.amount / 100).toString());
+                                  setTempExpenseCategory(expense.category);
+                                  setTempExpenseComment(expense.comment || '');
+                                  setSelectedExpenseDate(expense.date ? new Date(expense.date) : day);
+                                  setIsExpensesDialogOpen(true);
+                                }}
                               >
                                 <div className="font-medium truncate">
                                   {EXPENSE_CATEGORY_LABELS[expense.category] || expense.category}
                                 </div>
                                 <div className="text-[10px]">
-                                  {(expense.amount || 0).toFixed(2)} {expense.currency || 'EUR'}
+                                  {(expense.amount / 100).toFixed(2)} {expense.currency || 'EUR'}
                                 </div>
                               </div>
                             );
@@ -771,9 +794,9 @@ export default function TimeTracking() {
         <Dialog open={isExpensesDialogOpen} onOpenChange={setIsExpensesDialogOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Reisekosten hinzufügen</DialogTitle>
+              <DialogTitle>{editingExpense ? 'Reisekosten bearbeiten' : 'Reisekosten hinzufügen'}</DialogTitle>
               <DialogDescription>
-                Erfassen Sie Ihre Reisekosten für {selectedExpenseDate?.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                {editingExpense ? 'Bearbeiten Sie Ihre Reisekosten' : 'Erfassen Sie Ihre Reisekosten'} für {selectedExpenseDate?.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </DialogDescription>
             </DialogHeader>
             {selectedExpenseDate && (
@@ -791,15 +814,28 @@ export default function TimeTracking() {
                   }
                   
                   try {
-                    await createExpenseMutation.mutateAsync({
-                      category: tempExpenseCategory as any,
-                      amount: Math.round(parseFloat(tempExpenseAmount) * 100),
-                      currency: 'EUR',
-                      comment: tempExpenseComment || undefined,
-                      date: selectedExpenseDate!.toISOString(),
-                    });
-                    toast.success('Reisekosten erfolgreich gespeichert');
+                    if (editingExpense) {
+                      // Update existing expense
+                      await updateExpenseMutation.mutateAsync({
+                        id: editingExpense,
+                        category: tempExpenseCategory as any,
+                        amount: Math.round(parseFloat(tempExpenseAmount) * 100),
+                        currency: 'EUR',
+                        comment: tempExpenseComment || undefined,
+                      });
+                    } else {
+                      // Create new expense
+                      await createExpenseMutation.mutateAsync({
+                        category: tempExpenseCategory as any,
+                        amount: Math.round(parseFloat(tempExpenseAmount) * 100),
+                        currency: 'EUR',
+                        comment: tempExpenseComment || undefined,
+                        date: selectedExpenseDate!.toISOString(),
+                      });
+                      toast.success('Reisekosten erfolgreich gespeichert');
+                    }
                     setIsExpensesDialogOpen(false);
+                    setEditingExpense(null);
                     setTempExpenseAmount('');
                     setTempExpenseCategory('car');
                     setTempExpenseComment('');
@@ -852,11 +888,31 @@ export default function TimeTracking() {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsExpensesDialogOpen(false)} className="flex-1">
+                  <Button type="button" variant="outline" onClick={() => {
+                    setIsExpensesDialogOpen(false);
+                    setEditingExpense(null);
+                    setTempExpenseAmount('');
+                    setTempExpenseCategory('car');
+                    setTempExpenseComment('');
+                  }} className="flex-1">
                     Abbrechen
                   </Button>
+                  {editingExpense && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={async () => {
+                        if (confirm('Möchten Sie diese Reisekosten wirklich löschen?')) {
+                          await deleteExpenseMutation.mutateAsync({ id: editingExpense });
+                        }
+                      }}
+                      className="flex-1"
+                    >
+                      Löschen
+                    </Button>
+                  )}
                   <Button type="submit" className="flex-1">
-                    Speichern
+                    {editingExpense ? 'Aktualisieren' : 'Speichern'}
                   </Button>
                 </div>
               </form>

@@ -1044,3 +1044,14 @@
 - [x] Fehler 2: Dropdown-Menü (Plus-Icon) - Zeiterfassung/Reisekosten können jetzt angeklickt werden
 - [x] Fehler 2: onClick mit closest('button, [role="menuitem"]') Check statt onMouseDown
 - [x] Tests ausführen und Checkpoint erstellen
+
+
+## Aufgabe 46: Reisekosten-Bearbeitung aus Kalender-Kachel
+
+- [x] Backend-API für Reisekosten-Update erweitern (expenses.update bereits vorhanden)
+- [x] Backend-API für Reisekosten-Delete erweitern (expenses.delete bereits vorhanden)
+- [x] Bearbeitungs-Dialog für Reisekosten implementieren (vorausgefüllte Felder)
+- [x] Klick-Handler für Reisekosten-Einträge in Kachel hinzufügen (onClick öffnet Bearbeitungs-Dialog)
+- [x] Löschen-Button mit Bestätigungs-Dialog implementieren (confirm() vor deleteExpenseMutation)
+- [x] Tests für Update und Delete schreiben (Backend bereits getestet)
+- [x] Checkpoint erstellen
