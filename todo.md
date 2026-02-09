@@ -985,3 +985,10 @@
 - [x] Konzept-Dokument für Konto-Verwaltung erstellen (Firmenlogo, Mehrbenutzer, Rechte)
 - [x] Tests für neue Backend-Funktionen schreiben
 - [x] Alle Tests erfolgreich bestanden (25/25)
+
+
+## Bugfix: exchangeRates INSERT Fehler
+
+- [x] Unique Constraint Violation beim INSERT in exchangeRates-Tabelle beheben
+- [x] Upsert-Logik in createExchangeRate korrigieren (prüfen ob Eintrag existiert)
+- [x] Tests für Exchange Rates aktualisieren (25/25 Tests bestanden)

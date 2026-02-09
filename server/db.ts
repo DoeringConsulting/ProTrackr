@@ -272,7 +272,22 @@ export async function createExchangeRate(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { exchangeRates } = await import("../drizzle/schema");
-  await db.insert(exchangeRates).values(data);
+  
+  // Check if rate already exists for this date and currency pair
+  const existing = await getExchangeRateByDate(data.currencyPair, data.date);
+  
+  if (existing) {
+    // Update existing rate
+    await db.update(exchangeRates)
+      .set(data)
+      .where(and(
+        eq(exchangeRates.currencyPair, data.currencyPair),
+        eq(exchangeRates.date, data.date)
+      ));
+  } else {
+    // Insert new rate
+    await db.insert(exchangeRates).values(data);
+  }
 }
 
 export async function getExchangeRates(filters?: { startDate?: Date; endDate?: Date; currency?: string }) {
