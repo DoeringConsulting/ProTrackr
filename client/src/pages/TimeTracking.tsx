@@ -450,20 +450,17 @@ export default function TimeTracking() {
                   const hasMore = allItems.length > 2;
                   
                   return (
-                    <>
-                      {isExpanded && (
-                        <div
-                          className="fixed inset-0 bg-black/20 z-40"
-                          onClick={() => setExpandedDay(null)}
-                        />
-                      )}
-                      <div
-                        key={idx}
-                        className={`min-h-[120px] border rounded-lg p-2 transition-all ${
-                          isToday ? "border-primary bg-primary/5" : "border-border"
-                        } ${isExpanded ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 shadow-2xl bg-background w-[400px] max-h-[240px]" : "relative"}`}
-                        onMouseDown={() => {
-                          console.log('[DEBUG] Kachel onMouseDown triggered for day:', day.getDate());
+                    <div
+                      key={idx}
+                      className={`min-h-[120px] border rounded-lg p-2 transition-all ${
+                        isToday ? "border-primary bg-primary/5" : "border-border"
+                      } ${isExpanded ? "relative z-50 shadow-2xl bg-background max-h-[240px] -translate-y-4" : "relative"}`}
+                        onClick={(e) => {
+                          // Nur wenn nicht auf Button/Dropdown geklickt wurde
+                          if ((e.target as HTMLElement).closest('button, [role="menuitem"]')) {
+                            return;
+                          }
+                          console.log('[DEBUG] Kachel onClick triggered for day:', day.getDate());
                           console.log('[DEBUG] entries.length:', entries.length, 'dayExpenses.length:', dayExpenses.length);
                           if (entries.length > 0 || dayExpenses.length > 0) {
                             handleDayClick(day);
@@ -599,7 +596,6 @@ export default function TimeTracking() {
                         )}
                       </div>
                     </div>
-                    </>
                   );
                 })}
               </div>

@@ -1035,3 +1035,12 @@
 - [x] Flexible Höhe basierend auf Anzahl der Einträge (max. 2x Höhe: 240px statt fix 4x: 480px)
 - [x] Scroll-Funktion für restliche Einträge (max-h-[180px] overflow-y-auto)
 - [x] Tests ausführen und Checkpoint erstellen
+
+
+## Bugfix: Kachel-Vergrößerung und Dropdown-Interaktion
+
+- [x] Fehler 1: Kachel soll an ursprünglicher Position bleiben und nur vertikal nach oben schweben (-translate-y-4)
+- [x] Fehler 1: Schatten auf darunterliegende Fläche werfen (shadow-2xl)
+- [x] Fehler 2: Dropdown-Menü (Plus-Icon) - Zeiterfassung/Reisekosten können jetzt angeklickt werden
+- [x] Fehler 2: onClick mit closest('button, [role="menuitem"]') Check statt onMouseDown
+- [x] Tests ausführen und Checkpoint erstellen
