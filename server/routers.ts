@@ -1,5 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
+
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
@@ -23,54 +22,6 @@ export const appRouter = router({
   }),
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
-  auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
-    }),
-    requestPasswordReset: publicProcedure
-      .input(z.object({ email: z.string().email() }))
-      .mutation(async ({ input, ctx }) => {
-        const { createPasswordResetToken } = await import("./passwordReset");
-        const { sendPasswordResetEmail } = await import("./email");
-        
-        // Token erstellen
-        const resetToken = await createPasswordResetToken(input.email);
-        
-        if (!resetToken) {
-          // Aus Sicherheitsgründen immer success zurückgeben
-          // (verhindert E-Mail-Enumeration)
-          return { success: true };
-        }
-        
-        // E-Mail senden
-        const baseUrl = `${ctx.req.protocol}://${ctx.req.get('host')}`;
-        await sendPasswordResetEmail(input.email, resetToken, baseUrl);
-        
-        return { success: true };
-      }),
-    verifyResetToken: publicProcedure
-      .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
-        const { verifyPasswordResetToken } = await import("./passwordReset");
-        const userId = await verifyPasswordResetToken(input.token);
-        return { valid: userId !== null };
-      }),
-    resetPassword: publicProcedure
-      .input(z.object({ 
-        token: z.string(),
-        newPassword: z.string().min(8)
-      }))
-      .mutation(async ({ input }) => {
-        const { resetPasswordWithToken } = await import("./passwordReset");
-        const success = await resetPasswordWithToken(input.token, input.newPassword);
-        return { success };
-      }),
-  }),
 
   // Customer management
   customers: router({
@@ -171,7 +122,7 @@ export const appRouter = router({
       const { getTimeEntries } = await import("./db");
       const startDate = input.startDate ? new Date(input.startDate) : undefined;
       const endDate = input.endDate ? new Date(input.endDate) : undefined;
-      return await getTimeEntries(ctx.user.id, startDate, endDate);
+      return await getTimeEntries(1, startDate, endDate); // Hardcoded user ID (auth disabled)
     }),
     getById: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
@@ -196,7 +147,7 @@ export const appRouter = router({
       const { createTimeEntry } = await import("./db");
       return await createTimeEntry({
         ...input,
-        userId: ctx.user.id,
+        userId: 1, // Hardcoded user ID (auth disabled)
         date: new Date(input.date),
       });
     }),
@@ -246,7 +197,7 @@ export const appRouter = router({
       const createdEntries = [];
       for (const targetDate of input.targetDates) {
         const newEntry = await createTimeEntry({
-          userId: ctx.user.id,
+          userId: 1, // Hardcoded user ID (auth disabled)
           customerId: sourceEntry.customerId,
           date: new Date(targetDate),
           weekday: new Date(targetDate).toLocaleDateString('de-DE', { weekday: 'long' }),
@@ -274,7 +225,7 @@ export const appRouter = router({
       }).parse(val);
     }).query(async ({ ctx }) => {
       const { getAllExpenses } = await import("./db");
-      return await getAllExpenses(ctx.user.id);
+      return await getAllExpenses(1); // Hardcoded user ID (auth disabled)
     }),
     listByTimeEntry: protectedProcedure.input((val: unknown) => {
       return z.object({ timeEntryId: z.number() }).parse(val);
@@ -374,7 +325,7 @@ export const appRouter = router({
       const { getExpensesByCustomer } = await import("./db");
       const startDate = input.startDate ? new Date(input.startDate) : undefined;
       const endDate = input.endDate ? new Date(input.endDate) : undefined;
-      return await getExpensesByCustomer(ctx.user.id, input.customerId, startDate, endDate);
+      return await getExpensesByCustomer(1, input.customerId, startDate, endDate); // Hardcoded user ID (auth disabled)
     }),
   }),
 
@@ -541,7 +492,7 @@ export const appRouter = router({
       const { createDocument } = await import("./db");
       return await createDocument({
         ...input,
-        userId: ctx.user.id,
+        userId: 1, // Hardcoded user ID (auth disabled)
       });
     }),
     delete: protectedProcedure.input((val: unknown) => {
@@ -570,7 +521,7 @@ export const appRouter = router({
       const { createFixedCost } = await import("./db");
       return await createFixedCost({
         ...input,
-        userId: ctx.user.id,
+        userId: 1, // Hardcoded user ID (auth disabled)
       });
     }),
     update: protectedProcedure.input((val: unknown) => {

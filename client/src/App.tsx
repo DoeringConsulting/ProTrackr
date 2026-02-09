@@ -19,21 +19,13 @@ import ExchangeRates from "@/pages/ExchangeRates";
 import Backup from "./pages/Backup";
 import Settings from "./pages/Settings";
 import TaxSettings from "./pages/TaxSettings";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
+
 import ProjectDetail from "./pages/ProjectDetail";
 
 function Router() {
   return (
     <Switch>
-      {/* Auth routes - no layout */}
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
-      <Route path="/forgot-password" component={ForgotPassword} />
-      <Route path="/reset-password" component={ResetPassword} />
-      
+
       {/* App routes - with DashboardLayout */}
       <Route path="/" component={Dashboard} />
       <Route path="/customers" component={Customers} />

@@ -1,6 +1,6 @@
 import { desc, eq, and, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, invoiceNumbers, customers } from "../drizzle/schema";
+import { invoiceNumbers, customers } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -18,50 +18,7 @@ export async function getDb() {
   return _db;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
-
-  try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
-
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    }
-
-    await db
-      .insert(users)
-      .values(values)
-      .onDuplicateKeyUpdate({ set: updateSet });
-  } catch (error) {
-    console.error("[Database] upsertUser failed:", error);
-    throw error;
-  }
-}
+// ⚠️ User functions removed (auth disabled for development)
 
 export async function generateInvoiceNumber(customerId: number): Promise<string> {
   const db = await getDb();
@@ -291,13 +248,7 @@ export async function deleteDocument(id: number) {
   // TODO: Implement document deletion
 }
 
-// User queries
-export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) return null;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result[0] || null;
-}
+// ⚠️ User queries removed (auth disabled for development)
 
 // Document queries (placeholder - implement if needed)
 export async function createDocument(data: any) {

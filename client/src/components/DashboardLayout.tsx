@@ -1,4 +1,3 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -19,7 +18,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-// OAuth temporarily disabled - import { getLoginUrl } from "@/const";
+
 import { useIsMobile } from "@/hooks/useMobile";
 import { LayoutDashboard, LogOut, PanelLeft, Users, Clock, Receipt, FileText, Settings, Upload, Database, DollarSign, Calculator, Search } from "lucide-react";
 import NavigationButtons from "@/components/NavigationButtons";
@@ -59,43 +58,9 @@ export default function DashboardLayout({
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
-  // ⚠️ AUTHENTICATION COMPLETELY DISABLED FOR DEVELOPMENT
-  // Re-enable before final release!
-  // const { loading, user } = useAuth();
-
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
   }, [sidebarWidth]);
-
-  // Auth check disabled for development
-  // if (loading) {
-  //   return <DashboardLayoutSkeleton />
-  // }
-  // if (!user) {
-  //   return (
-  //     <div className="flex items-center justify-center min-h-screen">
-  //       <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-  //         <div className="flex flex-col items-center gap-6">
-  //           <h1 className="text-2xl font-semibold tracking-tight text-center">
-  //             Sign in to continue
-  //           </h1>
-  //           <p className="text-sm text-muted-foreground text-center max-w-sm">
-  //             Access to this dashboard requires authentication. Continue to launch the login flow.
-  //           </p>
-  //         </div>
-  //         <Button
-  //           onClick={() => {
-  //             window.location.href = "/login";
-  //           }}
-  //           size="lg"
-  //           className="w-full shadow-lg hover:shadow-xl transition-all"
-  //         >
-  //           Sign in
-  //         </Button>
-  //       </div>
-  //     </div>
-  //   );
-  // }
 
   return (
     <SidebarProvider
@@ -121,7 +86,8 @@ function DashboardLayoutContent({
   children,
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
-  const { user, logout } = useAuth();
+  // Mock user for development (no auth)
+  const user = { name: "Alexander Döring", email: "a.doering@doering-consulting.eu" };
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -244,7 +210,7 @@ function DashboardLayoutContent({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
-                  onClick={logout}
+                  onClick={() => console.log('Logout disabled in development')}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />

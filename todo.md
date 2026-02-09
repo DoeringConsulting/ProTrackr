@@ -864,3 +864,43 @@
 - [x] Logout deaktiviert
   - [x] Logout-Funktion macht nichts mehr
   - [x] Console-Log statt echter Logout
+
+## Aufgabe 39: Auth-Code komplett gelöscht für saubere Entwicklung ✅
+- [x] Auth-Seiten gelöscht
+  - [x] Login.tsx
+  - [x] Register.tsx
+  - [x] ForgotPassword.tsx
+  - [x] ResetPassword.tsx
+- [x] Auth-Backend gelöscht
+  - [x] server/_core/sdk.ts (OAuth)
+  - [x] server/_core/cookies.ts
+  - [x] server/passwordReset.ts
+  - [x] server/email.ts
+  - [x] server/_core/auth/ Verzeichnis komplett
+- [x] Auth-Hooks und Utils gelöscht
+  - [x] client/src/_core/hooks/useAuth.ts
+  - [x] Auth-Routen aus routers.ts entfernt
+  - [x] const.ts: getLoginUrl entfernt
+- [x] Auth-Tests gelöscht
+  - [x] server/auth.logout.test.ts
+  - [x] server/passwordReset.test.ts
+  - [x] server/email.test.ts
+- [x] Auth-Imports entfernt
+  - [x] App.tsx: Keine Auth-Routen
+  - [x] DashboardLayout.tsx: useAuth, Logout entfernt
+  - [x] routers.ts: ctx.user durch userId=1 ersetzt (7 Stellen)
+  - [x] server/_core/index.ts: OAuth, Session, Passport auskommentiert
+  - [x] main.tsx, Home.tsx: getLoginUrl entfernt
+- [x] Datenbank-Schema bereinigt
+  - [x] users-Tabelle aus schema.ts entfernt
+  - [x] User-Funktionen aus db.ts entfernt
+  - [x] context.ts: User-Typ entfernt
+  - [x] trpc.ts: Admin-Check deaktiviert
+- [x] Tests validiert: Alle 14 Tests bestehen, 0 TypeScript-Fehler
+- [ ] ⚠️ **KRITISCH: Auth vor finalem Release neu implementieren!**
+  - [ ] Moderne Lösung wählen (Clerk, Auth.js, Manus OAuth)
+  - [ ] User-Tabelle neu erstellen
+  - [ ] Login/Register-Seiten neu implementieren
+  - [ ] ctx.user wiederherstellen
+  - [ ] Alle userId=1 durch ctx.user.id ersetzen
+  - [ ] Frische Implementierung ohne Legacy-Code

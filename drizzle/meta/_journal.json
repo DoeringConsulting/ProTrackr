@@ -8,6 +8,13 @@
       "when": 1770561620216,
       "tag": "0000_zippy_gwen_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1770636487126,
+      "tag": "0001_lonely_frog_thor",
+      "breakpoints": true
     }
   ]
 }

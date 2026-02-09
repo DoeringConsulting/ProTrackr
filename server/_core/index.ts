@@ -5,13 +5,10 @@ import net from "net";
 import session from "express-session";
 import helmet from "helmet";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleCronRequest } from "../cronEndpoint";
-import passport from "../auth/passport";
-import authRouter from "../auth/authRouter";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
