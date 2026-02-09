@@ -254,7 +254,14 @@ export const appRouter = router({
       }).parse(val);
     }).mutation(async ({ input }) => {
       const { createExpense } = await import("./db");
-      return await createExpense(input);
+      // Convert date string to Date object if provided
+      const data = {
+        ...input,
+        date: input.date ? new Date(input.date) : undefined,
+        checkInDate: input.checkInDate ? new Date(input.checkInDate) : undefined,
+        checkOutDate: input.checkOutDate ? new Date(input.checkOutDate) : undefined,
+      };
+      return await createExpense(data);
     }),
     createBatch: publicProcedure.input((val: unknown) => {
       return z.object({

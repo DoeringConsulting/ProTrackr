@@ -1,6 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
-import ExpenseForm from "@/components/ExpenseForm";
+import { ExpenseFormInline } from "@/components/ExpenseFormInline";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -108,6 +109,9 @@ export default function TimeTracking() {
   const [isExpensesDialogOpen, setIsExpensesDialogOpen] = useState(false);
   const [selectedExpenseDate, setSelectedExpenseDate] = useState<Date | null>(null);
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
+  const [tempExpenseAmount, setTempExpenseAmount] = useState('');
+  const [tempExpenseCategory, setTempExpenseCategory] = useState('car');
+  const [tempExpenseComment, setTempExpenseComment] = useState('');
 
   const utils = trpc.useUtils();
   const { data: customers } = trpc.customers.list.useQuery();
@@ -367,9 +371,13 @@ export default function TimeTracking() {
   };
 
   const handleDayClick = (day: Date) => {
+    console.log('[DEBUG] handleDayClick called for day:', day.toISOString());
+    console.log('[DEBUG] Current expandedDay:', expandedDay?.toISOString());
     if (expandedDay && expandedDay.getTime() === day.getTime()) {
+      console.log('[DEBUG] Collapsing day');
       setExpandedDay(null);
     } else {
+      console.log('[DEBUG] Expanding day');
       setExpandedDay(day);
     }
   };
@@ -446,9 +454,17 @@ export default function TimeTracking() {
                       key={idx}
                       className={`min-h-[120px] border rounded-lg p-2 transition-all ${
                         isToday ? "border-primary bg-primary/5" : "border-border"
-                      } ${isExpanded ? "col-span-2 row-span-2 z-10 shadow-lg" : ""}`}
-                      onClick={() => hasMore && handleDayClick(day)}
-                      style={isExpanded ? { cursor: 'pointer' } : hasMore ? { cursor: 'pointer' } : {}}
+                      } ${isExpanded ? "col-span-4 row-span-4 z-10 shadow-lg bg-background" : ""}`}
+                      onClick={() => {
+                        console.log('[DEBUG] Kachel onClick triggered for day:', day.getDate());
+                        console.log('[DEBUG] entries.length:', entries.length, 'dayExpenses.length:', dayExpenses.length);
+                        if (entries.length > 0 || dayExpenses.length > 0) {
+                          handleDayClick(day);
+                        } else {
+                          console.log('[DEBUG] No entries/expenses, skipping handleDayClick');
+                        }
+                      }}
+                      style={(entries.length > 0 || dayExpenses.length > 0) ? { cursor: 'pointer' } : {}}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -499,7 +515,7 @@ export default function TimeTracking() {
                         </div>
                       </div>
                       
-                      <div className={`space-y-1 ${isExpanded ? "max-h-[400px] overflow-y-auto" : ""}`}>
+                      <div className={`space-y-1 ${isExpanded ? "max-h-[600px] overflow-y-auto pr-2" : ""}`}>
                         {displayItems.map((item, itemIdx) => {
                           if (item.type === 'time') {
                             const entry = item.data as any;
@@ -743,28 +759,89 @@ export default function TimeTracking() {
               </DialogDescription>
             </DialogHeader>
             {selectedExpenseDate && (
-              <ExpenseForm
-                date={selectedExpenseDate}
-                onSubmit={async (expenses) => {
+              <form
+                className="space-y-4"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  console.log('[TimeTracking] Form submitted');
+                  console.log('[TimeTracking] tempExpenseAmount:', tempExpenseAmount);
+                  console.log('[TimeTracking] tempExpenseCategory:', tempExpenseCategory);
+                  
+                  if (!tempExpenseAmount) {
+                    toast.error('Bitte Betrag eingeben');
+                    return;
+                  }
+                  
                   try {
-                    // Create expense entries in the database
-                    for (const expense of expenses) {
-                      await createExpenseMutation.mutateAsync({
-                        category: expense.category as any,
-                        amount: Math.round(parseFloat(expense.amount) * 100), // Convert to cents
-                        currency: expense.currency,
-                        comment: expense.comment || undefined,
-                        date: selectedExpenseDate!.toISOString().split('T')[0],
-                      });
-                    }
-                    toast.success(`${expenses.length} Reisekosten erfolgreich gespeichert`);
+                    await createExpenseMutation.mutateAsync({
+                      category: tempExpenseCategory as any,
+                      amount: Math.round(parseFloat(tempExpenseAmount) * 100),
+                      currency: 'EUR',
+                      comment: tempExpenseComment || undefined,
+                      date: selectedExpenseDate!.toISOString(),
+                    });
+                    toast.success('Reisekosten erfolgreich gespeichert');
                     setIsExpensesDialogOpen(false);
+                    setTempExpenseAmount('');
+                    setTempExpenseCategory('car');
+                    setTempExpenseComment('');
                   } catch (error: any) {
+                    console.error('[TimeTracking] Error:', error);
                     toast.error(`Fehler beim Speichern: ${error.message}`);
                   }
                 }}
-                onCancel={() => setIsExpensesDialogOpen(false)}
-              />
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="expense-amount">Betrag (EUR)</Label>
+                    <Input
+                      id="expense-amount"
+                      type="number"
+                      step="0.01"
+                      placeholder="z.B. 45.50"
+                      value={tempExpenseAmount}
+                      onChange={(e) => setTempExpenseAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="expense-category">Kategorie</Label>
+                    <Select value={tempExpenseCategory} onValueChange={setTempExpenseCategory}>
+                      <SelectTrigger id="expense-category">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="car">Mietwagen</SelectItem>
+                        <SelectItem value="train">Zug</SelectItem>
+                        <SelectItem value="flight">Flug</SelectItem>
+                        <SelectItem value="transport">Sonstiger Transport</SelectItem>
+                        <SelectItem value="hotel">Hotel</SelectItem>
+                        <SelectItem value="food">Gastronomie</SelectItem>
+                        <SelectItem value="meal_allowance">Verpflegungspauschale</SelectItem>
+                        <SelectItem value="fuel">Treibstoff</SelectItem>
+                        <SelectItem value="other">Sonstiges</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="expense-comment">Kommentar (optional)</Label>
+                  <Textarea
+                    id="expense-comment"
+                    placeholder="Zusätzliche Informationen..."
+                    value={tempExpenseComment}
+                    onChange={(e) => setTempExpenseComment(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsExpensesDialogOpen(false)} className="flex-1">
+                    Abbrechen
+                  </Button>
+                  <Button type="submit" className="flex-1">
+                    Speichern
+                  </Button>
+                </div>
+              </form>
             )}
           </DialogContent>
         </Dialog>

@@ -344,18 +344,18 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
   if (!db) return [];
   const { expenses, timeEntries } = await import("../drizzle/schema");
   
-  // Build where conditions
-  const conditions = [eq(timeEntries.userId, userId)];
+  // Build where conditions for time-entry-linked expenses
+  const timeEntryConditions = [eq(timeEntries.userId, userId)];
   
   if (startDate) {
-    conditions.push(sql`DATE(${timeEntries.date}) >= ${startDate}`);
+    timeEntryConditions.push(sql`DATE(${timeEntries.date}) >= ${startDate}`);
   }
   if (endDate) {
-    conditions.push(sql`DATE(${timeEntries.date}) <= ${endDate}`);
+    timeEntryConditions.push(sql`DATE(${timeEntries.date}) <= ${endDate}`);
   }
   
-  // Join expenses with timeEntries to filter by userId and date range
-  const result = await db
+  // Get expenses linked to time entries
+  const linkedExpenses = await db
     .select({
       id: expenses.id,
       timeEntryId: expenses.timeEntryId,
@@ -368,9 +368,35 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
     })
     .from(expenses)
     .innerJoin(timeEntries, eq(expenses.timeEntryId, timeEntries.id))
-    .where(and(...conditions));
+    .where(and(...timeEntryConditions));
   
-  return result;
+  // Build where conditions for standalone expenses
+  const standaloneConditions = [sql`${expenses.timeEntryId} IS NULL`];
+  
+  if (startDate) {
+    standaloneConditions.push(sql`DATE(${expenses.date}) >= ${startDate}`);
+  }
+  if (endDate) {
+    standaloneConditions.push(sql`DATE(${expenses.date}) <= ${endDate}`);
+  }
+  
+  // Get standalone expenses (not linked to time entries)
+  const standaloneExpenses = await db
+    .select({
+      id: expenses.id,
+      timeEntryId: expenses.timeEntryId,
+      category: expenses.category,
+      amount: expenses.amount,
+      currency: expenses.currency,
+      comment: expenses.comment,
+      date: expenses.date,
+      createdAt: expenses.createdAt,
+    })
+    .from(expenses)
+    .where(and(...standaloneConditions));
+  
+  // Combine both results
+  return [...linkedExpenses, ...standaloneExpenses];
 }
 
 export async function getTimeEntryById(id: number) {

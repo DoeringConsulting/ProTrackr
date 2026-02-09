@@ -1012,3 +1012,15 @@
 - [ ] Fehler 1: Kachel-Vergrößerung funktioniert nicht im Februar (vermutlich wegen fehlender Einträge)
 - [x] Fehler 2: Einstellungen-Struktur korrigieren - bestehende Sidebar-Reiter (Fixkosten, Steuern, Wechselkurse) als Tabs in Einstellungen verschieben
 - [x] Fehler 2: Sidebar-Navigation bereinigen (nur noch Dashboard, Zeiterfassung, Kunden, Rechnungen, Einstellungen)
+
+
+## Aufgabe 44: Reisekosten-Speicherung und Kachel-Vergrößerung
+
+- [x] ExpenseForm komplett neu implementieren ohne Dialog-Blockierung (Inline-Formular erstellt)
+- [x] Reisekosten-Speicherung direkt in TimeTracking.tsx integrieren (funktioniert vollständig)
+- [x] Submit-Handler ohne Form-Element implementieren (Form-Submit mit onSubmit)
+- [x] Reisekosten-Speicherung testen (9. Februar) - erfolgreich
+- [ ] Kachel-Vergrößerung (4-fach) beim Anklicken - PROBLEM: onClick-Handler wird nie aufgerufen (Januar & Februar getestet)
+- [ ] Scroll-Funktion für vergrößerte Kacheln mit vielen Einträgen
+- [ ] Vergrößerte Kachel schließen beim Klick außerhalb
+- [ ] Tests für neue Funktionen schreiben
