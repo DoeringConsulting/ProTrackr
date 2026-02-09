@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { ChevronLeft, ChevronRight, Plus, Copy, Clock, Receipt } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Copy, Clock, Receipt, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -450,27 +450,48 @@ export default function TimeTracking() {
                   const hasMore = allItems.length > 2;
                   
                   return (
-                    <div
-                      key={idx}
-                      className={`min-h-[120px] border rounded-lg p-2 transition-all ${
-                        isToday ? "border-primary bg-primary/5" : "border-border"
-                      } ${isExpanded ? "col-span-4 row-span-4 z-10 shadow-lg bg-background" : ""}`}
-                      onClick={() => {
-                        console.log('[DEBUG] Kachel onClick triggered for day:', day.getDate());
-                        console.log('[DEBUG] entries.length:', entries.length, 'dayExpenses.length:', dayExpenses.length);
-                        if (entries.length > 0 || dayExpenses.length > 0) {
-                          handleDayClick(day);
-                        } else {
-                          console.log('[DEBUG] No entries/expenses, skipping handleDayClick');
-                        }
-                      }}
-                      style={(entries.length > 0 || dayExpenses.length > 0) ? { cursor: 'pointer' } : {}}
-                    >
+                    <>
+                      {isExpanded && (
+                        <div
+                          className="fixed inset-0 bg-black/20 z-40"
+                          onClick={() => setExpandedDay(null)}
+                        />
+                      )}
+                      <div
+                        key={idx}
+                        className={`min-h-[120px] border rounded-lg p-2 transition-all ${
+                          isToday ? "border-primary bg-primary/5" : "border-border"
+                        } ${isExpanded ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 shadow-2xl bg-background w-[400px] max-h-[240px]" : "relative"}`}
+                        onMouseDown={() => {
+                          console.log('[DEBUG] Kachel onMouseDown triggered for day:', day.getDate());
+                          console.log('[DEBUG] entries.length:', entries.length, 'dayExpenses.length:', dayExpenses.length);
+                          if (entries.length > 0 || dayExpenses.length > 0) {
+                            handleDayClick(day);
+                          } else {
+                            console.log('[DEBUG] No entries/expenses, skipping handleDayClick');
+                          }
+                        }}
+                        style={(entries.length > 0 || dayExpenses.length > 0) ? { cursor: 'pointer' } : {}}
+                      >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-medium ${isToday ? "text-primary" : ""}`}>
                             {day.getDate()}
                           </span>
+                          {isExpanded && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 ml-auto"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedDay(null);
+                              }}
+                              title="Schließen"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
                           {entries.length > 0 && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-medium">
                               {entries.length}
@@ -515,7 +536,7 @@ export default function TimeTracking() {
                         </div>
                       </div>
                       
-                      <div className={`space-y-1 ${isExpanded ? "max-h-[600px] overflow-y-auto pr-2" : ""}`}>
+                      <div className={`space-y-1 ${isExpanded ? "max-h-[180px] overflow-y-auto pr-2" : ""}`}>
                         {displayItems.map((item, itemIdx) => {
                           if (item.type === 'time') {
                             const entry = item.data as any;
@@ -578,6 +599,7 @@ export default function TimeTracking() {
                         )}
                       </div>
                     </div>
+                    </>
                   );
                 })}
               </div>

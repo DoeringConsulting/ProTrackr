@@ -1024,3 +1024,14 @@
 - [ ] Scroll-Funktion für vergrößerte Kacheln mit vielen Einträgen
 - [ ] Vergrößerte Kachel schließen beim Klick außerhalb
 - [ ] Tests für neue Funktionen schreiben
+
+
+## Aufgabe 45: Kachel-Vergrößerung als schwebendes Overlay
+
+- [x] Kachel-Vergrößerung mit absoluter Positionierung implementieren (fixed position, nicht Grid-Span)
+- [x] Schwebendes Overlay über anderen Kacheln mit dezenten Schatten (shadow-2xl)
+- [x] onClick-Handler repariert (onMouseDown statt onClick + Backdrop)
+- [x] Backdrop hinzugefügt (grauer Hintergrund mit onClick zum Schließen)
+- [x] Flexible Höhe basierend auf Anzahl der Einträge (max. 2x Höhe: 240px statt fix 4x: 480px)
+- [x] Scroll-Funktion für restliche Einträge (max-h-[180px] overflow-y-auto)
+- [x] Tests ausführen und Checkpoint erstellen
