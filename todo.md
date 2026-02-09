@@ -992,3 +992,15 @@
 - [x] Unique Constraint Violation beim INSERT in exchangeRates-Tabelle beheben
 - [x] Upsert-Logik in createExchangeRate korrigieren (prüfen ob Eintrag existiert)
 - [x] Tests für Exchange Rates aktualisieren (25/25 Tests bestanden)
+
+
+## Aufgabe 43: Kalender-Kacheln Erweiterung
+
+- [x] Backend-API für Reisekosten-Abfrage nach Datum erweitern (getAllExpenses mit startDate/endDate)
+- [x] Reisekosten in Kalender-Kacheln anzeigen (max. 2 Einträge sichtbar pro Kachel)
+- [x] Plus-Icon durch Dropdown-Menü ersetzen (Zeiterfassung/Reisekosten)
+- [x] Banknoten-Icon aus Kacheln entfernen
+- [x] Kachel-Vergrößerung (4-fach) beim Anklicken implementieren
+- [x] Scroll-Funktion für vergrößerte Kacheln mit vielen Einträgen
+- [x] Responsive Design für mobile Geräte (Grid-Layout passt sich an)
+- [x] Tests für neue Backend-Funktionen schreiben

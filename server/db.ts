@@ -1,4 +1,4 @@
-import { desc, eq, and, isNull } from "drizzle-orm";
+import { and, eq, desc, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { invoiceNumbers, customers } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -339,12 +339,22 @@ export async function createExpense(data: any) {
   return result;
 }
 
-export async function getAllExpenses(userId: number) {
+export async function getAllExpenses(userId: number, startDate?: string, endDate?: string) {
   const db = await getDb();
   if (!db) return [];
   const { expenses, timeEntries } = await import("../drizzle/schema");
   
-  // Join expenses with timeEntries to filter by userId
+  // Build where conditions
+  const conditions = [eq(timeEntries.userId, userId)];
+  
+  if (startDate) {
+    conditions.push(sql`DATE(${timeEntries.date}) >= ${startDate}`);
+  }
+  if (endDate) {
+    conditions.push(sql`DATE(${timeEntries.date}) <= ${endDate}`);
+  }
+  
+  // Join expenses with timeEntries to filter by userId and date range
   const result = await db
     .select({
       id: expenses.id,
@@ -358,7 +368,7 @@ export async function getAllExpenses(userId: number) {
     })
     .from(expenses)
     .innerJoin(timeEntries, eq(expenses.timeEntryId, timeEntries.id))
-    .where(eq(timeEntries.userId, userId));
+    .where(and(...conditions));
   
   return result;
 }

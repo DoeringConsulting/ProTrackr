@@ -223,9 +223,9 @@ export const appRouter = router({
         startDate: z.string().optional(),
         endDate: z.string().optional(),
       }).parse(val);
-    }).query(async ({ ctx }) => {
+    }).query(async ({ ctx, input }) => {
       const { getAllExpenses } = await import("./db");
-      return await getAllExpenses(1); // Hardcoded user ID (auth disabled)
+      return await getAllExpenses(1, input.startDate, input.endDate); // Hardcoded user ID (auth disabled)
     }),
     listByTimeEntry: publicProcedure.input((val: unknown) => {
       return z.object({ timeEntryId: z.number() }).parse(val);
