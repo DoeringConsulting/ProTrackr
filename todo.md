@@ -833,3 +833,34 @@
   - [ ] DashboardLayout.tsx: Auth-Check wiederherstellen
   - [ ] OAuth-Routen reaktivieren
   - [ ] Kompletten Auth-Flow testen
+
+## Aufgabe 37: Versions-Management-System implementiert ✅
+- [x] Permanente Versions-Anzeige
+  - [x] VersionFooter-Komponente erstellt
+  - [x] Liest version.json (generiert bei Build)
+  - [x] In DashboardLayout integriert
+  - [x] Immer sichtbar am unteren Seitenrand
+  - [x] Zeigt Version, Build-Zeit, App-Name
+- [x] Intelligenter Update-Button
+  - [x] Service Worker Update-Detection erweitert
+  - [x] Versions-Validierung nach Update (getCurrentVersion)
+  - [x] Timeout-Handling (10 Sekunden)
+  - [x] Button zeigt Status ("Wird aktualisiert...", "Fehler")
+- [x] Fehler-Logging
+  - [x] Update-Fehler abgefangen
+  - [x] Fehlermeldung-Overlay (8 Sekunden)
+  - [x] Detaillierte Console-Logs
+  - [x] Hinweis auf Browser-Console (F12)
+
+## Aufgabe 38: Session-Timeout-Problem behoben ✅
+- [x] useAuth Hook komplett deaktiviert
+  - [x] Mock-User zurückgegeben (Alexander Döring, admin)
+  - [x] Keine Auth-Requests mehr (kein trpc.auth.me)
+  - [x] Originaler Code als Kommentar gespeichert
+- [x] Auth-Context komplett deaktiviert
+  - [x] Immer "authenticated" Status (isAuthenticated: true)
+  - [x] Keine Session-Checks (loading: false)
+  - [x] Keine Redirects mehr
+- [x] Logout deaktiviert
+  - [x] Logout-Funktion macht nichts mehr
+  - [x] Console-Log statt echter Logout

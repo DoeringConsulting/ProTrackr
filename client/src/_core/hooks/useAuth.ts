@@ -1,3 +1,36 @@
+// ⚠️ AUTHENTICATION COMPLETELY DISABLED FOR DEVELOPMENT
+// Re-enable before final release!
+
+type UseAuthOptions = {
+  redirectOnUnauthenticated?: boolean;
+  redirectPath?: string;
+};
+
+// Mock user for development
+const MOCK_USER = {
+  id: 'dev-user',
+  email: 'a.doering@doering-consulting.eu',
+  name: 'Alexander Döring',
+  role: 'admin' as const,
+  createdAt: new Date(),
+};
+
+export function useAuth(_options?: UseAuthOptions) {
+  // Return mock authenticated state - NO API CALLS
+  return {
+    user: MOCK_USER,
+    loading: false,
+    error: null,
+    isAuthenticated: true,
+    refresh: () => Promise.resolve({ data: MOCK_USER }),
+    logout: async () => {
+      console.log('[Auth] Logout disabled in development mode');
+      // Do nothing - auth is disabled
+    },
+  };
+}
+
+/* ORIGINAL CODE - RESTORE BEFORE FINAL RELEASE
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
@@ -82,3 +115,4 @@ export function useAuth(options?: UseAuthOptions) {
     logout,
   };
 }
+*/

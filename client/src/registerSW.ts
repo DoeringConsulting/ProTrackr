@@ -1,3 +1,71 @@
+// Helper function to get current version
+async function getCurrentVersion(): Promise<string> {
+  try {
+    const response = await fetch('/version.json');
+    const data = await response.json();
+    return data.version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+// Helper function to wait for controller change
+function waitForControllerChange(timeout: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    
+    const handler = () => {
+      if (!resolved) {
+        resolved = true;
+        resolve(true);
+      }
+    };
+    
+    navigator.serviceWorker.addEventListener('controllerchange', handler, { once: true });
+    
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        navigator.serviceWorker.removeEventListener('controllerchange', handler);
+        resolve(false);
+      }
+    }, timeout);
+  });
+}
+
+// Show error message to user
+function showUpdateError(errorMessage: string) {
+  const errorContainer = document.createElement('div');
+  errorContainer.style.cssText = `
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ef4444;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 9999;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    max-width: calc(100vw - 40px);
+    animation: slideUp 0.3s ease-out;
+  `;
+  
+  errorContainer.innerHTML = `
+    <div style="font-weight: 600; margin-bottom: 4px;">Update fehlgeschlagen</div>
+    <div style="opacity: 0.9; font-size: 12px;">${errorMessage}</div>
+    <div style="margin-top: 8px; font-size: 11px; opacity: 0.8;">Bitte Browser-Console (F12) für Details prüfen</div>
+  `;
+  
+  document.body.appendChild(errorContainer);
+  
+  setTimeout(() => {
+    errorContainer.remove();
+  }, 8000);
+}
+
 // Register Service Worker for offline functionality with auto-update
 export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -148,12 +216,43 @@ function showUpdateNotification(version: string) {
     updateBtn.onmouseout = () => {
       updateBtn.style.background = '#3b82f6';
     };
-    updateBtn.onclick = () => {
-      // Tell the service worker to skip waiting
-      if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+    updateBtn.onclick = async () => {
+      console.log('[SW] Update button clicked');
+      updateBtn.disabled = true;
+      updateBtn.textContent = 'Wird aktualisiert...';
+      updateBtn.style.background = '#6b7280';
+      
+      try {
+        // Get current version before update
+        const currentVersion = await getCurrentVersion();
+        console.log('[SW] Current version:', currentVersion);
+        
+        // Tell the service worker to skip waiting
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+          console.log('[SW] SKIP_WAITING message sent');
+        } else {
+          throw new Error('No service worker controller available');
+        }
+        
+        // Wait for controller change (max 10 seconds)
+        const updateSuccess = await waitForControllerChange(10000);
+        
+        if (updateSuccess) {
+          console.log('[SW] Update successful, reloading...');
+          // Reload will happen automatically via controllerchange event
+        } else {
+          throw new Error('Update timeout - controller did not change');
+        }
+      } catch (error) {
+        console.error('[SW] Update failed:', error);
+        updateBtn.textContent = 'Fehler - Erneut versuchen';
+        updateBtn.style.background = '#ef4444';
+        updateBtn.disabled = false;
+        
+        // Show error message
+        showUpdateError(error instanceof Error ? error.message : 'Unknown error');
       }
-      // Reload will happen automatically via controllerchange event
     };
     
     // Close button
