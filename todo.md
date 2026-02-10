@@ -1100,3 +1100,7 @@
 - [x] Automatische Versions-Inkrementierung beim Deployment
 - [x] Changelog-Dialog nach erfolgreichem Update anzeigen
 - [x] Manueller Update-Button in Einstellungen hinzufügen
+- [x] Mobile-Icons (blau/rosa Kreise) werden nicht angezeigt - inline-styles hinzugefügt
+- [x] Versions-Nummer in Fußzeile auf 1.0.1 aktualisieren
+- [x] Mobile-Icons mit inline-styles für garantierte Sichtbarkeit
+- [x] Versions-Nummer automatisch aus useUpdateCheck.ts synchronisieren

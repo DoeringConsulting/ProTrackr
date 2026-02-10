@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { getCurrentVersion } from '@/hooks/useUpdateCheck';
 
-// Version info from package.json
-const APP_VERSION = '1.0.0';
+// Version info - automatically synced with useUpdateCheck
+const APP_VERSION = getCurrentVersion();
 const BUILD_TIME = new Date().toISOString();
 
 export function VersionFooter() {

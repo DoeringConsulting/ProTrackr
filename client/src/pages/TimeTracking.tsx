@@ -535,15 +535,17 @@ export default function TimeTracking() {
                             <>
                               {entries.length > 0 && (
                                 <div 
-                                  className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold"
-                                  title={`${entries.length} Zeiteintr\u00e4ge`}
+                                  className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
+                                  style={{ backgroundColor: '#3b82f6', color: '#ffffff' }}
+                                  title={`${entries.length} Zeiteinträge`}
                                 >
                                   {entries.length}
                                 </div>
                               )}
                               {dayExpenses.length > 0 && (
                                 <div 
-                                  className="flex items-center justify-center w-5 h-5 rounded-full bg-pink-500 text-white text-[9px] font-bold"
+                                  className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
+                                  style={{ backgroundColor: '#ec4899', color: '#ffffff' }}
                                   title={`${dayExpenses.length} Reisekosten`}
                                 >
                                   {dayExpenses.length}
