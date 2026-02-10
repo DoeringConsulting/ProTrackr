@@ -119,7 +119,9 @@ export default function TimeTracking() {
   // Mobile detection
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      console.log('[TimeTracking] Mobile detection:', mobile, 'width:', window.innerWidth);
+      setIsMobile(mobile);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -532,12 +534,18 @@ export default function TimeTracking() {
                           {isMobile && (
                             <>
                               {entries.length > 0 && (
-                                <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold">
+                                <div 
+                                  className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold"
+                                  title={`${entries.length} Zeiteintr\u00e4ge`}
+                                >
                                   {entries.length}
                                 </div>
                               )}
                               {dayExpenses.length > 0 && (
-                                <div className="flex items-center justify-center w-5 h-5 rounded-full bg-pink-500 text-white text-[9px] font-bold">
+                                <div 
+                                  className="flex items-center justify-center w-5 h-5 rounded-full bg-pink-500 text-white text-[9px] font-bold"
+                                  title={`${dayExpenses.length} Reisekosten`}
+                                >
                                   {dayExpenses.length}
                                 </div>
                               )}
