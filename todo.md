@@ -1093,3 +1093,4 @@
 - [x] Zurück- und Home-Button in Einstellungen-Seite integrieren
 - [x] Mobile-Zeiterfassung optimieren: Tage vergrößern beim Anklicken, kompakte Icon-Ansicht im Normalzustand
 - [x] Zeiterfassung: Zeiteinträge blau, Reisekosten rosa, Kachel-Hintergründe weiß-deckend
+- [x] Mobile-Zeiterfassung: Plus-Icon in Kachel positionieren und Anzahl-Icons immer sichtbar machen
