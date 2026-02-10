@@ -478,9 +478,9 @@ export default function TimeTracking() {
                   return (
                     <div
                       key={idx}
-                      className={`min-h-[120px] md:min-h-[120px] min-h-[80px] border rounded-lg p-2 transition-all ${
-                        isToday ? "border-primary bg-primary/5" : "border-border"
-                      } ${isExpanded ? "fixed md:relative z-50 shadow-2xl bg-background md:max-h-[240px] max-h-[320px] md:-translate-y-4 left-4 right-4 md:left-auto md:right-auto top-20 md:top-auto" : "relative"}`}
+                      className={`min-h-[120px] md:min-h-[120px] min-h-[80px] border rounded-lg p-2 transition-all bg-white ${
+                        isToday ? "border-primary" : "border-border"
+                      } ${isExpanded ? "fixed md:relative z-50 shadow-2xl md:max-h-[240px] max-h-[320px] md:-translate-y-4 left-4 right-4 md:left-auto md:right-auto top-20 md:top-auto" : "relative"}`}
                         onClick={(e) => {
                           // Nur wenn nicht auf Button/Dropdown geklickt wurde
                           if ((e.target as HTMLElement).closest('button, [role="menuitem"]')) {
@@ -522,7 +522,7 @@ export default function TimeTracking() {
                             </span>
                           )}
                           {(isExpanded || !isMobile) && dayExpenses.length > 0 && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-medium">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-pink-100 text-pink-800 font-medium">
                               {dayExpenses.length}
                             </span>
                           )}
@@ -535,7 +535,7 @@ export default function TimeTracking() {
                                 </div>
                               )}
                               {dayExpenses.length > 0 && (
-                                <div className="flex items-center justify-center w-5 h-5 rounded-full bg-purple-500 text-white text-[9px] font-bold">
+                                <div className="flex items-center justify-center w-5 h-5 rounded-full bg-pink-500 text-white text-[9px] font-bold">
                                   {dayExpenses.length}
                                 </div>
                               )}
@@ -801,8 +801,8 @@ export default function TimeTracking() {
                       isSelected
                         ? "bg-primary text-primary-foreground border-primary"
                         : isToday
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-accent"
+                        ? "border-primary bg-white"
+                        : "border-border bg-white hover:bg-accent"
                     }`}
                   >
                     {day.getDate()}
