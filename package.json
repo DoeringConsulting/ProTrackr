@@ -13,7 +13,9 @@
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "update-version": "node scripts/update-version.js",
-    "version:increment": "node scripts/increment-version.mjs"
+    "version:increment": "node scripts/increment-version.mjs",
+    "prepare-checkpoint": "pnpm version:increment && echo '✅ Version incremented. Ready for checkpoint!'",
+    "prepare": "husky"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
@@ -116,6 +118,7 @@
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.4",
     "esbuild": "^0.25.0",
+    "husky": "^9.1.7",
     "pnpm": "^10.15.1",
     "postcss": "^8.4.47",
     "prettier": "^3.6.2",

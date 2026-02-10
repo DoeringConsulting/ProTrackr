@@ -1105,3 +1105,5 @@
 - [x] Mobile-Icons mit inline-styles für garantierte Sichtbarkeit
 - [x] Versions-Nummer automatisch aus useUpdateCheck.ts synchronisieren
 - [x] Version zeigt 1.0.0 statt 1.0.1 - Dev-Cache-Problem, wird beim Publish behoben
+- [x] pnpm version:increment manuell ausgeführt - Version 1.0.1 → 1.0.2
+- [x] Version-Increment automatisiert mit prepare-checkpoint Script
