@@ -8,8 +8,12 @@ import {
   TrendingUp, 
   Database, 
   Upload, 
-  User 
+  User,
+  ArrowLeft,
+  Home
 } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import FixedCostsTab from "./settings/FixedCostsTab";
 import TaxesTab from "./settings/TaxesTab";
 import ExchangeRatesTab from "./settings/ExchangeRatesTab";
@@ -24,6 +28,18 @@ export default function Settings() {
   return (
     <div className="container mx-auto py-6">
       <div className="mb-6">
+        <div className="flex items-center gap-4 mb-4">
+          <Link href="/">
+            <Button variant="ghost" size="icon" title="Zurück zum Dashboard">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <Link href="/">
+            <Button variant="ghost" size="icon" title="Zur Startseite">
+              <Home className="h-5 w-5" />
+            </Button>
+          </Link>
+        </div>
         <h1 className="text-3xl font-bold">Einstellungen</h1>
         <p className="text-muted-foreground mt-2">
           Verwalten Sie Fixkosten, Steuern, Wechselkurse und weitere Einstellungen

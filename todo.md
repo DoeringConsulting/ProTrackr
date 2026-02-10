@@ -1090,3 +1090,4 @@
 - [ ] Tests für Wechselkurse-Tab schreiben
 - [ ] Tests für Währungsumrechnung in Berichten schreiben
 - [ ] Checkpoint erstellen
+- [x] Zurück- und Home-Button in Einstellungen-Seite integrieren
