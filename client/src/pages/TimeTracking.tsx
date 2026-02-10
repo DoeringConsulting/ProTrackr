@@ -473,9 +473,9 @@ export default function TimeTracking() {
                     ...dayExpenses.map(e => ({ type: 'expense', data: e }))
                   ];
                   
-                  // Limit to 2 items in normal view
-                  const displayItems = isExpanded ? allItems : allItems.slice(0, 2);
-                  const hasMore = allItems.length > 2;
+                  // Desktop: zeige alle Einträge mit Scroll, Mobile: nur 2 im collapsed state
+                  const displayItems = isMobile ? (isExpanded ? allItems : allItems.slice(0, 2)) : allItems;
+                  const hasMore = isMobile && allItems.length > 2;
                   
                   return (
                     <div
@@ -534,18 +534,28 @@ export default function TimeTracking() {
                           {isMobile && (
                             <>
                               {entries.length > 0 && (
-                                <div 
-                                  className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
-                                  style={{ backgroundColor: '#3b82f6', color: '#ffffff' }}
+                              <div 
+                                className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
+                                style={{ 
+                                  backgroundColor: '#3b82f6',
+                                  color: '#ffffff',
+                                  opacity: 1,
+                                  border: '2px solid #3b82f6'
+                                } as React.CSSProperties}
                                   title={`${entries.length} Zeiteinträge`}
                                 >
                                   {entries.length}
                                 </div>
                               )}
                               {dayExpenses.length > 0 && (
-                                <div 
-                                  className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
-                                  style={{ backgroundColor: '#ec4899', color: '#ffffff' }}
+                              <div 
+                                className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
+                                style={{ 
+                                  backgroundColor: '#ec4899',
+                                  color: '#ffffff',
+                                  opacity: 1,
+                                  border: '2px solid #ec4899'
+                                } as React.CSSProperties}
                                   title={`${dayExpenses.length} Reisekosten`}
                                 >
                                   {dayExpenses.length}
@@ -586,8 +596,8 @@ export default function TimeTracking() {
                         </div>
                       </div>
                       
-                      {/* Mobile: Verstecke Details wenn nicht expanded, Desktop: zeige immer */}
-                      <div className={`space-y-1 ${isExpanded ? "max-h-[180px] md:max-h-[180px] max-h-[240px] overflow-y-auto pr-2" : "md:block hidden"}`}>
+                      {/* Mobile: Verstecke Details wenn nicht expanded, Desktop: zeige immer mit Scroll */}
+                      <div className={`space-y-1 ${isExpanded ? "max-h-[180px] md:max-h-[180px] max-h-[240px] overflow-y-auto pr-2" : "md:block hidden md:max-h-[180px] md:overflow-y-auto md:pr-2"}`}>
                         {displayItems.map((item, itemIdx) => {
                           if (item.type === 'time') {
                             const entry = item.data as any;

@@ -1107,3 +1107,6 @@
 - [x] Version zeigt 1.0.0 statt 1.0.1 - Dev-Cache-Problem, wird beim Publish behoben
 - [x] pnpm version:increment manuell ausgeführt - Version 1.0.1 → 1.0.2
 - [x] Version-Increment automatisiert mit prepare-checkpoint Script
+- [x] Desktop-Kacheln zeigen nicht alle Einträge - alle Einträge werden jetzt angezeigt
+- [x] Desktop-Kacheln: Scroll-Funktion aktiviert mit max-h-[180px]
+- [x] Mobile-Icons: Border und opacity hinzugefügt für bessere Safari-Kompatibilität
