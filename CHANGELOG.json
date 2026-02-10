@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.3",
+      "date": "2026-02-10",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Version Update",
+          "description": "Neue Version mit Verbesserungen und Fehlerbehebungen"
+        }
+      ]
+    },
+    {
       "version": "1.0.2",
       "date": "2026-02-10",
       "changes": [
