@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
-import { getCurrentVersion } from '@/hooks/useUpdateCheck';
 
-// Version info - automatically synced with useUpdateCheck
-const APP_VERSION = getCurrentVersion();
-const BUILD_TIME = new Date().toISOString();
+// Version is managed by scripts/increment-version.mjs
+const APP_VERSION = '1.0.1';
 
 export function VersionFooter() {
   const [currentVersion, setCurrentVersion] = useState(APP_VERSION);
-  const [buildTime, setBuildTime] = useState(BUILD_TIME);
+  const [buildTime, setBuildTime] = useState(() => new Date().toISOString());
 
   useEffect(() => {
     // Try to fetch version info from a generated file

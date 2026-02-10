@@ -37,6 +37,16 @@ htmlContent = htmlContent.replace(
 writeFileSync(htmlPath, htmlContent);
 console.log(`✅ Updated index.html`);
 
+// Update VersionFooter.tsx
+const footerPath = join(projectRoot, 'client/src/components/VersionFooter.tsx');
+let footerContent = readFileSync(footerPath, 'utf-8');
+footerContent = footerContent.replace(
+  /const APP_VERSION = '[^']+';/,
+  `const APP_VERSION = '${newVersion}';`
+);
+writeFileSync(footerPath, footerContent);
+console.log(`✅ Updated VersionFooter.tsx`);
+
 // Add new version entry to CHANGELOG.json
 const today = new Date().toISOString().split('T')[0];
 changelog.versions.unshift({
