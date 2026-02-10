@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { ChevronLeft, ChevronRight, Plus, Copy, Clock, Receipt, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 type TimeEntryFormData = {
@@ -114,6 +114,17 @@ export default function TimeTracking() {
   const [tempExpenseCurrency, setTempExpenseCurrency] = useState('EUR');
   const [tempExpenseComment, setTempExpenseComment] = useState('');
   const [editingExpense, setEditingExpense] = useState<number | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const utils = trpc.useUtils();
   const { data: customers } = trpc.customers.list.useQuery();
@@ -467,9 +478,9 @@ export default function TimeTracking() {
                   return (
                     <div
                       key={idx}
-                      className={`min-h-[120px] border rounded-lg p-2 transition-all ${
+                      className={`min-h-[120px] md:min-h-[120px] min-h-[80px] border rounded-lg p-2 transition-all ${
                         isToday ? "border-primary bg-primary/5" : "border-border"
-                      } ${isExpanded ? "relative z-50 shadow-2xl bg-background max-h-[240px] -translate-y-4" : "relative"}`}
+                      } ${isExpanded ? "fixed md:relative z-50 shadow-2xl bg-background md:max-h-[240px] max-h-[320px] md:-translate-y-4 left-4 right-4 md:left-auto md:right-auto top-20 md:top-auto" : "relative"}`}
                         onClick={(e) => {
                           // Nur wenn nicht auf Button/Dropdown geklickt wurde
                           if ((e.target as HTMLElement).closest('button, [role="menuitem"]')) {
@@ -487,7 +498,7 @@ export default function TimeTracking() {
                       >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <span className={`text-sm font-medium ${isToday ? "text-primary" : ""}`}>
+                          <span className={`text-sm md:text-sm text-xs font-medium ${isToday ? "text-primary" : ""}`}>
                             {day.getDate()}
                           </span>
                           {isExpanded && (
@@ -504,15 +515,31 @@ export default function TimeTracking() {
                               <X className="h-4 w-4" />
                             </Button>
                           )}
-                          {entries.length > 0 && (
+                          {/* Desktop: Badges, Mobile: nur wenn expanded */}
+                          {(isExpanded || !isMobile) && entries.length > 0 && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-medium">
                               {entries.length}
                             </span>
                           )}
-                          {dayExpenses.length > 0 && (
+                          {(isExpanded || !isMobile) && dayExpenses.length > 0 && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-medium">
                               {dayExpenses.length}
                             </span>
+                          )}
+                          {/* Mobile: Farbige Kreis-Icons nur wenn nicht expanded */}
+                          {!isExpanded && isMobile && (
+                            <div className="flex items-center gap-1">
+                              {entries.length > 0 && (
+                                <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold">
+                                  {entries.length}
+                                </div>
+                              )}
+                              {dayExpenses.length > 0 && (
+                                <div className="flex items-center justify-center w-5 h-5 rounded-full bg-purple-500 text-white text-[9px] font-bold">
+                                  {dayExpenses.length}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                         <div className="flex gap-1">
@@ -548,7 +575,8 @@ export default function TimeTracking() {
                         </div>
                       </div>
                       
-                      <div className={`space-y-1 ${isExpanded ? "max-h-[180px] overflow-y-auto pr-2" : ""}`}>
+                      {/* Mobile: Verstecke Details wenn nicht expanded, Desktop: zeige immer */}
+                      <div className={`space-y-1 ${isExpanded ? "max-h-[180px] md:max-h-[180px] max-h-[240px] overflow-y-auto pr-2" : "md:block hidden"}`}>
                         {displayItems.map((item, itemIdx) => {
                           if (item.type === 'time') {
                             const entry = item.data as any;
