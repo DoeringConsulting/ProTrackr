@@ -4,6 +4,8 @@ import { DirectorySetup } from "./components/DirectorySetup";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { hasSelectedDirectory, isFileSystemAccessSupported } from "./lib/fileSystem";
 import { useState, useEffect } from "react";
+import { useUpdateCheck } from "./hooks/useUpdateCheck";
+import { UpdateBanner } from "./components/UpdateBanner";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -52,6 +54,7 @@ function Router() {
 function App() {
   const [showDirectorySetup, setShowDirectorySetup] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const { updateAvailable } = useUpdateCheck();
 
   useEffect(() => {
     // Check if user has seen the info screen
@@ -94,6 +97,7 @@ function App() {
       >
         <TooltipProvider>
           <Toaster />
+          {updateAvailable && <UpdateBanner />}
           <OfflineIndicator />
           <Router />
         </TooltipProvider>
