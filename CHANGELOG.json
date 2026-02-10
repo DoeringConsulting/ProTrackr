@@ -1,0 +1,36 @@
+{
+  "versions": [
+    {
+      "version": "1.0.1",
+      "date": "2026-02-10",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Automatisches Update-System",
+          "description": "Die App prüft automatisch auf neue Versionen und aktualisiert sich selbst"
+        },
+        {
+          "type": "improvement",
+          "title": "Mobile-Zeiterfassung optimiert",
+          "description": "Kompakte Ansicht mit farbigen Icons, vergrößerte Details beim Anklicken"
+        },
+        {
+          "type": "fix",
+          "title": "Farbgebung angepasst",
+          "description": "Zeiteinträge blau, Reisekosten rosa, weiße Kachel-Hintergründe"
+        }
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-02-09",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Initiale Version",
+          "description": "Projekt- und Abrechnungsmanagement mit Zeiterfassung, Reisekosten und Berichten"
+        }
+      ]
+    }
+  ]
+}

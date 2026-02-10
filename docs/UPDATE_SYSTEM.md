@@ -39,16 +39,26 @@ Zeigt dem Nutzer an, dass ein Update geladen wird.
 
 ## Deployment-Workflow
 
-### Bei jedem neuen Deployment:
+### Automatische Versions-Inkrementierung:
 
-1. **Version in `useUpdateCheck.ts` erhöhen:**
-   ```typescript
-   const APP_VERSION = '1.0.2'; // Increment!
+1. **Script ausführen:**
+   ```bash
+   pnpm version:increment
    ```
+   Dieses Script:
+   - Erhöht automatisch die Patch-Version (z.B. 1.0.1 → 1.0.2)
+   - Aktualisiert `useUpdateCheck.ts`
+   - Aktualisiert `index.html`
+   - Fügt neuen Eintrag in `CHANGELOG.json` hinzu
 
-2. **Version in `index.html` aktualisieren:**
-   ```html
-   <!-- APP_VERSION: 1.0.2 -->
+2. **Changelog bearbeiten:**
+   Öffnen Sie `CHANGELOG.json` und ersetzen Sie den generischen Eintrag mit den tatsächlichen Änderungen:
+   ```json
+   {
+     "type": "feature",  // oder "improvement" oder "fix"
+     "title": "Ihr Feature-Titel",
+     "description": "Detaillierte Beschreibung"
+   }
    ```
 
 3. **Checkpoint erstellen und veröffentlichen**
@@ -57,6 +67,11 @@ Zeigt dem Nutzer an, dass ein Update geladen wird.
    - Erkennt automatisch neue Version innerhalb von 60 Sekunden
    - Zeigt Update-Banner
    - Löscht Cache und lädt neu
+   - Zeigt Changelog-Dialog mit neuen Features
+
+### Manuelles Update:
+
+Nutzer können in **Einstellungen → System** jederzeit manuell auf Updates prüfen.
 
 ## Cache-Control Headers
 
@@ -69,12 +84,40 @@ Zusätzliche Meta-Tags in `index.html`:
 
 Diese verhindern aggressives Browser-Caching.
 
+## Neue Features
+
+### 1. Changelog-Dialog
+
+Nach jedem Update sieht der Nutzer automatisch einen Dialog mit:
+- Versions-Nummer
+- Veröffentlichungsdatum
+- Liste aller Änderungen (Features, Verbesserungen, Bugfixes)
+- Farbige Badges zur Kategorisierung
+
+### 2. Manueller Update-Button
+
+In **Einstellungen → System** können Nutzer:
+- Aktuelle Version sehen
+- Manuell auf Updates prüfen
+- Sofort aktualisieren ohne Wartezeit
+- Informationen zum Update-System lesen
+
+### 3. Automatische Versions-Inkrementierung
+
+Das Script `pnpm version:increment`:
+- Verhindert manuelle Fehler
+- Synchronisiert alle Versions-Referenzen
+- Erstellt automatisch Changelog-Einträge
+- Spart Zeit beim Deployment
+
 ## Vorteile
 
 ✅ **Automatisch:** Nutzer müssen nicht manuell aktualisieren  
 ✅ **Zuverlässig:** Cache wird immer gelöscht  
-✅ **Transparent:** Nutzer sieht Update-Banner  
+✅ **Transparent:** Nutzer sieht Update-Banner und Changelog  
 ✅ **Schnell:** Update innerhalb von 60 Sekunden erkannt  
+✅ **Informativ:** Changelog zeigt alle Änderungen  
+✅ **Flexibel:** Manuelles Update jederzeit möglich  
 
 ## Troubleshooting
 

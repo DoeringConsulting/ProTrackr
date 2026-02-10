@@ -10,7 +10,8 @@ import {
   Upload, 
   User,
   ArrowLeft,
-  Home
+  Home,
+  Settings as SettingsIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import ExchangeRatesTab from "./settings/ExchangeRatesTab";
 import BackupTab from "./settings/BackupTab";
 import ImportTab from "./settings/ImportTab";
 import AccountTab from "./settings/AccountTab";
+import SystemTab from "./settings/SystemTab";
 
 export default function Settings() {
   const { t } = useTranslation();
@@ -47,7 +49,7 @@ export default function Settings() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6 lg:w-auto">
+        <TabsList className="grid w-full grid-cols-7 lg:w-auto">
           <TabsTrigger value="fixed-costs" className="flex items-center gap-2">
             <DollarSign className="h-4 w-4" />
             <span className="hidden sm:inline">Fixkosten</span>
@@ -71,6 +73,10 @@ export default function Settings() {
           <TabsTrigger value="account" className="flex items-center gap-2">
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Konto</span>
+          </TabsTrigger>
+          <TabsTrigger value="system" className="flex items-center gap-2">
+            <SettingsIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">System</span>
           </TabsTrigger>
         </TabsList>
 
@@ -96,6 +102,10 @@ export default function Settings() {
 
         <TabsContent value="account">
           <AccountTab />
+        </TabsContent>
+
+        <TabsContent value="system">
+          <SystemTab />
         </TabsContent>
       </Tabs>
     </div>

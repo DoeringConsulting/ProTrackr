@@ -4,8 +4,9 @@ import { DirectorySetup } from "./components/DirectorySetup";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { hasSelectedDirectory, isFileSystemAccessSupported } from "./lib/fileSystem";
 import { useState, useEffect } from "react";
-import { useUpdateCheck } from "./hooks/useUpdateCheck";
+import { useUpdateCheck, checkIfJustUpdated, getCurrentVersion } from "./hooks/useUpdateCheck";
 import { UpdateBanner } from "./components/UpdateBanner";
+import { ChangelogDialog } from "./components/ChangelogDialog";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -54,6 +55,8 @@ function Router() {
 function App() {
   const [showDirectorySetup, setShowDirectorySetup] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [changelogData, setChangelogData] = useState<any>(null);
   const { updateAvailable } = useUpdateCheck();
 
   useEffect(() => {
@@ -63,6 +66,21 @@ function App() {
       setShowDirectorySetup(true);
     } else {
       setIsReady(true);
+    }
+
+    // Check if app just updated and show changelog
+    if (checkIfJustUpdated()) {
+      fetch('/CHANGELOG.json')
+        .then(res => res.json())
+        .then(data => {
+          const currentVersion = getCurrentVersion();
+          const versionData = data.versions.find((v: any) => v.version === currentVersion);
+          if (versionData) {
+            setChangelogData(versionData);
+            setShowChangelog(true);
+          }
+        })
+        .catch(err => console.error('Failed to load changelog:', err));
     }
   }, []);
 
@@ -98,6 +116,13 @@ function App() {
         <TooltipProvider>
           <Toaster />
           {updateAvailable && <UpdateBanner />}
+          {changelogData && (
+            <ChangelogDialog
+              open={showChangelog}
+              onOpenChange={setShowChangelog}
+              version={changelogData}
+            />
+          )}
           <OfflineIndicator />
           <Router />
         </TooltipProvider>

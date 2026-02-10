@@ -1097,3 +1097,6 @@
 - [x] Update-Fehler beheben (Service Worker timeout) - Cache-Control Meta-Tags hinzugefügt
 - [x] Anzahl-Icons in Mobile-Zeiterfassung sichtbar machen - Debug-Logging hinzugefügt
 - [x] Automatisches Update-System mit Force-Reload und Cache-Clearing implementieren
+- [x] Automatische Versions-Inkrementierung beim Deployment
+- [x] Changelog-Dialog nach erfolgreichem Update anzeigen
+- [x] Manueller Update-Button in Einstellungen hinzufügen

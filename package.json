@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
-    "update-version": "node scripts/update-version.js"
+    "update-version": "node scripts/update-version.js",
+    "version:increment": "node scripts/increment-version.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

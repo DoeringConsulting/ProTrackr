@@ -61,6 +61,27 @@ async function forceReload() {
     console.log('[UpdateCheck] Caches cleared:', cacheNames);
   }
   
+  // Mark that update just happened (before reload)
+  localStorage.setItem('justUpdated', 'true');
+  
   // Force hard reload
   window.location.reload();
+}
+
+export function checkIfJustUpdated(): boolean {
+  const justUpdated = localStorage.getItem('justUpdated');
+  if (justUpdated === 'true') {
+    localStorage.removeItem('justUpdated');
+    return true;
+  }
+  return false;
+}
+
+export function getCurrentVersion(): string {
+  return APP_VERSION;
+}
+
+export async function manualUpdate(): Promise<void> {
+  console.log('[UpdateCheck] Manual update triggered');
+  await forceReload();
 }
