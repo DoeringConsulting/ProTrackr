@@ -1132,3 +1132,21 @@
 - [x] HF-SW-01: skipWaiting() aus sw.js install Event entfernen
 - [x] HF-SW-02: Button-Logik in registerSW.ts ohne controllerchange umbauen
 - [x] HF-SW-03: Auto-Reload in useUpdateCheck.ts deaktivieren (User kontrolliert Zeitpunkt)
+
+## Phase 1: Authentifizierung (Passport.js)
+- [x] T-P1-01: Users-Tabelle in drizzle/schema.ts hinzufügen (Schema an bestehende DB angepasst)
+- [x] T-P1-02: DB-Migration ausführen (users Tabelle existiert bereits)
+- [x] T-P1-03: Ersten Admin-User anlegen (admin@doering-consulting.eu / ChangeMe123!)
+- [x] T-P1-04: User-DB-Funktionen in server/db.ts hinzufügen (findUserByEmail, findUserById, createUser)
+- [x] T-P1-05: Passport Local Strategy erstellen (server/auth/strategy.ts)
+- [x] T-P1-06: Auth Router erstellen (server/auth/router.ts)
+- [x] T-P1-07b: adminProcedure Auth-Check reaktivieren
+- [x] T-P1-08: User aus Session in server/_core/context.ts lesen
+- [x] T-P1-09: Session + Passport in server/_core/index.ts aktivieren (secure:true + sameSite:none)
+- [x] T-P1-10: Alle 9 userId=1 durch ctx.user.id ersetzen
+- [x] T-P1-10: publicProcedure zu protectedProcedure ändern (50+ Routen)
+- [x] T-P1-11: Scheduler-Endpoints mit API-Key absichern (SCHEDULER_API_KEY)
+- [x] T-P1-12: Login-Seite erstellen (client/src/pages/Login.tsx)
+- [x] T-P1-13a: Login-Route in App.tsx hinzufügen
+- [x] T-P1-13b: Auth-Guard in DashboardLayout.tsx implementieren (mit Retry-Schutz)
+- [x] T-P1-13c: UNAUTHORIZED-Redirect in main.tsx aktivieren

@@ -1,0 +1,16 @@
+{
+  "query": "SELECT id, email, role, passwordHash FROM users WHERE email = 'a.doering@doering-consulting.eu';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute SELECT id, email, role, passwordHash FROM users WHERE email = 'a.doering@doering-consulting.eu';",
+  "rows": [
+    {
+      "id": "1",
+      "email": "a.doering@doering-consulting.eu",
+      "role": "admin",
+      "passwordHash": "$2b$10$9QH/RzHzN.jXtjztx0lVPepjToEUx7dO153xodZgLGa4qodbO8DsS"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\temail\trole\tpasswordHash\n1\ta.doering@doering-consulting.eu\tadmin\t$2b$10$9QH/RzHzN.jXtjztx0lVPepjToEUx7dO153xodZgLGa4qodbO8DsS\n",
+  "stderr": "",
+  "execution_time_ms": 343
+}

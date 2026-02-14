@@ -82,9 +82,49 @@ function DashboardLayoutContent({
   children,
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
-  // Mock user for development (no auth)
-  const user = { name: "Alexander Döring", email: "a.doering@doering-consulting.eu" };
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [location, setLocation] = useLocation();
+
+  // Auth-Check beim Laden: /api/auth/me prüfen
+  // Retry nach 800ms verhindert Login-Schleife durch Race Condition beim Cookie-Setzen
+  useEffect(() => {
+    const checkAuth = async (isRetry = false) => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (res.status === 401) {
+          if (!isRetry) {
+            // Einmal warten und nochmals versuchen bevor weitergeleitet wird
+            setTimeout(() => checkAuth(true), 800);
+          } else {
+            // Zweiter Versuch ebenfalls 401 → wirklich nicht eingeloggt
+            setLocation("/login");
+          }
+          return;
+        }
+        const data = await res.json();
+        if (data?.user) {
+          setUser({
+            name: data.user.displayName ?? data.user.email,
+            email: data.user.email,
+          });
+          setAuthChecked(true);
+        }
+      } catch {
+        if (!isRetry) {
+          setTimeout(() => checkAuth(true), 800);
+        } else {
+          setLocation("/login");
+        }
+      }
+    };
+    checkAuth();
+  }, []);
+
+  // Ladebildschirm während Auth-Check
+  if (!authChecked) {
+    return <DashboardLayoutSkeleton />;
+  }
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
@@ -206,11 +246,17 @@ function DashboardLayoutContent({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
-                  onClick={() => console.log('Logout disabled in development')}
+                  onClick={async () => {
+                    await fetch("/api/auth/logout", {
+                      method: "POST",
+                      credentials: "include",
+                    });
+                    setLocation("/login");
+                  }}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <span>Abmelden</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

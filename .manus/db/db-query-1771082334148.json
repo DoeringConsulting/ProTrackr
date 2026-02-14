@@ -1,0 +1,32 @@
+{
+  "query": "SHOW CREATE TABLE users;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute SHOW CREATE TABLE users;",
+  "rows": [
+    {
+      "Table": "users",
+      "Create Table": "CREATE TABLE `users` ("
+    }
+  ],
+  "messages": [
+    "  `id` int(11) NOT NULL AUTO_INCREMENT,",
+    "  `openId` varchar(64) DEFAULT NULL,",
+    "  `name` text DEFAULT NULL,",
+    "  `email` varchar(320) DEFAULT NULL,",
+    "  `loginMethod` varchar(64) DEFAULT NULL,",
+    "  `role` enum('user','admin') NOT NULL DEFAULT 'user',",
+    "  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+    "  `lastSignedIn` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  `passwordHash` varchar(255) DEFAULT NULL,",
+    "  `resetToken` varchar(255) DEFAULT NULL,",
+    "  `resetTokenExpiry` timestamp NULL DEFAULT NULL,",
+    "  `emailVerified` int(11) NOT NULL DEFAULT '0',",
+    "  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,",
+    "  UNIQUE KEY `users_openId_unique` (`openId`),",
+    "  UNIQUE KEY `users_email_unique` (`email`)",
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin AUTO_INCREMENT=1260001"
+  ],
+  "stdout": "Table\tCreate Table\nusers\tCREATE TABLE `users` (\n  `id` int(11) NOT NULL AUTO_INCREMENT,\n  `openId` varchar(64) DEFAULT NULL,\n  `name` text DEFAULT NULL,\n  `email` varchar(320) DEFAULT NULL,\n  `loginMethod` varchar(64) DEFAULT NULL,\n  `role` enum('user','admin') NOT NULL DEFAULT 'user',\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `lastSignedIn` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `passwordHash` varchar(255) DEFAULT NULL,\n  `resetToken` varchar(255) DEFAULT NULL,\n  `resetTokenExpiry` timestamp NULL DEFAULT NULL,\n  `emailVerified` int(11) NOT NULL DEFAULT '0',\n  PRIMARY KEY (`id`) /*T![clustered_index] CLUSTERED */,\n  UNIQUE KEY `users_openId_unique` (`openId`),\n  UNIQUE KEY `users_email_unique` (`email`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin AUTO_INCREMENT=1260001\n",
+  "stderr": "",
+  "execution_time_ms": 450
+}

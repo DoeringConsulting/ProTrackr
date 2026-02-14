@@ -43,33 +43,36 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   
-  // ⚠️ AUTHENTICATION COMPLETELY DISABLED FOR DEVELOPMENT
-  // Re-enable before final release!
-  
-  // Session configuration - DISABLED
-  // app.use(
-  //   session({
-  //     secret: process.env.JWT_SECRET || "fallback-secret-change-in-production",
-  //     resave: false,
-  //     saveUninitialized: false,
-  //     cookie: {
-  //       secure: process.env.NODE_ENV === "production",
-  //       httpOnly: true,
-  //       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  //       maxAge: 1000 * 60 * 60 * 24 * 7,
-  //     },
-  //   })
-  // );
-  
-  // Passport initialization - DISABLED
-  // app.use(passport.initialize());
-  // app.use(passport.session());
-  // OAuth callback under /api/oauth/callback
-  // TEMPORARILY DISABLED FOR DEVELOPMENT - Re-enable before production release!
-  // registerOAuthRoutes(app);
-  
-  // Passport.js auth routes - DISABLED FOR DEVELOPMENT
-  // app.use("/api/auth", authRouter);
+  // ✅ AUTHENTICATION ACTIVATED
+  // Session-Middleware
+  // WICHTIG: secure:true + sameSite:"none" sind Pflicht für Manus-Hosting (HTTPS + Cross-Origin)
+  // Diese Einstellungen verhindern die Login-Schleife die zur Auth-Deaktivierung geführt hat
+  if (!process.env.SESSION_SECRET) {
+    throw new Error("[Auth] SESSION_SECRET Umgebungsvariable ist nicht gesetzt!");
+  }
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: true,       // Manus läuft immer auf HTTPS
+        httpOnly: true,
+        sameSite: "none",   // Pflicht für Cross-Origin-Kontext auf Manus
+        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 Tage
+      },
+    })
+  );
+
+  // Passport.js initialisieren (importiert Strategy als Seiteneffekt)
+  await import("../auth/strategy");
+  const { default: passportInstance } = await import("passport");
+  app.use(passportInstance.initialize());
+  app.use(passportInstance.session());
+
+  // Auth-Routen: /api/auth/login, /api/auth/logout, /api/auth/me, /api/auth/register
+  const { authRouter } = await import("../auth/router");
+  app.use("/api/auth", authRouter);
   // Cron endpoint for scheduled tasks
   app.post("/api/cron/run-scheduler", handleCronRequest);
   // tRPC API

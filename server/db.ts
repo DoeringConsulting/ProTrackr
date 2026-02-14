@@ -514,6 +514,51 @@ export async function exportDatabase() {
   return backup;
 }
 
+// ─── AUTH: USER FUNCTIONS ───────────────────────────────────────────
+
+export async function findUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const { users } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function findUserById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { users } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function createUser(data: {
+  email: string;
+  passwordHash: string;
+  displayName?: string | null;
+  role?: "user" | "admin";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db.insert(users).values({
+    email: data.email,
+    passwordHash: data.passwordHash,
+    displayName: data.displayName ?? null,
+    role: data.role ?? "user",
+  });
+}
+
+// ─── END AUTH ─────────────────────────────────────────────────────────
+
 export async function importDatabase(backup: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

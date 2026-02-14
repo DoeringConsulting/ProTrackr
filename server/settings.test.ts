@@ -2,7 +2,18 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { appRouter } from "./routers";
 
 describe("Settings API Tests", () => {
-  const caller = appRouter.createCaller({ user: null });
+  // Mock authenticated user for tests
+  const mockUser = {
+    id: 1,
+    email: "test@doering-consulting.eu",
+    displayName: "Test User",
+    role: "admin",
+  };
+  const caller = appRouter.createCaller({ 
+    user: mockUser,
+    req: {} as any,
+    res: {} as any,
+  });
 
   describe("Account Settings", () => {
     it("should get account settings (null if not exists)", async () => {

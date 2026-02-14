@@ -1,20 +1,26 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 
-// ⚠️ AUTHENTICATION COMPLETELY DISABLED FOR DEVELOPMENT
-// Re-implement before final release!
+export type TrpcUser = {
+  id: number;
+  email: string;
+  displayName: string | null;
+  role: string;
+};
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
-  user: null; // Always null during development
+  user: TrpcUser | null;
 };
 
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
+  // Passport setzt req.user nach erfolgreicher Authentifizierung
+  const user = opts.req.user as TrpcUser | undefined;
   return {
     req: opts.req,
     res: opts.res,
-    user: null,
+    user: user ?? null,
   };
 }

@@ -1,6 +1,7 @@
 
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { generateInvoiceNumber, getInvoiceNumbers, getDb } from "./db";
 import { sql } from "drizzle-orm";
@@ -25,17 +26,17 @@ export const appRouter = router({
 
   // Customer management
   customers: router({
-    list: publicProcedure.query(async () => {
+    list: protectedProcedure.query(async () => {
       const { getCustomers } = await import("./db");
       return await getCustomers();
     }),
-    getById: publicProcedure.input((val: unknown) => {
+    getById: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).query(async ({ input }) => {
       const { getCustomerById } = await import("./db");
       return await getCustomerById(input.id);
     }),
-    create: publicProcedure.input((val: unknown) => {
+    create: protectedProcedure.input((val: unknown) => {
       return z.object({
         provider: z.string(),
         mandatenNr: z.string(),
@@ -60,7 +61,7 @@ export const appRouter = router({
       const { createCustomer } = await import("./db");
       return await createCustomer(input);
     }),
-    update: publicProcedure.input((val: unknown) => {
+    update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
         provider: z.string().optional(),
@@ -88,21 +89,21 @@ export const appRouter = router({
       await updateCustomer(id, data);
       return { success: true };
     }),
-    delete: publicProcedure.input((val: unknown) => {
+    delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteCustomer } = await import("./db");
       await deleteCustomer(input.id);
       return { success: true };
     }),
-    archive: publicProcedure.input((val: unknown) => {
+    archive: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { archiveCustomer } = await import("./db");
       await archiveCustomer(input.id);
       return { success: true };
     }),
-    unarchive: publicProcedure.input((val: unknown) => {
+    unarchive: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { unarchiveCustomer } = await import("./db");
@@ -113,7 +114,7 @@ export const appRouter = router({
 
   // Time tracking
   timeEntries: router({
-    list: publicProcedure.input((val: unknown) => {
+    list: protectedProcedure.input((val: unknown) => {
       return z.object({
         startDate: z.string().optional(),
         endDate: z.string().optional(),
@@ -122,15 +123,15 @@ export const appRouter = router({
       const { getTimeEntries } = await import("./db");
       const startDate = input.startDate ? new Date(input.startDate) : undefined;
       const endDate = input.endDate ? new Date(input.endDate) : undefined;
-      return await getTimeEntries(1, startDate, endDate); // Hardcoded user ID (auth disabled)
+      return await getTimeEntries(ctx.user.id, startDate, endDate);
     }),
-    getById: publicProcedure.input((val: unknown) => {
+    getById: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).query(async ({ input }) => {
       const { getTimeEntryById } = await import("./db");
       return await getTimeEntryById(input.id);
     }),
-    create: publicProcedure.input((val: unknown) => {
+    create: protectedProcedure.input((val: unknown) => {
       return z.object({
         customerId: z.number(),
         date: z.string(),
@@ -147,11 +148,11 @@ export const appRouter = router({
       const { createTimeEntry } = await import("./db");
       return await createTimeEntry({
         ...input,
-        userId: 1, // Hardcoded user ID (auth disabled)
+        userId: ctx.user.id,
         date: new Date(input.date),
       });
     }),
-    update: publicProcedure.input((val: unknown) => {
+    update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
         customerId: z.number().optional(),
@@ -174,14 +175,14 @@ export const appRouter = router({
       });
       return { success: true };
     }),
-    delete: publicProcedure.input((val: unknown) => {
+    delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteTimeEntry } = await import("./db");
       await deleteTimeEntry(input.id);
       return { success: true };
     }),
-    bulkCreate: publicProcedure.input((val: unknown) => {
+    bulkCreate: protectedProcedure.input((val: unknown) => {
       return z.object({
         sourceId: z.number(),
         targetDates: z.array(z.string()),
@@ -197,7 +198,7 @@ export const appRouter = router({
       const createdEntries = [];
       for (const targetDate of input.targetDates) {
         const newEntry = await createTimeEntry({
-          userId: 1, // Hardcoded user ID (auth disabled)
+          userId: ctx.user.id,
           customerId: sourceEntry.customerId,
           date: new Date(targetDate),
           weekday: new Date(targetDate).toLocaleDateString('de-DE', { weekday: 'long' }),
@@ -218,22 +219,22 @@ export const appRouter = router({
 
   // Expenses
   expenses: router({
-    list: publicProcedure.input((val: unknown) => {
+    list: protectedProcedure.input((val: unknown) => {
       return z.object({
         startDate: z.string().optional(),
         endDate: z.string().optional(),
       }).parse(val);
     }).query(async ({ ctx, input }) => {
       const { getAllExpenses } = await import("./db");
-      return await getAllExpenses(1, input.startDate, input.endDate); // Hardcoded user ID (auth disabled)
+      return await getAllExpenses(ctx.user.id, input.startDate, input.endDate);
     }),
-    listByTimeEntry: publicProcedure.input((val: unknown) => {
+    listByTimeEntry: protectedProcedure.input((val: unknown) => {
       return z.object({ timeEntryId: z.number() }).parse(val);
     }).query(async ({ input }) => {
       const { getExpensesByTimeEntry } = await import("./db");
       return await getExpensesByTimeEntry(input.timeEntryId);
     }),
-    create: publicProcedure.input((val: unknown) => {
+    create: protectedProcedure.input((val: unknown) => {
       return z.object({
         timeEntryId: z.number().optional(),
         date: z.string().optional(), // ISO date string for standalone expenses
@@ -263,7 +264,7 @@ export const appRouter = router({
       };
       return await createExpense(data);
     }),
-    createBatch: publicProcedure.input((val: unknown) => {
+    createBatch: protectedProcedure.input((val: unknown) => {
       return z.object({
         timeEntryId: z.number(),
         expenses: z.array(z.object({
@@ -292,7 +293,7 @@ export const appRouter = router({
       }
       return { success: true, count: results.length };
     }),
-    update: publicProcedure.input((val: unknown) => {
+    update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
         category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]).optional(),
@@ -316,14 +317,14 @@ export const appRouter = router({
       await updateExpense(id, data);
       return { success: true };
     }),
-    delete: publicProcedure.input((val: unknown) => {
+    delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteExpense } = await import("./db");
       await deleteExpense(input.id);
       return { success: true };
     }),
-    aggregateByCustomer: publicProcedure.input((val: unknown) => {
+    aggregateByCustomer: protectedProcedure.input((val: unknown) => {
       return z.object({
         customerId: z.number(),
         startDate: z.string().optional(),
@@ -333,17 +334,17 @@ export const appRouter = router({
       const { getExpensesByCustomer } = await import("./db");
       const startDate = input.startDate ? new Date(input.startDate) : undefined;
       const endDate = input.endDate ? new Date(input.endDate) : undefined;
-      return await getExpensesByCustomer(1, input.customerId, startDate, endDate); // Hardcoded user ID (auth disabled)
+      return await getExpensesByCustomer(ctx.user.id, input.customerId, startDate, endDate);
     }),
   }),
 
   // Currency support
   currencies: router({
-    list: publicProcedure.query(() => {
+    list: protectedProcedure.query(() => {
       const { NBP_CURRENCIES } = require("./nbp");
       return NBP_CURRENCIES;
     }),
-    getRate: publicProcedure.input((val: unknown) => {
+    getRate: protectedProcedure.input((val: unknown) => {
       return z.object({
         currencyCode: z.string(),
         date: z.string(),
@@ -358,11 +359,11 @@ export const appRouter = router({
 
   // Exchange rates
   exchangeRates: router({
-    list: publicProcedure.query(async () => {
+    list: protectedProcedure.query(async () => {
       const { getExchangeRates } = await import("./db");
       return await getExchangeRates();
     }),
-    getByDate: publicProcedure.input((val: unknown) => {
+    getByDate: protectedProcedure.input((val: unknown) => {
       return z.object({ date: z.string() }).parse(val);
     }).query(async ({ input }) => {
       const { getExchangeRateByDate, createExchangeRate } = await import("./db");
@@ -384,7 +385,7 @@ export const appRouter = router({
       
       return rate;
     }),
-    fetchRate: publicProcedure.input((val: unknown) => {
+    fetchRate: protectedProcedure.input((val: unknown) => {
       return z.object({
         currencyCode: z.string(),
         date: z.string(),
@@ -403,7 +404,7 @@ export const appRouter = router({
         source: "NBP",
       });
     }),
-    create: publicProcedure.input((val: unknown) => {
+    create: protectedProcedure.input((val: unknown) => {
       return z.object({
         date: z.string(),
         currencyPair: z.string(),
@@ -421,19 +422,31 @@ export const appRouter = router({
     }),
   }),
 
-  // Scheduler
+  // Scheduler – geschützt durch API-Key (für Cron-Jobs, nicht für eingeloggte User)
   scheduler: router({
-    runTasks: publicProcedure.mutation(async () => {
+    runTasks: publicProcedure.mutation(async ({ ctx }) => {
+      const apiKey = ctx.req.headers["x-scheduler-key"];
+      if (apiKey !== process.env.SCHEDULER_API_KEY) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültiger Scheduler API-Key" });
+      }
       const { runScheduledTasks } = await import("./scheduler");
       return await runScheduledTasks();
     }),
-    checkMonthEnd: publicProcedure.mutation(async () => {
+    checkMonthEnd: publicProcedure.mutation(async ({ ctx }) => {
+      const apiKey = ctx.req.headers["x-scheduler-key"];
+      if (apiKey !== process.env.SCHEDULER_API_KEY) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültiger Scheduler API-Key" });
+      }
       const { checkMonthEnd } = await import("./scheduler");
       return await checkMonthEnd();
     }),
-    checkMissingEntries: protectedProcedure.mutation(async ({ ctx }: { ctx: any }) => {
+    checkMissingEntries: publicProcedure.mutation(async ({ ctx }) => {
+      const apiKey = ctx.req.headers["x-scheduler-key"];
+      if (apiKey !== process.env.SCHEDULER_API_KEY) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültiger Scheduler API-Key" });
+      }
       const { checkMissingTimeEntries } = await import("./scheduler");
-      return await checkMissingTimeEntries(ctx.user.id);
+      return await checkMissingTimeEntries();
     }),
   }),
 
@@ -480,13 +493,13 @@ export const appRouter = router({
   }),
 
   // Documents
-  documents: router({ listByExpense: publicProcedure.input((val: unknown) => {
+  documents: router({ listByExpense: protectedProcedure.input((val: unknown) => {
       return z.object({ expenseId: z.number() }).parse(val);
     }).query(async ({ input }) => {
       const { getDocumentsByExpense } = await import("./db");
       return await getDocumentsByExpense(input.expenseId);
     }),
-    create: publicProcedure.input((val: unknown) => {
+    create: protectedProcedure.input((val: unknown) => {
       return z.object({
         expenseId: z.number().optional(),
         timeEntryId: z.number().optional(),
@@ -500,10 +513,10 @@ export const appRouter = router({
       const { createDocument } = await import("./db");
       return await createDocument({
         ...input,
-        userId: 1, // Hardcoded user ID (auth disabled)
+        userId: ctx.user.id,
       });
     }),
-    delete: publicProcedure.input((val: unknown) => {
+    delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteDocument } = await import("./db");
@@ -514,11 +527,11 @@ export const appRouter = router({
 
   // Fixed costs
   fixedCosts: router({
-    list: publicProcedure.query(async () => {
+    list: protectedProcedure.query(async () => {
       const { getFixedCosts } = await import("./db");
       return await getFixedCosts();
     }),
-    create: publicProcedure.input((val: unknown) => {
+    create: protectedProcedure.input((val: unknown) => {
       return z.object({
         category: z.string(),
         amount: z.number(),
@@ -529,10 +542,10 @@ export const appRouter = router({
       const { createFixedCost } = await import("./db");
       return await createFixedCost({
         ...input,
-        userId: 1, // Hardcoded user ID (auth disabled)
+        userId: ctx.user.id,
       });
     }),
-    update: publicProcedure.input((val: unknown) => {
+    update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
         category: z.string().optional(),
@@ -546,7 +559,7 @@ export const appRouter = router({
       await updateFixedCost(id, data);
       return { success: true };
     }),
-    delete: publicProcedure.input((val: unknown) => {
+    delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteFixedCost } = await import("./db");
@@ -556,11 +569,12 @@ export const appRouter = router({
   }),
 
   // Tax settings
-  taxSettings: router({    get: publicProcedure.query(async () => {
+  taxSettings: router({
+    get: protectedProcedure.query(async () => {
       const { getTaxSettings } = await import("./db");
       return await getTaxSettings();
     }),
-    upsert: publicProcedure.input((val: unknown) => {
+    upsert: protectedProcedure.input((val: unknown) => {
       return z.object({
         zusType: z.enum(["percentage", "fixed"]),
         zusValue: z.number(),
@@ -577,11 +591,11 @@ export const appRouter = router({
 
   // Backup
   backup: router({
-    create: publicProcedure.mutation(async () => {
+    create: protectedProcedure.mutation(async () => {
       const { createBackup } = await import("./backup");
       return await createBackup();
     }),
-    restore: publicProcedure.input((val: unknown) => {
+    restore: protectedProcedure.input((val: unknown) => {
       return z.object({
         backup: z.any(),
       }).parse(val);
@@ -593,7 +607,7 @@ export const appRouter = router({
 
   // Global search
   search: router({
-    global: publicProcedure
+    global: protectedProcedure
       .input(z.object({ query: z.string().min(1) }))
       .query(async ({ input }) => {
         const { globalSearch } = await import("./globalSearch");
@@ -603,11 +617,11 @@ export const appRouter = router({
 
   // Account settings
   accountSettings: router({
-    get: publicProcedure.query(async () => {
+    get: protectedProcedure.query(async ({ ctx }) => {
       const { getAccountSettings } = await import("./db");
-      return await getAccountSettings(1); // Hardcoded user ID (auth disabled)
+      return await getAccountSettings(ctx.user.id);
     }),
-    upsert: publicProcedure.input((val: unknown) => {
+    upsert: protectedProcedure.input((val: unknown) => {
       return z.object({
         companyName: z.string().optional(),
         companyLogoUrl: z.string().optional(),
@@ -622,15 +636,15 @@ export const appRouter = router({
         iban: z.string().optional(),
         swift: z.string().optional(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { upsertAccountSettings } = await import("./db");
-      return await upsertAccountSettings(1, input); // Hardcoded user ID (auth disabled)
+      return await upsertAccountSettings(ctx.user.id, input);
     }),
   }),
 
   // Exchange rates management
   exchangeRatesManagement: router({
-    list: publicProcedure.input((val: unknown) => {
+    list: protectedProcedure.input((val: unknown) => {
       return z.object({
         startDate: z.string().optional(),
         endDate: z.string().optional(),
@@ -644,7 +658,7 @@ export const appRouter = router({
         currency: input.currency,
       });
     }),
-    upsert: publicProcedure.input((val: unknown) => {
+    upsert: protectedProcedure.input((val: unknown) => {
       return z.object({
         date: z.string(),
         currencyPair: z.string(),
@@ -660,7 +674,7 @@ export const appRouter = router({
         source: input.source,
       });
     }),
-    updateFromNBP: publicProcedure.input((val: unknown) => {
+    updateFromNBP: protectedProcedure.input((val: unknown) => {
       return z.object({
         currencies: z.array(z.string()),
       }).parse(val);
@@ -685,7 +699,7 @@ export const appRouter = router({
       }
       return results;
     }),
-    createManual: publicProcedure.input((val: unknown) => {
+    createManual: protectedProcedure.input((val: unknown) => {
       return z.object({
         date: z.string(),
         currencyPair: z.string(),

@@ -24,10 +24,14 @@ import Settings from "./pages/Settings";
 import TaxSettings from "./pages/TaxSettings";
 
 import ProjectDetail from "./pages/ProjectDetail";
+import Login from "./pages/Login";
 
 function Router() {
   return (
     <Switch>
+
+      {/* Auth routes - without DashboardLayout */}
+      <Route path="/login" component={Login} />
 
       {/* App routes - with DashboardLayout */}
       <Route path="/" component={Dashboard} />

@@ -1,13 +1,39 @@
 {
   "versions": [
     {
+      "version": "1.0.9",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Authentifizierung mit Passport.js",
+          "description": "Vollständiges Login-System mit E-Mail/Passwort, Session-Management und rollenbasierter Zugriffskontrolle. Admin-Login: admin@doering-consulting.eu / ChangeMe123!"
+        },
+        {
+          "type": "security",
+          "title": "Zugriffskontrolle aktiviert",
+          "description": "Alle geschäftskritischen Routen sind jetzt geschützt (protectedProcedure). Scheduler-Endpoints mit API-Key abgesichert."
+        },
+        {
+          "type": "improvement",
+          "title": "Auth-Guard mit Retry-Schutz",
+          "description": "Verhindert Login-Schleife durch Race Condition beim Cookie-Setzen (800ms Retry-Logik)"
+        },
+        {
+          "type": "fix",
+          "title": "Tests angepasst",
+          "description": "Alle 28 Tests bestehen mit Mock-User für Auth-Context"
+        }
+      ]
+    },
+    {
       "version": "1.0.8",
       "date": "2026-02-14",
       "changes": [
         {
           "type": "fix",
           "title": "Update-System Timeout & Doppel-Reload behoben",
-          "description": "Service Worker skipWaiting-Timing korrigiert, iOS Safari controllerchange-Abh\u00e4ngigkeit entfernt, automatischer Reload deaktiviert (User kontrolliert Zeitpunkt)"
+          "description": "Service Worker skipWaiting-Timing korrigiert, iOS Safari controllerchange-Abhängigkeit entfernt, automatischer Reload deaktiviert (User kontrolliert Zeitpunkt)"
         }
       ]
     },

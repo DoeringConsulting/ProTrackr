@@ -29,6 +29,13 @@
       "when": 1770672576696,
       "tag": "0003_previous_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1771081860473,
+      "tag": "0004_swift_silverclaw",
+      "breakpoints": true
     }
   ]
 }

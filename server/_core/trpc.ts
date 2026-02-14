@@ -31,10 +31,10 @@ export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
 
-    // ⚠️ Admin check disabled (auth disabled for development)
-    // if (!ctx.user || ctx.user.role !== 'admin') {
-    //   throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    // }
+    // Admin-Check aktiv
+    if (!ctx.user || ctx.user.role !== 'admin') {
+      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
 
     return next({
       ctx: {
