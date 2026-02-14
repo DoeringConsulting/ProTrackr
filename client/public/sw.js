@@ -1,5 +1,5 @@
 // Service Worker for Offline Caching with Auto-Update
-const APP_VERSION = 'b54d85bd'; // Updated with each deployment
+const APP_VERSION = '6d82bfa8'; // Updated with each deployment
 const CACHE_NAME = `doring-consulting-${APP_VERSION}`;
 const urlsToCache = [
   '/',
@@ -16,8 +16,8 @@ self.addEventListener('install', (event) => {
       return cache.addAll(urlsToCache);
     })
   );
-  // Force the waiting service worker to become the active service worker
-  self.skipWaiting();
+  // SW wartet auf explizites SKIP_WAITING-Signal vom User
+  // (kein automatisches skipWaiting – verhindert Timing-Probleme)
 });
 
 // Activate event - clean up old caches and claim clients

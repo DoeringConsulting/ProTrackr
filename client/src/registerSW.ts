@@ -221,38 +221,28 @@ function showUpdateNotification(version: string) {
       updateBtn.disabled = true;
       updateBtn.textContent = 'Wird aktualisiert...';
       updateBtn.style.background = '#6b7280';
-      
-      try {
-        // Get current version before update
-        const currentVersion = await getCurrentVersion();
-        console.log('[SW] Current version:', currentVersion);
-        
-        // Tell the service worker to skip waiting
-        if (navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
-          console.log('[SW] SKIP_WAITING message sent');
-        } else {
-          throw new Error('No service worker controller available');
-        }
-        
-        // Wait for controller change (max 10 seconds)
-        const updateSuccess = await waitForControllerChange(10000);
-        
-        if (updateSuccess) {
-          console.log('[SW] Update successful, reloading...');
-          // Reload will happen automatically via controllerchange event
-        } else {
-          throw new Error('Update timeout - controller did not change');
-        }
-      } catch (error) {
-        console.error('[SW] Update failed:', error);
-        updateBtn.textContent = 'Fehler - Erneut versuchen';
-        updateBtn.style.background = '#ef4444';
-        updateBtn.disabled = false;
-        
-        // Show error message
-        showUpdateError(error instanceof Error ? error.message : 'Unknown error');
+
+      // SKIP_WAITING senden falls ein wartender SW vorhanden ist
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+        console.log('[SW] SKIP_WAITING message sent');
       }
+
+      // Caches leeren und nach 500ms neu laden
+      // Kein waitForControllerChange – iOS Safari feuert controllerchange nicht zuverlässig
+      try {
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map(name => caches.delete(name)));
+          console.log('[SW] Caches cleared');
+        }
+      } catch (e) {
+        console.warn('[SW] Cache clearing failed:', e);
+      }
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     };
     
     // Close button

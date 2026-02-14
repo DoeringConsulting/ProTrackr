@@ -1,13 +1,24 @@
 {
   "versions": [
     {
+      "version": "1.0.8",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Update-System Timeout & Doppel-Reload behoben",
+          "description": "Service Worker skipWaiting-Timing korrigiert, iOS Safari controllerchange-Abh\u00e4ngigkeit entfernt, automatischer Reload deaktiviert (User kontrolliert Zeitpunkt)"
+        }
+      ]
+    },
+    {
       "version": "1.0.7",
       "date": "2026-02-14",
       "changes": [
         {
           "type": "fix",
           "title": "Reisekosten Timezone-Problem behoben",
-          "description": "Reisekosteneintr\u00e4ge werden jetzt am korrekten Tag gespeichert (Timezone-Konvertierung korrigiert)"
+          "description": "Reisekosteneinträge werden jetzt am korrekten Tag gespeichert (Timezone-Konvertierung korrigiert)"
         }
       ]
     },

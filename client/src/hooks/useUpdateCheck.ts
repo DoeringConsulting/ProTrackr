@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const APP_VERSION = '1.0.7'; // Increment this when deploying new version
+const APP_VERSION = '1.0.8'; // Increment this when deploying new version
 const VERSION_CHECK_INTERVAL = 60000; // Check every 60 seconds
 
 export function useUpdateCheck() {
@@ -26,13 +26,9 @@ export function useUpdateCheck() {
         console.log('[UpdateCheck] Current:', APP_VERSION, 'Server:', serverVersion);
         
         if (serverVersion && serverVersion !== APP_VERSION) {
-          console.log('[UpdateCheck] New version available, triggering update...');
+          console.log('[UpdateCheck] New version available:', serverVersion);
           setUpdateAvailable(true);
-          
-          // Force reload after 2 seconds
-          setTimeout(() => {
-            forceReload();
-          }, 2000);
+          // Kein automatischer Reload – User wählt Zeitpunkt über Notification-Banner
         }
       } catch (error) {
         console.error('[UpdateCheck] Error checking for updates:', error);

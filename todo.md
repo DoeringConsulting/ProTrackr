@@ -1127,3 +1127,8 @@
 
 ## Bugfix: Reisekosten Timezone-Problem
 - [x] Reisekosteneinträge fallen in Vortag statt korrekten Tag - Timezone-Problem beheben
+
+## Hotfix: Update-System Timeout & Doppel-Reload
+- [x] HF-SW-01: skipWaiting() aus sw.js install Event entfernen
+- [x] HF-SW-02: Button-Logik in registerSW.ts ohne controllerchange umbauen
+- [x] HF-SW-03: Auto-Reload in useUpdateCheck.ts deaktivieren (User kontrolliert Zeitpunkt)
