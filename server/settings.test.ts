@@ -63,7 +63,7 @@ describe("Settings API Tests", () => {
       expect(result.length).toBe(2);
       expect(result[0]).toHaveProperty("currency");
       expect(result[0]).toHaveProperty("success");
-    });
+    }, 15000); // 15s timeout for external API call
 
     it("should create manual exchange rate", async () => {
       const testDate = "2026-01-15";
