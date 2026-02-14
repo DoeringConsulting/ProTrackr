@@ -112,12 +112,17 @@ export async function getTimeEntries(userId: number, startDate?: Date, endDate?:
   if (!db) return [];
   const { timeEntries } = await import("../drizzle/schema");
   
-  let query = db.select().from(timeEntries).where(eq(timeEntries.userId, userId));
+  // Build where conditions
+  const conditions = [eq(timeEntries.userId, userId)];
   
-  // Note: Date filtering would require additional where clauses with date comparison
-  // For now, returning all entries for the user
+  if (startDate) {
+    conditions.push(sql`DATE(${timeEntries.date}) >= ${startDate.toISOString().split('T')[0]}`);
+  }
+  if (endDate) {
+    conditions.push(sql`DATE(${timeEntries.date}) <= ${endDate.toISOString().split('T')[0]}`);
+  }
   
-  return await query.orderBy(desc(timeEntries.date));
+  return await db.select().from(timeEntries).where(and(...conditions)).orderBy(desc(timeEntries.date));
 }
 
 export async function createTimeEntry(data: any) {

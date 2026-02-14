@@ -64,7 +64,7 @@ export async function fetchNBPExchangeRate(
  * @returns Amount in PLN cents
  */
 export function convertEURtoPLN(eurCents: number, rate: number): number {
-  return Math.round((eurCents * rate) / 100) * 100;
+  return Math.round(eurCents * rate);
 }
 
 /**
@@ -74,5 +74,5 @@ export function convertEURtoPLN(eurCents: number, rate: number): number {
  * @returns Amount in EUR cents
  */
 export function convertPLNtoEUR(plnCents: number, rate: number): number {
-  return Math.round((plnCents / rate) * 100);
+  return Math.round(plnCents / rate);
 }

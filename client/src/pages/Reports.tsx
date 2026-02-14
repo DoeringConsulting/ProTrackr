@@ -26,6 +26,7 @@ export default function Reports() {
 
   const { data: customers = [] } = trpc.customers.list.useQuery();
   const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({ startDate, endDate });
+  const { data: expenses = [] } = trpc.expenses.list.useQuery({ startDate, endDate });
   const { data: fixedCosts = [] } = trpc.fixedCosts.list.useQuery();
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
@@ -35,11 +36,7 @@ export default function Reports() {
     const timeRevenue = timeEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
 
     // Get all expenses for the period
-    let totalExpenses = 0;
-    timeEntries.forEach((entry) => {
-      // This would need to be fetched from expenses
-      // For now, we'll use a placeholder
-    });
+    const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
     const grossRevenue = timeRevenue + totalExpenses;
 
@@ -97,8 +94,13 @@ export default function Reports() {
     const totalAmount = customerEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
     const totalManDays = customerEntries.reduce((sum, entry) => sum + entry.manDays, 0);
 
-    // Calculate expenses (placeholder - would need actual expense queries)
-    const totalExpenses = 0;
+    // Calculate expenses for this customer
+    const customerExpenses = expenses.filter(expense => {
+      // Find the time entry for this expense
+      const timeEntry = timeEntries.find(te => te.id === expense.timeEntryId);
+      return timeEntry && timeEntry.customerId === selectedCustomerId;
+    });
+    const totalExpenses = customerExpenses.reduce((sum, expense) => sum + expense.amount, 0);
 
     return {
       customer,
@@ -443,19 +445,25 @@ export default function Reports() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {customerData.entries.map((entry) => (
-                          <TableRow key={entry.id}>
-                            <TableCell>
-                              {new Date(entry.date).toLocaleDateString("de-DE")}
-                            </TableCell>
-                            <TableCell>{entry.weekday}</TableCell>
-                            <TableCell className="capitalize">{entry.entryType}</TableCell>
-                            <TableCell className="text-right">{formatHours(entry.hours)}</TableCell>
-                            <TableCell className="text-right">{formatManDays(entry.manDays)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(entry.calculatedAmount)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(0)}</TableCell>
-                          </TableRow>
-                        ))}
+                        {customerData.entries.map((entry) => {
+                          // Calculate expenses for this entry
+                          const entryExpenses = expenses.filter(e => e.timeEntryId === entry.id);
+                          const entryExpenseTotal = entryExpenses.reduce((sum, e) => sum + e.amount, 0);
+                          
+                          return (
+                            <TableRow key={entry.id}>
+                              <TableCell>
+                                {new Date(entry.date).toLocaleDateString("de-DE")}
+                              </TableCell>
+                              <TableCell>{entry.weekday}</TableCell>
+                              <TableCell className="capitalize">{entry.entryType}</TableCell>
+                              <TableCell className="text-right">{formatHours(entry.hours)}</TableCell>
+                              <TableCell className="text-right">{formatManDays(entry.manDays)}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(entry.calculatedAmount)}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(entryExpenseTotal)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
                         <TableRow className="border-t-2 font-semibold">
                           <TableCell colSpan={3}>Gesamt</TableCell>
                           <TableCell className="text-right">{formatHours(customerData.totalHours)}</TableCell>

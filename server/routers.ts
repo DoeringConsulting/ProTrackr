@@ -1,6 +1,6 @@
 
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { generateInvoiceNumber, getInvoiceNumbers, getDb } from "./db";
 import { sql } from "drizzle-orm";
@@ -431,9 +431,9 @@ export const appRouter = router({
       const { checkMonthEnd } = await import("./scheduler");
       return await checkMonthEnd();
     }),
-    checkMissingEntries: publicProcedure.mutation(async () => {
+    checkMissingEntries: protectedProcedure.mutation(async ({ ctx }: { ctx: any }) => {
       const { checkMissingTimeEntries } = await import("./scheduler");
-      return await checkMissingTimeEntries();
+      return await checkMissingTimeEntries(ctx.user.id);
     }),
   }),
 

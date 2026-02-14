@@ -5,9 +5,14 @@ import { Calendar, Euro, FileText, Users, TrendingUp, PieChart as PieChartIcon }
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export default function Dashboard() {
+  // Get current month date range
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+  
   const { data: customers, isLoading: customersLoading } = trpc.customers.list.useQuery();
-  const { data: timeEntries, isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({});
-  const { data: expenses } = trpc.expenses.list.useQuery({});
+  const { data: timeEntries, isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({ startDate, endDate });
+  const { data: expenses } = trpc.expenses.list.useQuery({ startDate, endDate });
   const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 

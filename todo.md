@@ -1110,3 +1110,17 @@
 - [x] Desktop-Kacheln zeigen nicht alle Einträge - alle Einträge werden jetzt angezeigt
 - [x] Desktop-Kacheln: Scroll-Funktion aktiviert mit max-h-[180px]
 - [x] Mobile-Icons: Border und opacity hinzugefügt für bessere Safari-Kompatibilität
+
+## Phase 0: Kritische Korrekturen (Source Code Review)
+
+- [x] T-01: server/db.ts - Datumsfilter aktiviert (D-01)
+- [x] T-02: server/nbp.ts - Rundungsfehler behoben (NBP-01)
+- [x] T-03: Reports.tsx - Expenses-Query hinzugefügt (REP-01)
+- [x] T-04: Reports.tsx - Buchhaltungsbericht Expenses eingebunden (REP-01)
+- [x] T-05: Reports.tsx - Kundenbericht Expenses + Exclusive/Inclusive (REP-02/03)
+- [x] T-06: Reports.tsx - Reisekosten-Spalte in Detailtabelle befüllt (REP-05)
+- [x] T-07: Dashboard.tsx - Monatsfilter für Zeiteinträge hinzugefügt (DASH-01)
+- [x] T-08: Dashboard.tsx - Zeiteinträge-Kachel Label bereits korrekt (DASH-02)
+- [x] T-09: scheduler.ts - Monatsabschluss: echte Expense-Summe implementiert (SC-01)
+- [x] T-10: scheduler.ts - checkIncompleteExpenses: echte Prüfung implementiert (SC-02)
+- [x] T-11: scheduler.ts - userId-Parameter hinzugefügt (SC-05 teilweise)

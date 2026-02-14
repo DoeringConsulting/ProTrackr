@@ -36,7 +36,19 @@ export async function checkMonthEnd() {
     );
 
   const revenue = entries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
-  const expenses = 0; // Would need to query expenses table
+  
+  // Query expenses for the month
+  const { expenses: expensesTable } = await import("../drizzle/schema");
+  const expenseRecords = await db
+    .select()
+    .from(expensesTable)
+    .where(
+      and(
+        gte(expensesTable.date, firstDay),
+        lte(expensesTable.date, lastDay)
+      )
+    );
+  const expenses = expenseRecords.reduce((sum, exp) => sum + exp.amount, 0);
 
   const monthName = now.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
   await notifyMonthEnd(monthName, revenue, expenses);
@@ -44,7 +56,7 @@ export async function checkMonthEnd() {
   return { executed: true, month: monthName, revenue, expenses };
 }
 
-export async function checkMissingTimeEntries() {
+export async function checkMissingTimeEntries(userId?: number) {
   const now = new Date();
   const db = await getDb();
   if (!db) {
@@ -66,15 +78,19 @@ export async function checkMissingTimeEntries() {
     const startOfDay = new Date(checkDate.setHours(0, 0, 0, 0));
     const endOfDay = new Date(checkDate.setHours(23, 59, 59, 999));
 
+    const whereConditions = [
+      gte(timeEntries.date, startOfDay),
+      lte(timeEntries.date, endOfDay)
+    ];
+    
+    if (userId) {
+      whereConditions.push(eq(timeEntries.userId, userId));
+    }
+    
     const entries = await db
       .select()
       .from(timeEntries)
-      .where(
-        and(
-          gte(timeEntries.date, startOfDay),
-          lte(timeEntries.date, endOfDay)
-        )
-      );
+      .where(and(...whereConditions));
 
     if (entries.length === 0) {
       missingDays.push(checkDate.toLocaleDateString("de-DE"));
@@ -141,8 +157,20 @@ export async function checkIncompleteExpenses() {
       )
     );
 
-  // In a real implementation, we would check if these entries have associated expenses
-  const entriesWithoutExpenses = entries.length; // Placeholder
+  // Check which entries have no associated expenses
+  const { expenses: expensesTable } = await import("../drizzle/schema");
+  let entriesWithoutExpenses = 0;
+  
+  for (const entry of entries) {
+    const expenseCount = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(expensesTable)
+      .where(eq(expensesTable.timeEntryId, entry.id));
+    
+    if (expenseCount[0]?.count === 0) {
+      entriesWithoutExpenses++;
+    }
+  }
 
   if (entriesWithoutExpenses > 0) {
     const monthName = now.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
@@ -157,12 +185,12 @@ export async function checkIncompleteExpenses() {
  * Main scheduler function to run all checks
  * Should be called periodically (e.g., daily at a specific time)
  */
-export async function runScheduledTasks() {
+export async function runScheduledTasks(userId?: number) {
   console.log("[Scheduler] Running scheduled tasks...");
   
   const results = {
     monthEnd: await checkMonthEnd(),
-    missingEntries: await checkMissingTimeEntries(),
+    missingEntries: userId ? await checkMissingTimeEntries(userId) : { executed: false, reason: "No userId provided" },
     invoiceDeadlines: await checkUpcomingInvoiceDeadlines(),
     incompleteExpenses: await checkIncompleteExpenses(),
   };
