@@ -876,12 +876,18 @@ export default function TimeTracking() {
                       });
                     } else {
                       // Create new expense
+                      // Format date as YYYY-MM-DD without timezone conversion
+                      const year = selectedExpenseDate!.getFullYear();
+                      const month = String(selectedExpenseDate!.getMonth() + 1).padStart(2, '0');
+                      const day = String(selectedExpenseDate!.getDate()).padStart(2, '0');
+                      const dateStr = `${year}-${month}-${day}`;
+                      
                       await createExpenseMutation.mutateAsync({
                         category: tempExpenseCategory as any,
                         amount: Math.round(parseFloat(tempExpenseAmount) * 100),
                         currency: 'EUR',
                         comment: tempExpenseComment || undefined,
-                        date: selectedExpenseDate!.toISOString(),
+                        date: dateStr,
                       });
                       toast.success('Reisekosten erfolgreich gespeichert');
                     }

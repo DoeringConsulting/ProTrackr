@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 // Version is managed by scripts/increment-version.mjs
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.7';
 
 export function VersionFooter() {
   const [currentVersion, setCurrentVersion] = useState(APP_VERSION);

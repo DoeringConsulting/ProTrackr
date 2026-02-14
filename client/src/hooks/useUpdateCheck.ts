@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const APP_VERSION = '1.0.6'; // Increment this when deploying new version
+const APP_VERSION = '1.0.7'; // Increment this when deploying new version
 const VERSION_CHECK_INTERVAL = 60000; // Check every 60 seconds
 
 export function useUpdateCheck() {

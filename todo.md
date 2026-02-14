@@ -1124,3 +1124,6 @@
 - [x] T-09: scheduler.ts - Monatsabschluss: echte Expense-Summe implementiert (SC-01)
 - [x] T-10: scheduler.ts - checkIncompleteExpenses: echte Prüfung implementiert (SC-02)
 - [x] T-11: scheduler.ts - userId-Parameter hinzugefügt (SC-05 teilweise)
+
+## Bugfix: Reisekosten Timezone-Problem
+- [x] Reisekosteneinträge fallen in Vortag statt korrekten Tag - Timezone-Problem beheben

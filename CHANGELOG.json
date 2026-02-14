@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.7",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Reisekosten Timezone-Problem behoben",
+          "description": "Reisekosteneintr\u00e4ge werden jetzt am korrekten Tag gespeichert (Timezone-Konvertierung korrigiert)"
+        }
+      ]
+    },
+    {
       "version": "1.0.6",
       "date": "2026-02-14",
       "changes": [
