@@ -1,0 +1,9 @@
+{
+  "query": "INSERT INTO mandanten (name, mandantNr) VALUES ('Döring Consulting', 'DC001');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute INSERT INTO mandanten (name, mandantNr) VALUES ('Döring Consulting', 'DC001');",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 360
+}

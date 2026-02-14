@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE users \nSET email = 'a.doering@doering-consulting.eu',\n    passwordHash = '$2b$10$nRwPOjonuj8HzigDkkgWsOFLGwuJSCrDMxTsOX.xD5Dppkeu/4TyK',\n    name = 'Alexander Döring'\nWHERE role = 'admin' AND email = 'admin@doering-consulting.eu';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute UPDATE users \nSET email = 'a.doering@doering-consulting.eu',\n    passwordHash = '$2b$10$nRwPOjonuj8HzigDkkgWsOFLGwuJSCrDMxTsOX.xD5Dppkeu/4TyK',\n    name = 'Alexander Döring'\nWHERE role = 'admin' AND email = 'admin@doering-consulting.eu';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 351
+}

@@ -64,9 +64,12 @@ authRouter.post("/register", async (req: Request, res: Response) => {
     if (existing) {
       return res.status(409).json({ error: "E-Mail-Adresse bereits registriert" });
     }
-    const passwordHash = await bcrypt.hash(password, 10);
-    await createUser({ email, passwordHash, displayName: displayName ?? null });
-    return res.status(201).json({ success: true });
+    // Registration temporarily disabled - admin must create users
+    return res.status(501).json({ error: "Registrierung derzeit deaktiviert. Bitte kontaktieren Sie Ihren Administrator." });
+    
+    // const passwordHash = await bcrypt.hash(password, 10);
+    // await createUser({ mandantId: 1, email, passwordHash, displayName: displayName ?? null });
+    // return res.status(201).json({ success: true });
   } catch (err) {
     console.error("[Auth] Register error:", err);
     return res.status(500).json({ error: "Registrierung fehlgeschlagen" });

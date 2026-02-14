@@ -6,7 +6,8 @@ import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, uniqueIndex, inde
  */
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
-  email: varchar("email", { length: 320 }).notNull().unique(), // 320 = bestehende DB-Länge
+  mandantId: int("mandantId").notNull(), // Foreign key to mandanten
+  email: varchar("email", { length: 320 }).notNull(), // Removed unique - unique per mandant
   passwordHash: varchar("passwordHash", { length: 255 }),     // bestehender Spaltenname in DB
   displayName: varchar("name", { length: 255 }),              // bestehender Spaltenname "name" in DB
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(), // bestehender enum-Typ
@@ -16,6 +17,20 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+/**
+ * Mandanten table - multi-tenancy support
+ */
+export const mandanten = mysqlTable("mandanten", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  mandantNr: varchar("mandantNr", { length: 50 }).notNull().unique(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Mandant = typeof mandanten.$inferSelect;
+export type InsertMandant = typeof mandanten.$inferInsert;
 
 /**
  * Customers table - stores client master data

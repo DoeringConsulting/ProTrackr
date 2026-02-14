@@ -1,0 +1,17 @@
+{
+  "query": "SELECT id, mandantId, email, name, role FROM users WHERE email = 'a.doering@doering-consulting.eu';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute SELECT id, mandantId, email, name, role FROM users WHERE email = 'a.doering@doering-consulting.eu';",
+  "rows": [
+    {
+      "id": "1",
+      "mandantId": "1",
+      "email": "a.doering@doering-consulting.eu",
+      "name": "Alexander Döring",
+      "role": "admin"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tmandantId\temail\tname\trole\n1\t1\ta.doering@doering-consulting.eu\tAlexander Döring\tadmin\n",
+  "stderr": "",
+  "execution_time_ms": 347
+}

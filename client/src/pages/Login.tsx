@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 export default function Login() {
+  const [mandant, setMandant] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ mandant, email, password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -45,6 +46,18 @@ export default function Login() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="mandant">Mandant</Label>
+              <Input
+                id="mandant"
+                type="text"
+                placeholder="Mandanten-Nr. oder Name"
+                value={mandant}
+                onChange={(e) => setMandant(e.target.value)}
+                required
+                autoComplete="organization"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">E-Mail</Label>
               <Input

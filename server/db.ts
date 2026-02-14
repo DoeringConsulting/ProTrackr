@@ -516,6 +516,18 @@ export async function exportDatabase() {
 
 // ─── AUTH: USER FUNCTIONS ───────────────────────────────────────────
 
+export async function findUserByEmailAndMandant(email: string, mandantId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { users } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.email, email), eq(users.mandantId, mandantId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
 export async function findUserByEmail(email: string) {
   const db = await getDb();
   if (!db) return null;
@@ -541,6 +553,7 @@ export async function findUserById(id: number) {
 }
 
 export async function createUser(data: {
+  mandantId: number;
   email: string;
   passwordHash: string;
   displayName?: string | null;
@@ -550,6 +563,7 @@ export async function createUser(data: {
   if (!db) throw new Error("Database not available");
   const { users } = await import("../drizzle/schema");
   await db.insert(users).values({
+    mandantId: data.mandantId,
     email: data.email,
     passwordHash: data.passwordHash,
     displayName: data.displayName ?? null,

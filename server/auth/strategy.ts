@@ -1,23 +1,39 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
-import { findUserByEmail, findUserById } from "../db";
+import { findUserByEmailAndMandant, findUserById } from "../db";
+import { findMandantByNr, findMandantByName } from "../db-mandanten";
 
 passport.use(
   new LocalStrategy(
-    { usernameField: "email", passwordField: "password" },
-    async (email, password, done) => {
+    { usernameField: "email", passwordField: "password", passReqToCallback: true },
+    async (req: any, email, password, done) => {
       try {
-        const user = await findUserByEmail(email);
+        const mandantInput = req.body.mandant;
+        if (!mandantInput) {
+          return done(null, false, { message: "Mandant ist erforderlich" });
+        }
+        
+        // Find mandant by number or name
+        let mandant = await findMandantByNr(mandantInput);
+        if (!mandant) {
+          mandant = await findMandantByName(mandantInput);
+        }
+        if (!mandant) {
+          return done(null, false, { message: "Ungültiger Mandant" });
+        }
+        
+        const user = await findUserByEmailAndMandant(email, mandant.id);
         if (!user || !user.passwordHash) {
-          return done(null, false, { message: "Ungültige E-Mail oder Passwort" });
+          return done(null, false, { message: "Ungültige Anmeldedaten" });
         }
         const isValid = await bcrypt.compare(password, user.passwordHash);
         if (!isValid) {
-          return done(null, false, { message: "Ungültige E-Mail oder Passwort" });
+          return done(null, false, { message: "Ungültige Anmeldedaten" });
         }
         return done(null, {
           id: user.id,
+          mandantId: user.mandantId,
           email: user.email,
           displayName: user.displayName,
           role: user.role,

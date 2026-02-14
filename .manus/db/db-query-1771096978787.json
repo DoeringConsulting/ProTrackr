@@ -1,0 +1,17 @@
+{
+  "query": "SELECT * FROM mandanten WHERE mandantNr = 'DC001';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user SdJW3LKTrP7n3wf.root --database 8yGpDpC3cK44EWrvsrxLR6 --execute SELECT * FROM mandanten WHERE mandantNr = 'DC001';",
+  "rows": [
+    {
+      "id": "1",
+      "name": "Döring Consulting",
+      "mandantNr": "DC001",
+      "createdAt": "2026-02-14 19:21:09",
+      "updatedAt": "2026-02-14 19:21:09"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tmandantNr\tcreatedAt\tupdatedAt\n1\tDöring Consulting\tDC001\t2026-02-14 19:21:09\t2026-02-14 19:21:09\n",
+  "stderr": "",
+  "execution_time_ms": 453
+}

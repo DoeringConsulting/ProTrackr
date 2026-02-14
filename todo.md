@@ -1150,3 +1150,20 @@
 - [x] T-P1-13a: Login-Route in App.tsx hinzufügen
 - [x] T-P1-13b: Auth-Guard in DashboardLayout.tsx implementieren (mit Retry-Schutz)
 - [x] T-P1-13c: UNAUTHORIZED-Redirect in main.tsx aktivieren
+
+## Bugfix: Login funktioniert nicht
+- [x] Admin-User Passwort-Hash prüfen und korrigieren (bcryptjs, 10 rounds)
+- [x] Login-Logik in server/auth/router.ts getestet
+- [x] Admin-E-Mail auf a.doering@doering-consulting.eu geändert
+
+## Feature: Mandanten-Verwaltung
+- [x] Mandanten-Tabelle in drizzle/schema.ts erstellt (id, mandantNr, name, createdAt, updatedAt)
+- [x] users-Tabelle um mandantId erweitert (NOT NULL, Foreign Key)
+- [x] DB-Migration durchgeführt (manuell via SQL)
+- [x] Mandanten-DB-Funktionen in server/db-mandanten.ts hinzugefügt (findMandantByNr, findMandantByName, getAllMandanten)
+- [x] Auth-Strategie um Mandanten-Check erweitert (passReqToCallback: true, Mandant-Validierung)
+- [x] Login-Formular um Mandanten-Feld erweitert (Placeholder: "Mandanten-Nr. oder Name")
+- [x] Ersten Mandanten "Döring Consulting" (DC001) angelegt
+- [x] Admin-User mit Mandanten-Zuordnung (mandantId=1, a.doering@doering-consulting.eu)
+- [x] Context um mandantId erweitert (server/_core/context.ts)
+- [x] Tests angepasst (Mock-User mit mandantId)

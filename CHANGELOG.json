@@ -1,6 +1,32 @@
 {
   "versions": [
     {
+      "version": "1.0.10",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Login-Problem behoben",
+          "description": "Admin-User Passwort-Hash korrigiert (bcryptjs, 10 rounds) und E-Mail-Adresse auf a.doering@doering-consulting.eu aktualisiert"
+        },
+        {
+          "type": "feature",
+          "title": "Mandanten-Verwaltung implementiert",
+          "description": "3-Felder-Login (Mandant, E-Mail, Passwort) mit Mandanten-Tabelle, mandantId in users-Tabelle und Mandanten-Validierung in Auth-Strategie. Erster Mandant: DC001 - D\u00f6ring Consulting"
+        },
+        {
+          "type": "security",
+          "title": "Multi-Mandanten-F\u00e4higkeit",
+          "description": "Klare Trennung von Daten verschiedener Mandanten durch mandantId in Session und Context. Sicherere Authentifizierung durch zus\u00e4tzlichen Faktor."
+        },
+        {
+          "type": "improvement",
+          "title": "Tests angepasst",
+          "description": "Alle 28 Tests bestehen mit Mock-User inkl. mandantId"
+        }
+      ]
+    },
+    {
       "version": "1.0.9",
       "date": "2026-02-14",
       "changes": [
