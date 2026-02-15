@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.11",
+      "date": "2026-02-15",
+      "changes": [
+        {
+          "type": "documentation",
+          "title": "Vollständige Dokumentations-Struktur erstellt",
+          "description": "DEVELOPMENT_HISTORY.md (technische Historie für LLMs), CHANGELOG.md (nutzer-freundliche Versions-Historie), ARCHITECTURE.md (High-Level-Überblick), todo.md (bereinigt und aktualisiert)"
+        },
+        {
+          "type": "improvement",
+          "title": "Dokumentation für Cursor und andere LLMs optimiert",
+          "description": "Klare Trennung zwischen technischer Dokumentation (für AI-Agents) und Business-Dokumentation (für Menschen). Alle Datei-Pfade, Code-Änderungen und Design-Entscheidungen dokumentiert."
+        }
+      ]
+    },
+    {
       "version": "1.0.10",
       "date": "2026-02-14",
       "changes": [
@@ -12,12 +28,12 @@
         {
           "type": "feature",
           "title": "Mandanten-Verwaltung implementiert",
-          "description": "3-Felder-Login (Mandant, E-Mail, Passwort) mit Mandanten-Tabelle, mandantId in users-Tabelle und Mandanten-Validierung in Auth-Strategie. Erster Mandant: DC001 - D\u00f6ring Consulting"
+          "description": "3-Felder-Login (Mandant, E-Mail, Passwort) mit Mandanten-Tabelle, mandantId in users-Tabelle und Mandanten-Validierung in Auth-Strategie. Erster Mandant: DC001 - Döring Consulting"
         },
         {
           "type": "security",
-          "title": "Multi-Mandanten-F\u00e4higkeit",
-          "description": "Klare Trennung von Daten verschiedener Mandanten durch mandantId in Session und Context. Sicherere Authentifizierung durch zus\u00e4tzlichen Faktor."
+          "title": "Multi-Mandanten-Fähigkeit",
+          "description": "Klare Trennung von Daten verschiedener Mandanten durch mandantId in Session und Context. Sicherere Authentifizierung durch zusätzlichen Faktor."
         },
         {
           "type": "improvement",
