@@ -32,6 +32,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  const isProduction = process.env.NODE_ENV === "production";
   
   // Security headers
   app.use(helmet({
@@ -45,7 +46,12 @@ async function startServer() {
   
   // ✅ AUTHENTICATION ACTIVATED
   // Session-Middleware
-  // WICHTIG: secure:true + sameSite:"none" sind Pflicht für Manus-Hosting (HTTPS + Cross-Origin)
+  // WICHTIG: In Production hinter Reverse-Proxy (Nginx/Manus) trust proxy setzen,
+  // sonst kann express-session das Secure-Cookie nicht zuverlässig setzen.
+  if (isProduction) {
+    app.set("trust proxy", 1);
+  }
+  // secure + sameSite:none sind in Production für HTTPS/Cross-Origin nötig
   // Diese Einstellungen verhindern die Login-Schleife die zur Auth-Deaktivierung geführt hat
   if (!process.env.SESSION_SECRET) {
     throw new Error("[Auth] SESSION_SECRET Umgebungsvariable ist nicht gesetzt!");
@@ -55,10 +61,11 @@ async function startServer() {
       secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
+      proxy: isProduction,
       cookie: {
-        secure: true,       // Manus läuft immer auf HTTPS
+        secure: isProduction, // lokal ohne HTTPS, in Production nur mit HTTPS
         httpOnly: true,
-        sameSite: "none",   // Pflicht für Cross-Origin-Kontext auf Manus
+        sameSite: isProduction ? "none" : "lax",
         maxAge: 1000 * 60 * 60 * 24 * 7, // 7 Tage
       },
     })
@@ -84,7 +91,7 @@ async function startServer() {
     })
   );
   // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
+  if (!isProduction) {
     await setupVite(app, server);
   } else {
     serveStatic(app);
