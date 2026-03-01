@@ -50,6 +50,10 @@ OWNER_NAME=
 VITE_OAUTH_PORTAL_URL=
 VITE_APP_TITLE=ProTrackr
 VITE_APP_LOGO=
+
+# Lokal mit `pnpm start` ueber http://localhost:
+SESSION_COOKIE_SECURE=false
+SESSION_COOKIE_SAMESITE=lax
 ```
 
 Wichtig:
@@ -116,6 +120,13 @@ NODE_ENV=production PORT=3000 pnpm start
 Dann ebenfalls im Browser:
 - `http://localhost:3000`
 
+Hinweis fuer lokalen Betrieb mit `pnpm start`:
+- Bei `http://localhost` muessen Session-Cookies ohne HTTPS funktionieren.
+- Deshalb in `.env` setzen:
+  - `SESSION_COOKIE_SECURE=false`
+  - `SESSION_COOKIE_SAMESITE=lax`
+- Auf echten HTTPS-Deployments sollte `SESSION_COOKIE_SECURE=true` verwendet werden.
+
 ## 9) Typische Probleme
 
 ### Fehler: `SESSION_SECRET Umgebungsvariable ist nicht gesetzt`
@@ -128,7 +139,9 @@ Dann ebenfalls im Browser:
 
 ### Login klappt, aber Weiterleitung springt wieder auf Login
 - In Production hinter Nginx/Proxy auf HTTPS achten.
-- Aktueller Stand setzt Session-Proxy-Handling bereits korrekt.
+- Fuer lokalen Betrieb ohne HTTPS (`http://localhost`) in `.env` setzen:
+  - `SESSION_COOKIE_SECURE=false`
+  - `SESSION_COOKIE_SAMESITE=lax`
 
 ---
 

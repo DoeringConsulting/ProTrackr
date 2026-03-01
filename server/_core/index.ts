@@ -33,6 +33,19 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   const isProduction = process.env.NODE_ENV === "production";
+  const sessionCookieSecure =
+    process.env.SESSION_COOKIE_SECURE !== undefined
+      ? process.env.SESSION_COOKIE_SECURE === "true"
+      : isProduction;
+  const sessionCookieSameSiteEnv = process.env.SESSION_COOKIE_SAMESITE;
+  const sessionCookieSameSite =
+    sessionCookieSameSiteEnv === "none" ||
+    sessionCookieSameSiteEnv === "lax" ||
+    sessionCookieSameSiteEnv === "strict"
+      ? sessionCookieSameSiteEnv
+      : sessionCookieSecure
+        ? "none"
+        : "lax";
   
   // Security headers
   app.use(helmet({
@@ -48,7 +61,7 @@ async function startServer() {
   // Session-Middleware
   // WICHTIG: In Production hinter Reverse-Proxy (Nginx/Manus) trust proxy setzen,
   // sonst kann express-session das Secure-Cookie nicht zuverlässig setzen.
-  if (isProduction) {
+  if (isProduction && sessionCookieSecure) {
     app.set("trust proxy", 1);
   }
   // secure + sameSite:none sind in Production für HTTPS/Cross-Origin nötig
@@ -61,11 +74,11 @@ async function startServer() {
       secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
-      proxy: isProduction,
+      proxy: isProduction && sessionCookieSecure,
       cookie: {
-        secure: isProduction, // lokal ohne HTTPS, in Production nur mit HTTPS
+        secure: sessionCookieSecure,
         httpOnly: true,
-        sameSite: isProduction ? "none" : "lax",
+        sameSite: sessionCookieSameSite,
         maxAge: 1000 * 60 * 60 * 24 * 7, // 7 Tage
       },
     })
