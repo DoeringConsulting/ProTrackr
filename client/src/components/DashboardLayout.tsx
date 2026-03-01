@@ -121,10 +121,6 @@ function DashboardLayoutContent({
     checkAuth();
   }, []);
 
-  // Ladebildschirm während Auth-Check
-  if (!authChecked) {
-    return <DashboardLayoutSkeleton />;
-  }
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
@@ -174,6 +170,12 @@ function DashboardLayoutContent({
       document.body.style.userSelect = "";
     };
   }, [isResizing, setSidebarWidth]);
+
+  // Hooks müssen in jeder Render-Phase in identischer Reihenfolge laufen.
+  // Darum kommt der frühe Return erst NACH allen Hook-Aufrufen.
+  if (!authChecked) {
+    return <DashboardLayoutSkeleton />;
+  }
 
   return (
     <>
