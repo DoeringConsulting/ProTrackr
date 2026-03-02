@@ -52,6 +52,18 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - Network First strategy with cache fallback
 self.addEventListener('fetch', (event) => {
+  const requestUrl = new URL(event.request.url);
+
+  // Never cache or intercept API/auth calls and non-GET requests.
+  // This prevents stale auth/session behavior and login race issues.
+  if (
+    event.request.method !== 'GET' ||
+    requestUrl.pathname.startsWith('/api/')
+  ) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {

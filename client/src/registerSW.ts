@@ -69,6 +69,28 @@ function showUpdateError(errorMessage: string) {
 // Register Service Worker for offline functionality with auto-update
 export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
+    const hostname = window.location.hostname;
+    const isLocalhost =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1';
+
+    // Local development/prod preview should not be controlled by SW,
+    // otherwise cached API behavior can break login/session flows.
+    if (isLocalhost) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => {
+          registrations.forEach((registration) => {
+            registration.unregister();
+          });
+        })
+        .catch((error) => {
+          console.warn('[SW] Failed to cleanup local registrations:', error);
+        });
+      return;
+    }
+
     window.addEventListener('load', () => {
       navigator.serviceWorker
         .register('/sw.js')
