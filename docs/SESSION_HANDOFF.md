@@ -4,40 +4,62 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 
 ## Letzte Aktualisierung
 
-- UTC: 2026-02-27 17:12:22Z
+- UTC: 2026-03-02 14:36:41Z
 - Branch: `ProTrackr_developing_path`
-- Commit: `7dc403b32ef0d0ce6a6d16638b21f7962d1f0ec7`
+- Commit: `b0fb56d672dd20775647e1a44fefbb004b7b261d` (`b0fb56d`)
 - Remote: `origin/ProTrackr_developing_path`
 
 ## Zuletzt abgeschlossene Arbeit
 
-1. Branch umbenannt auf `ProTrackr_developing_path`.
-2. Alter Remote-Branch `cursor/app-leistung-hostinger-954a` entfernt.
-3. Auth/Session-Fix fuer Production hinter Reverse Proxy in `server/_core/index.ts`:
-   - `app.set("trust proxy", 1)` in Production
-   - `session({ proxy: isProduction })`
-   - `cookie.secure` und `cookie.sameSite` environment-abhängig gesetzt
+1. Auth-/Session-Stabilisierung fuer lokalen Production-Betrieb:
+   - `SESSION_COOKIE_SECURE` und `SESSION_COOKIE_SAMESITE` per `.env` steuerbar.
+2. UI-Crash behoben:
+   - Hook-Order-Fehler in `DashboardLayout.tsx` beseitigt.
+3. Monatswechsel-Bug in Zeiterfassung behoben:
+   - lokale Datumskeys statt `toISOString()` in `TimeTracking.tsx`.
+4. Service-Worker/Login-Konflikt behoben:
+   - auf localhost wird SW deaktiviert/aufgeraeumt.
+   - SW interceptet keine `/api/*` und keine Nicht-GET-Requests.
+5. Dokumentation erweitert:
+   - `docs/ANLEITUNG_WINDOWS_BEFEHLE_PROTRACKR.md` (komplette Windows-Befehlsreferenz).
 
-## Arbeitsbasis
+## Nutzer-Praeferenzen (SEHR WICHTIG)
 
-- Der Stand enthaelt weiterhin:
-  - `27a2fe6` (Login-Bugfix + Mandanten-Verwaltung)
-  - `f70d2be` (Dokumentationsstruktur)
-  - zusaetzlich `7dc403b` (Session/Proxy-Stabilisierung)
-- Working Tree war beim letzten Check sauber.
+Der Nutzer ist ausdruecklich **Laie**. Kommunikation muss immer:
 
-## Naechste sinnvolle Schritte
+1. in **Deutsch** erfolgen.
+2. **jeden einzelnen Schritt** klar und einfach erklaeren.
+3. bei mehreren Terminals immer sagen:
+   - welches Terminal zu verwenden ist
+   - was offen bleiben muss
+4. nach **jeder Code-Aenderung** aktiv an den lokalen Update-/Start-Block erinnern.
 
-1. Sporadische Login-Schleife end-to-end testen (Prod-Setup mit Nginx/HTTPS).
-2. Aus `todo.md`: Login-Rate-Limiting (5 Versuche/15 Min) umsetzen.
-3. Danach: Mandanten-Verwaltungsseite (Admin) als naechster groesserer Block.
+## Pflicht-Erinnerung nach jeder Code-Aenderung
+
+Dem Nutzer immer diesen Block geben (ggf. angepasst):
+
+```powershell
+cd "C:\Projects\ProTrackr_developing_path"
+git pull origin ProTrackr_developing_path
+pnpm install
+pnpm build
+schtasks /Run /TN "ProTrackr-App"
+Test-NetConnection 127.0.0.1 -Port 3000
+```
+
+Hinweis:
+- `pnpm install` nur noetig, wenn Dependencies geaendert wurden.
+- Browser-Zugriff ueber `http://127.0.0.1:3000`.
+
+## Terminal-Konvention fuer den Nutzer
+
+- **Terminal A**: laufende App (z. B. `pnpm start`) oder MySQL-Konsole, wenn manuell gestartet.
+- **Terminal B**: alle Admin-/Git-/Pruef-Befehle.
 
 ## Wiederaufnahme-Prompt (Copy/Paste)
 
-Nutze diesen Prompt beim naechsten Start:
-
 ```text
-Bitte setze die Arbeit auf ProTrackr fort. Lies zuerst docs/SESSION_HANDOFF.md und arbeite exakt auf dem dort genannten Branch und Commit-Kontext weiter. Antworte auf Deutsch. Starte mit dem naechsten offenen Schritt aus dem Handoff und committe/pushe sauber nach jedem abgeschlossenen Block.
+Bitte setze die Arbeit auf ProTrackr fort. Lies zuerst docs/SESSION_HANDOFF.md und arbeite exakt auf dem dort genannten Branch/Commit weiter. Antworte auf Deutsch. Ich bin Laie: erklaere jeden Schritt einzeln und sage bei mehreren Terminals immer explizit, welches Terminal ich verwenden soll.
 ```
 
 ## Pflege-Regel
