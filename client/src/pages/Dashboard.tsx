@@ -3,56 +3,49 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { trpc } from "@/lib/trpc";
 import { Calendar, Euro, FileText, Users, TrendingUp, PieChart as PieChartIcon } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { calculateDashboardCostBreakdown } from "@/lib/uiCalculations";
+import {
+  calculateDashboardCostBreakdown,
+  calculateMonthlyRevenueSeries,
+  formatLocalDate,
+  getDateKey,
+} from "@/lib/uiCalculations";
 
 export default function Dashboard() {
-  // Get current month date range
+  // Date ranges: charts use last 6 months, cost breakdown/stats use current month
   const now = new Date();
-  const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  
+  const currentMonthStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  const currentMonthEnd = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const trendStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 5, 1));
+  const trendEnd = currentMonthEnd;
+
   const { data: customers, isLoading: customersLoading } = trpc.customers.list.useQuery();
-  const { data: timeEntries, isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({ startDate, endDate });
-  const { data: expenses } = trpc.expenses.list.useQuery({ startDate, endDate });
+  const { data: timeEntries = [], isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({
+    startDate: trendStart,
+    endDate: trendEnd,
+  });
+  const { data: expenses = [] } = trpc.expenses.list.useQuery({
+    startDate: currentMonthStart,
+    endDate: currentMonthEnd,
+  });
   const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
   const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
   const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: now.getFullYear() });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
-  // Calculate monthly revenue data for the last 6 months
-  const getMonthlyRevenueData = () => {
-    const now = new Date();
-    const months = [];
-    
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthName = date.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
-      
-      const monthEntries = timeEntries?.filter(entry => {
-        const entryDate = new Date(entry.date);
-        return entryDate.getMonth() === date.getMonth() && 
-               entryDate.getFullYear() === date.getFullYear();
-      }) || [];
-      
-      const revenue = monthEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0) / 100;
-      
-      months.push({
-        month: monthName,
-        umsatz: Math.round(revenue),
-      });
-    }
-    
-    return months;
-  };
+  const currentYearMonth = currentMonthStart.slice(0, 7);
+  const thisMonthEntries = timeEntries.filter((entry) => getDateKey(entry.date).slice(0, 7) === currentYearMonth);
+  const latestEntries = [...timeEntries]
+    .sort((a, b) => getDateKey(b.date).localeCompare(getDateKey(a.date)))
+    .slice(0, 5);
 
   // Calculate cost breakdown
   const getCostBreakdown = () => {
     const breakdown = calculateDashboardCostBreakdown({
-      timeEntries: timeEntries ?? [],
-      expenses: expenses ?? [],
+      timeEntries,
+      expenses,
       fixedCosts: fixedCosts ?? [],
-      startDate,
-      endDate,
+      startDate: currentMonthStart,
+      endDate: currentMonthEnd,
       taxProfile: taxProfile
         ? {
             taxForm: taxProfile.taxForm,
@@ -87,7 +80,7 @@ export default function Dashboard() {
   const getProjectComparison = () => {
     const projectRevenue: Record<string, number> = {};
     
-    timeEntries?.forEach(entry => {
+    timeEntries.forEach(entry => {
       if (!projectRevenue[entry.projectName]) {
         projectRevenue[entry.projectName] = 0;
       }
@@ -103,7 +96,11 @@ export default function Dashboard() {
       .slice(0, 5);
   };
 
-  const monthlyData = getMonthlyRevenueData();
+  const monthlyData = calculateMonthlyRevenueSeries({
+    timeEntries,
+    referenceDate: now,
+    monthsBack: 6,
+  });
   const costData = getCostBreakdown();
   const projectData = getProjectComparison();
 
@@ -117,16 +114,16 @@ export default function Dashboard() {
     },
     {
       title: "Zeiteinträge",
-      value: timeEntries?.length ?? 0,
+      value: thisMonthEntries.length,
       icon: Calendar,
       description: "Diesen Monat",
       color: "text-emerald-600",
     },
     {
       title: "Reisekosten",
-      value: `€${Math.round((expenses?.reduce((sum, exp) => sum + exp.amount, 0) ?? 0) / 100).toLocaleString('de-DE')}`,
+      value: `€${Math.round((expenses.reduce((sum, exp) => sum + exp.amount, 0) ?? 0) / 100).toLocaleString('de-DE')}`,
       icon: Euro,
-      description: "Gesamt",
+      description: "Diesen Monat",
       color: "text-purple-600",
     },
     {
@@ -203,14 +200,14 @@ export default function Dashboard() {
             <CardContent>
               {timeEntriesLoading ? (
                 <p className="text-muted-foreground">Lädt...</p>
-              ) : timeEntries && timeEntries.length > 0 ? (
+              ) : latestEntries.length > 0 ? (
                 <div className="space-y-2">
-                  {timeEntries.slice(0, 5).map((entry) => (
+                  {latestEntries.map((entry) => (
                     <div key={entry.id} className="flex items-center justify-between border-b pb-2">
                       <div>
                         <p className="font-medium">{entry.projectName}</p>
                         <p className="text-sm text-muted-foreground">
-                          {new Date(entry.date).toLocaleDateString("de-DE")}
+                          {new Date(`${getDateKey(entry.date)}T00:00:00`).toLocaleDateString("de-DE")}
                         </p>
                       </div>
                       <span className="text-sm font-medium">
@@ -285,7 +282,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Projekt-Vergleich</CardTitle>
-            <CardDescription>Top 5 Projekte nach Umsatz</CardDescription>
+            <CardDescription>Top 5 Projekte nach Umsatz (letzte 6 Monate)</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>

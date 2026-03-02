@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateAccountingUiData,
   calculateDashboardCostBreakdown,
+  calculateMonthlyRevenueSeries,
 } from "../client/src/lib/uiCalculations";
 
 describe("UI-Validierung: Reports und Dashboard", () => {
@@ -99,6 +100,24 @@ describe("UI-Validierung: Reports und Dashboard", () => {
       { name: "Krankenvers.", value: 277, color: "#ec4899" },
       { name: "Steuer", value: 0, color: "#f59e0b" },
     ]);
+  });
+
+  it("Dashboard: Umsatzentwicklung zeigt Vormonate (inkl. Februar) korrekt an", () => {
+    const series = calculateMonthlyRevenueSeries({
+      referenceDate: new Date("2026-03-15T12:00:00Z"),
+      monthsBack: 6,
+      timeEntries: [
+        { id: 201, customerId: 1, calculatedAmount: 90_000, date: "2026-02-11" },
+        { id: 202, customerId: 1, calculatedAmount: 30_000, date: "2026-02-28T23:30:00.000Z" },
+        { id: 203, customerId: 1, calculatedAmount: 120_000, date: "2026-03-02" },
+      ],
+    });
+
+    const february = series.find((point) => point.yearMonth === "2026-02");
+    const march = series.find((point) => point.yearMonth === "2026-03");
+
+    expect(february?.umsatz).toBe(1200); // 120000 cents => 1200 EUR
+    expect(march?.umsatz).toBe(1200); // 120000 cents => 1200 EUR
   });
 
   it("Reports: faellt ohne Profil/Config sauber auf Legacy-Werte zurueck", () => {
