@@ -98,6 +98,20 @@ const EXPENSE_CATEGORY_COLORS = {
   other: "bg-slate-100 text-slate-800 border-slate-200",
 };
 
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDateKey(value: string | Date): string {
+  if (typeof value === "string") {
+    return value.split("T")[0] ?? value;
+  }
+  return formatLocalDate(value);
+}
+
 export default function TimeTracking() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -135,13 +149,13 @@ export default function TimeTracking() {
   const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
   
   const { data: timeEntries, isLoading } = trpc.timeEntries.list.useQuery({
-    startDate: startDate.toISOString().split('T')[0],
-    endDate: endDate.toISOString().split('T')[0],
+    startDate: formatLocalDate(startDate),
+    endDate: formatLocalDate(endDate),
   });
 
   const { data: expenses } = trpc.expenses.list.useQuery({
-    startDate: startDate.toISOString().split('T')[0],
-    endDate: endDate.toISOString().split('T')[0],
+    startDate: formatLocalDate(startDate),
+    endDate: formatLocalDate(endDate),
   });  const createExpenseMutation = trpc.expenses.create.useMutation({
     onSuccess: () => {
       utils.expenses.list.invalidate();
@@ -272,8 +286,8 @@ export default function TimeTracking() {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     
-    // Parse date string directly to avoid timezone conversion
-    const entryDate = typeof entry.date === 'string' ? entry.date.split('T')[0] : new Date(entry.date).toISOString().split('T')[0];
+    // Parse using local date parts to avoid UTC timezone shifts.
+    const entryDate = getDateKey(entry.date as string | Date);
     
     setFormData({
       customerId: entry.customerId,
@@ -356,28 +370,20 @@ export default function TimeTracking() {
 
   const getEntriesForDate = (date: Date) => {
     if (!timeEntries) return [];
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const dateStr = `${year}-${month}-${day}`;
+    const dateStr = formatLocalDate(date);
     
     return timeEntries.filter(entry => {
-      const entryDateStr = entry.date as any;
-      const entryDate = typeof entryDateStr === 'string' ? entryDateStr.split('T')[0] : new Date(entryDateStr).toISOString().split('T')[0];
+      const entryDate = getDateKey(entry.date as string | Date);
       return entryDate === dateStr;
     });
   };
 
   const getExpensesForDate = (date: Date) => {
     if (!expenses) return [];
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const dateStr = `${year}-${month}-${day}`;
+    const dateStr = formatLocalDate(date);
     
     return expenses.filter(expense => {
-      const expenseDateStr = expense.date as any;
-      const expenseDate = typeof expenseDateStr === 'string' ? expenseDateStr.split('T')[0] : new Date(expenseDateStr).toISOString().split('T')[0];
+      const expenseDate = getDateKey(expense.date as string | Date);
       return expenseDate === dateStr;
     });
   };
