@@ -33,11 +33,11 @@ type ExpenseItem = {
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   car: "Mietwagen",
-  train: "Zug",
+  train: "ÖPNV",
   flight: "Flug",
   taxi: "Taxi",
   hotel: "Hotel",
-  fuel: "Tanken",
+  fuel: "Kraftstoff",
   meal: "Bewirtung",
   other: "Sonstiges",
 };

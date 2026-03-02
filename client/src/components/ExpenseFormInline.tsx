@@ -7,17 +7,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2 } from "lucide-react";
 
-type ExpenseCategory = "car" | "train" | "flight" | "transport" | "hotel" | "food" | "meal_allowance" | "fuel" | "other";
+type ExpenseCategory = "car" | "train" | "flight" | "taxi" | "transport" | "hotel" | "food" | "meal_allowance" | "fuel" | "other";
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   car: "Mietwagen",
-  train: "Zug",
+  train: "ÖPNV",
   flight: "Flug",
+  taxi: "Taxi",
   transport: "Sonstiger Transport",
   hotel: "Hotel",
   food: "Gastronomie",
   meal_allowance: "Verpflegungspauschale",
-  fuel: "Treibstoff",
+  fuel: "Kraftstoff",
   other: "Sonstiges",
 };
 

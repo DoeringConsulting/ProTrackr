@@ -74,7 +74,7 @@ const WORK_TYPE_COLORS = {
 
 const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   car: "Auto",
-  train: "Zug",
+  train: "ÖPNV",
   flight: "Flug",
   taxi: "Taxi",
   transport: "Transport",
@@ -978,13 +978,14 @@ export default function TimeTracking() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="car">Mietwagen</SelectItem>
-                        <SelectItem value="train">Zug</SelectItem>
+                        <SelectItem value="train">ÖPNV</SelectItem>
                         <SelectItem value="flight">Flug</SelectItem>
+                        <SelectItem value="taxi">Taxi</SelectItem>
                         <SelectItem value="transport">Sonstiger Transport</SelectItem>
                         <SelectItem value="hotel">Hotel</SelectItem>
                         <SelectItem value="food">Gastronomie</SelectItem>
                         <SelectItem value="meal">Verpflegungspauschale</SelectItem>
-                        <SelectItem value="fuel">Treibstoff</SelectItem>
+                        <SelectItem value="fuel">Kraftstoff</SelectItem>
                         <SelectItem value="other">Sonstiges</SelectItem>
                       </SelectContent>
                     </Select>

@@ -14,11 +14,11 @@ type FilterPeriod = "month" | "year" | "lifetime" | "average";
 
 const CATEGORY_LABELS: Record<string, string> = {
   car: "Mietwagen",
-  train: "Zug",
+  train: "ÖPNV",
   flight: "Flug",
   taxi: "Taxi",
   hotel: "Hotel",
-  fuel: "Tanken",
+  fuel: "Kraftstoff",
   meal: "Bewirtung",
   other: "Sonstiges",
 };
