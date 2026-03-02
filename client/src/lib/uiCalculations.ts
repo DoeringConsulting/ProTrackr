@@ -20,6 +20,7 @@ type TimeEntryLike = {
 type ExpenseLike = {
   amount: number;
   timeEntryId?: number | null;
+  date?: string | Date;
 };
 
 type FixedCostLike = {
@@ -42,6 +43,28 @@ export function getDateKey(value: string | Date): string {
 
 function getYearMonthKey(value: string | Date): string {
   return getDateKey(value).slice(0, 7);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getPeriodMonthCount(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 1;
+
+  const rawMonths =
+    (end.getFullYear() - start.getFullYear()) * 12 +
+    (end.getMonth() - start.getMonth()) +
+    1;
+
+  return clamp(rawMonths, 1, 12);
+}
+
+function isWithinDateRange(value: string | Date, startDate: string, endDate: string) {
+  const key = getDateKey(value);
+  return key >= startDate && key <= endDate;
 }
 
 export type AccountingUiData = {
@@ -170,19 +193,24 @@ export function calculateDashboardCostBreakdown(input: {
   taxProfile?: TaxProfilePl | null;
   taxConfig?: TaxConfigPl | null;
   legacySettings?: LegacyTaxSettings | null;
-  referenceDate?: Date;
-}): { items: DashboardCostItem[]; thisMonthRevenue: number } {
-  const totalFixed = input.fixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
-  const variableCosts = input.expenses.reduce((sum, expense) => sum + expense.amount, 0);
+}): { items: DashboardCostItem[]; periodRevenue: number } {
+  const periodMonthCount = getPeriodMonthCount(input.startDate, input.endDate);
+  const monthlyFixed = input.fixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
+  const totalFixed = monthlyFixed * periodMonthCount;
 
-  const refDate = input.referenceDate ?? new Date();
-  const referenceYearMonth = getYearMonthKey(refDate);
-  const thisMonthRevenue = input.timeEntries
-    .filter((entry) => getYearMonthKey(entry.date) === referenceYearMonth)
-    .reduce((sum, entry) => sum + entry.calculatedAmount, 0);
+  const periodEntries = input.timeEntries.filter((entry) =>
+    isWithinDateRange(entry.date, input.startDate, input.endDate)
+  );
+  const periodRevenue = periodEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
+
+  const periodExpenses = input.expenses.filter((expense) => {
+    if (!expense.date) return true;
+    return isWithinDateRange(expense.date, input.startDate, input.endDate);
+  });
+  const variableCosts = periodExpenses.reduce((sum, expense) => sum + expense.amount, 0);
 
   const taxResult = calculatePolishTaxResult({
-    revenueCents: thisMonthRevenue,
+    revenueCents: periodRevenue,
     fixedCostsCents: totalFixed,
     variableCostsCents: variableCosts,
     startDate: input.startDate,
@@ -193,7 +221,7 @@ export function calculateDashboardCostBreakdown(input: {
   });
 
   return {
-    thisMonthRevenue,
+    periodRevenue,
     items: [
       { name: "Fixkosten", value: Math.round(totalFixed / 100), color: "#3b82f6" },
       { name: "Reisekosten", value: Math.round(variableCosts / 100), color: "#0ea5e9" },

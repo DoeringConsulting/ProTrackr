@@ -88,11 +88,10 @@ describe("UI-Validierung: Reports und Dashboard", () => {
       taxProfile,
       taxConfig,
       legacySettings: null,
-      referenceDate: new Date("2026-01-15T00:00:00Z"),
     });
 
     // January only
-    expect(breakdown.thisMonthRevenue).toBe(150_000);
+    expect(breakdown.periodRevenue).toBe(150_000);
     expect(breakdown.items).toEqual([
       { name: "Fixkosten", value: 400, color: "#3b82f6" },
       { name: "Reisekosten", value: 300, color: "#0ea5e9" },

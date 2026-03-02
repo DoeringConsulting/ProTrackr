@@ -1,4 +1,6 @@
+import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
 import { Calendar, Euro, FileText, Users, TrendingUp, PieChart as PieChartIcon } from "lucide-react";
@@ -11,21 +13,24 @@ import {
 } from "@/lib/uiCalculations";
 
 export default function Dashboard() {
-  // Date ranges: charts use last 6 months, cost breakdown/stats use current month
+  const [selectedMonths, setSelectedMonths] = useState<3 | 6 | 12>(6);
+
+  // One shared date range for all chart sections.
   const now = new Date();
   const currentMonthStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
   const currentMonthEnd = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-  const trendStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 5, 1));
-  const trendEnd = currentMonthEnd;
+  const rangeStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - (selectedMonths - 1), 1));
+  const rangeEnd = currentMonthEnd;
+  const selectedPeriodLabel = `${selectedMonths} Monate`;
 
   const { data: customers, isLoading: customersLoading } = trpc.customers.list.useQuery();
   const { data: timeEntries = [], isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({
-    startDate: trendStart,
-    endDate: trendEnd,
+    startDate: rangeStart,
+    endDate: rangeEnd,
   });
   const { data: expenses = [] } = trpc.expenses.list.useQuery({
-    startDate: currentMonthStart,
-    endDate: currentMonthEnd,
+    startDate: rangeStart,
+    endDate: rangeEnd,
   });
   const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
   const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
@@ -44,8 +49,8 @@ export default function Dashboard() {
       timeEntries,
       expenses,
       fixedCosts: fixedCosts ?? [],
-      startDate: currentMonthStart,
-      endDate: currentMonthEnd,
+      startDate: rangeStart,
+      endDate: rangeEnd,
       taxProfile: taxProfile
         ? {
             taxForm: taxProfile.taxForm,
@@ -70,7 +75,6 @@ export default function Dashboard() {
           }
         : null,
       legacySettings: taxSettings,
-      referenceDate: now,
     });
 
     return breakdown.items;
@@ -99,7 +103,7 @@ export default function Dashboard() {
   const monthlyData = calculateMonthlyRevenueSeries({
     timeEntries,
     referenceDate: now,
-    monthsBack: 6,
+    monthsBack: selectedMonths,
   });
   const costData = getCostBreakdown();
   const projectData = getProjectComparison();
@@ -123,7 +127,7 @@ export default function Dashboard() {
       title: "Reisekosten",
       value: `€${Math.round((expenses.reduce((sum, exp) => sum + exp.amount, 0) ?? 0) / 100).toLocaleString('de-DE')}`,
       icon: Euro,
-      description: "Diesen Monat",
+      description: `Im Zeitraum (${selectedPeriodLabel})`,
       color: "text-purple-600",
     },
     {
@@ -224,6 +228,20 @@ export default function Dashboard() {
         </div>
 
         {/* Charts Section */}
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-sm text-muted-foreground">Zeitraum:</span>
+          {([3, 6, 12] as const).map((months) => (
+            <Button
+              key={months}
+              variant={selectedMonths === months ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedMonths(months)}
+            >
+              {months}M
+            </Button>
+          ))}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
@@ -231,7 +249,7 @@ export default function Dashboard() {
                 <TrendingUp className="h-5 w-5 text-emerald-600" />
                 <CardTitle>Umsatzentwicklung</CardTitle>
               </div>
-              <CardDescription>Monatlicher Umsatz der letzten 6 Monate</CardDescription>
+              <CardDescription>Monatlicher Umsatz ({selectedPeriodLabel})</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -253,7 +271,7 @@ export default function Dashboard() {
                 <PieChartIcon className="h-5 w-5 text-indigo-600" />
                 <CardTitle>Kostenverteilung</CardTitle>
               </div>
-              <CardDescription>Aktuelle Kostenaufschlüsselung</CardDescription>
+              <CardDescription>Kostenaufschlüsselung ({selectedPeriodLabel})</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -282,7 +300,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Projekt-Vergleich</CardTitle>
-            <CardDescription>Top 5 Projekte nach Umsatz (letzte 6 Monate)</CardDescription>
+            <CardDescription>Top 5 Projekte nach Umsatz ({selectedPeriodLabel})</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
