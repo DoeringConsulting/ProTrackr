@@ -1,4 +1,4 @@
-CREATE TABLE `taxProfiles` (
+CREATE TABLE IF NOT EXISTS `taxProfiles` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
 	`taxForm` enum('liniowy_19') NOT NULL DEFAULT 'liniowy_19',
@@ -14,7 +14,7 @@ CREATE TABLE `taxProfiles` (
 	CONSTRAINT `taxProfiles_userId_unique` UNIQUE(`userId`)
 );
 --> statement-breakpoint
-CREATE TABLE `taxConfigPl` (
+CREATE TABLE IF NOT EXISTS `taxConfigPl` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`year` int NOT NULL,
 	`socialMinBaseCents` int NOT NULL,
