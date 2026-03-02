@@ -4,9 +4,9 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 
 ## Letzte Aktualisierung
 
-- UTC: 2026-03-02 21:21:43Z
+- UTC: 2026-03-02 21:23:42Z
 - Branch: `ProTrackr_developing_path`
-- Commit: `ae53fa81f5d5a7f9f9c1a65ab7f33653eb36d1fe` (`ae53fa8`)
+- Commit: `b263612af1da877c9f656a0008116a6a71963452` (`b263612`)
 - Remote: `origin/ProTrackr_developing_path`
 
 ## Zuletzt abgeschlossene Arbeit
@@ -38,6 +38,9 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 5. Build/Typecheck:
    - `pnpm check` erfolgreich
    - `pnpm build` erfolgreich
+6. Legacy-Route vereinheitlicht:
+   - `client/src/pages/TaxSettings.tsx` rendert jetzt den neuen `TaxesTab`
+   - Kein divergenter Alt-Dialog mehr auf `/tax-settings`
 
 ## Nutzer-Praeferenzen (SEHR WICHTIG)
 
