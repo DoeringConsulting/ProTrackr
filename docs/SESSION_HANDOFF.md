@@ -4,31 +4,40 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 
 ## Letzte Aktualisierung
 
-- UTC: 2026-03-02 19:13:14Z
+- UTC: 2026-03-02 21:21:43Z
 - Branch: `ProTrackr_developing_path`
-- Commit: `e134be8b2a7ed1cdbf542462fa53410e8b4fd0d3` (`e134be8`)
+- Commit: `ae53fa81f5d5a7f9f9c1a65ab7f33653eb36d1fe` (`ae53fa8`)
 - Remote: `origin/ProTrackr_developing_path`
 
 ## Zuletzt abgeschlossene Arbeit
 
-1. Auth-/Session-Stabilisierung fuer lokalen Production-Betrieb:
-   - `SESSION_COOKIE_SECURE` und `SESSION_COOKIE_SAMESITE` per `.env` steuerbar.
-2. UI-Crash behoben:
-   - Hook-Order-Fehler in `DashboardLayout.tsx` beseitigt.
-3. Monatswechsel-Bug in Zeiterfassung behoben:
-   - lokale Datumskeys statt `toISOString()` in `TimeTracking.tsx`.
-4. Service-Worker/Login-Konflikt behoben:
-   - auf localhost wird SW deaktiviert/aufgeraeumt.
-   - SW interceptet keine `/api/*` und keine Nicht-GET-Requests.
-5. Dokumentation erweitert:
-   - `docs/ANLEITUNG_WINDOWS_BEFEHLE_PROTRACKR.md` (komplette Windows-Befehlsreferenz).
-6. Zeiterfassung erweitert:
-   - Notizen werden beim Bearbeiten korrekt aus `description` geladen.
-   - Neue Felder fuer Onsite-Reisespesen bei Reisekosten:
-     - `Reise-start`
-     - `Reise-Ende`
-     - `Ganzer Tag`
-   - Felder sind fuer Onsite-Tage verpflichtend (oder `Ganzer Tag` aktivieren).
+1. Neue Datenstruktur fuer Steuern (Variante B) umgesetzt:
+   - Neue Tabellen in `drizzle/schema.ts`:
+     - `taxProfiles` (Regime + schaltbare Regeln pro User)
+     - `taxConfigPl` (Jahreswerte/Limits)
+   - Migration angelegt:
+     - `drizzle/0005_tax_profile_and_year_config.sql`
+     - Journal erweitert (`drizzle/meta/_journal.json`)
+2. Backend/API erweitert:
+   - Neue DB-Funktionen in `server/db.ts`:
+     - `getTaxProfile`, `upsertTaxProfile`
+     - `getTaxConfigByYear`, `upsertTaxConfigByYear`
+   - Neue tRPC-Endpunkte in `server/routers.ts`:
+     - `taxSettings.getProfile`
+     - `taxSettings.upsertProfile`
+     - `taxSettings.getConfig`
+     - `taxSettings.upsertConfig`
+3. Berechnungsengine umgestellt:
+   - Neue zentrale Engine: `client/src/lib/taxEnginePl.ts`
+   - Nutzt Regime + Jahreswerte (mit Legacy-Fallback)
+   - Dashboard und Reports verwenden jetzt dieselbe Engine.
+4. Settings-UI (Steuern) auf neue Struktur umgebaut:
+   - `client/src/pages/settings/TaxesTab.tsx`
+   - Felder fuer Regime, Chorobowe, FP/FS, Wypadkowa
+   - Jahreswerte je Jahr (`tax_config_pl[year]`) inkl. Limits/Basen
+5. Build/Typecheck:
+   - `pnpm check` erfolgreich
+   - `pnpm build` erfolgreich
 
 ## Nutzer-Praeferenzen (SEHR WICHTIG)
 
@@ -76,3 +85,8 @@ Bei jedem abgeschlossenen Entwicklungsblock diese Datei aktualisieren:
 - Commit-Hash
 - was abgeschlossen wurde
 - was als naechstes kommt
+
+## Naechster sinnvoller Schritt
+
+- Reale 2026/2027 Werte fuer `taxConfigPl` fachlich final eintragen (gegen Gesetzesstand pruefen).
+- Optional: dedizierte Tests fuer `taxEnginePl` ergaenzen (Regime-Szenarien + Grenzfaelle).
