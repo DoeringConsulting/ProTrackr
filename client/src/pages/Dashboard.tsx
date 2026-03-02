@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { trpc } from "@/lib/trpc";
 import { Calendar, Euro, FileText, Users, TrendingUp, PieChart as PieChartIcon } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { calculatePolishTaxResult } from "@/lib/taxEnginePl";
 
 export default function Dashboard() {
   // Get current month date range
@@ -14,6 +15,8 @@ export default function Dashboard() {
   const { data: timeEntries, isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({ startDate, endDate });
   const { data: expenses } = trpc.expenses.list.useQuery({ startDate, endDate });
   const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
+  const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
+  const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: now.getFullYear() });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
   // Calculate monthly revenue data for the last 6 months
@@ -45,31 +48,52 @@ export default function Dashboard() {
   // Calculate cost breakdown
   const getCostBreakdown = () => {
     const totalFixed = fixedCosts?.reduce((sum, cost) => sum + cost.amount, 0) || 0;
+    const variableCosts = expenses?.reduce((sum, expense) => sum + expense.amount, 0) || 0;
     const thisMonthRevenue = timeEntries?.filter(entry => {
       const entryDate = new Date(entry.date);
       const now = new Date();
       return entryDate.getMonth() === now.getMonth() && 
              entryDate.getFullYear() === now.getFullYear();
     }).reduce((sum, entry) => sum + entry.calculatedAmount, 0) || 0;
-    
-    // Use configured tax settings or defaults
-    const zusRate = taxSettings?.zusType === "percentage" ? taxSettings.zusValue / 10000 : 0.1952;
-    const zusFixed = taxSettings?.zusType === "fixed" ? taxSettings.zusValue : 0;
-    const healthRate = taxSettings?.healthInsuranceType === "percentage" ? taxSettings.healthInsuranceValue / 10000 : 0.09;
-    const healthFixed = taxSettings?.healthInsuranceType === "fixed" ? taxSettings.healthInsuranceValue : 0;
-    const taxRate = taxSettings?.taxType === "percentage" ? taxSettings.taxValue / 10000 : 0.19;
-    const taxFixed = taxSettings?.taxType === "fixed" ? taxSettings.taxValue : 0;
-    
-    const zus = taxSettings?.zusType === "fixed" ? zusFixed : Math.round(thisMonthRevenue * zusRate);
-    const healthInsurance = taxSettings?.healthInsuranceType === "fixed" ? healthFixed : Math.round(thisMonthRevenue * healthRate);
-    const taxBase = Math.max(0, thisMonthRevenue - totalFixed - zus);
-    const tax = taxSettings?.taxType === "fixed" ? taxFixed : Math.round(taxBase * taxRate);
+
+    const taxResult = calculatePolishTaxResult({
+      revenueCents: thisMonthRevenue,
+      fixedCostsCents: totalFixed,
+      variableCostsCents: variableCosts,
+      startDate,
+      endDate,
+      profile: taxProfile
+        ? {
+            taxForm: taxProfile.taxForm,
+            zusRegime: taxProfile.zusRegime,
+            choroboweEnabled: taxProfile.choroboweEnabled,
+            fpFsEnabled: taxProfile.fpFsEnabled,
+            wypadkowaRateBp: taxProfile.wypadkowaRateBp,
+            zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
+            pitRateBp: taxProfile.pitRateBp,
+          }
+        : null,
+      config: taxConfig
+        ? {
+            year: taxConfig.year,
+            socialMinBaseCents: taxConfig.socialMinBaseCents,
+            zdrowotnaMinBaseCents: taxConfig.zdrowotnaMinBaseCents,
+            zdrowotnaMinAmountCents: taxConfig.zdrowotnaMinAmountCents,
+            zdrowotnaDeductionLimitYearlyCents: taxConfig.zdrowotnaDeductionLimitYearlyCents,
+            socialContributionRateBp: taxConfig.socialContributionRateBp,
+            choroboweRateBp: taxConfig.choroboweRateBp,
+            fpFsRateBp: taxConfig.fpFsRateBp,
+          }
+        : null,
+      legacySettings: taxSettings,
+    });
     
     return [
       { name: 'Fixkosten', value: Math.round(totalFixed / 100), color: '#3b82f6' },
-      { name: 'ZUS', value: Math.round(zus / 100), color: '#8b5cf6' },
-      { name: 'Krankenvers.', value: Math.round(healthInsurance / 100), color: '#ec4899' },
-      { name: 'Steuer', value: Math.round(tax / 100), color: '#f59e0b' },
+      { name: 'Reisekosten', value: Math.round(variableCosts / 100), color: '#0ea5e9' },
+      { name: 'ZUS', value: Math.round(taxResult.zus / 100), color: '#8b5cf6' },
+      { name: 'Krankenvers.', value: Math.round(taxResult.healthInsurance / 100), color: '#ec4899' },
+      { name: 'Steuer', value: Math.round(taxResult.tax / 100), color: '#f59e0b' },
     ];
   };
 

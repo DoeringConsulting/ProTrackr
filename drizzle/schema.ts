@@ -224,6 +224,51 @@ export type TaxSetting = typeof taxSettings.$inferSelect;
 export type InsertTaxSetting = typeof taxSettings.$inferInsert;
 
 /**
+ * Tax profile table (PL JDG) - user specific regime and rates
+ */
+export const taxProfiles = mysqlTable("taxProfiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  taxForm: mysqlEnum("taxForm", ["liniowy_19"]).notNull().default("liniowy_19"),
+  zusRegime: mysqlEnum("zusRegime", [
+    "ulga_na_start",
+    "preferencyjny_zus",
+    "maly_zus_plus",
+    "pelny_zus",
+  ]).notNull().default("pelny_zus"),
+  choroboweEnabled: int("choroboweEnabled").notNull().default(0), // 0 = false, 1 = true
+  fpFsEnabled: int("fpFsEnabled").notNull().default(1), // 0 = false, 1 = true
+  wypadkowaRateBp: int("wypadkowaRateBp").notNull().default(167), // basis points (1.67%)
+  zdrowotnaRateLiniowyBp: int("zdrowotnaRateLiniowyBp").notNull().default(490), // 4.9%
+  pitRateBp: int("pitRateBp").notNull().default(1900), // 19%
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TaxProfile = typeof taxProfiles.$inferSelect;
+export type InsertTaxProfile = typeof taxProfiles.$inferInsert;
+
+/**
+ * Tax config per year (PL legal bases/limits)
+ */
+export const taxConfigPl = mysqlTable("taxConfigPl", {
+  id: int("id").autoincrement().primaryKey(),
+  year: int("year").notNull().unique(),
+  socialMinBaseCents: int("socialMinBaseCents").notNull(), // e.g. 5652.00 PLN => 565200
+  zdrowotnaMinBaseCents: int("zdrowotnaMinBaseCents").notNull(),
+  zdrowotnaMinAmountCents: int("zdrowotnaMinAmountCents").notNull(),
+  zdrowotnaDeductionLimitYearlyCents: int("zdrowotnaDeductionLimitYearlyCents").notNull(),
+  socialContributionRateBp: int("socialContributionRateBp").notNull().default(1952), // 19.52%
+  choroboweRateBp: int("choroboweRateBp").notNull().default(245), // 2.45%
+  fpFsRateBp: int("fpFsRateBp").notNull().default(245), // 2.45%
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TaxConfigPl = typeof taxConfigPl.$inferSelect;
+export type InsertTaxConfigPl = typeof taxConfigPl.$inferInsert;
+
+/**
  * Account settings table - company logo and user preferences
  * Note: Multi-user functionality is planned but not yet implemented
  */

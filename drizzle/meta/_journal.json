@@ -36,6 +36,13 @@
       "when": 1771081860473,
       "tag": "0004_swift_silverclaw",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1772486397719,
+      "tag": "0005_tax_profile_and_year_config",
+      "breakpoints": true
     }
   ]
 }

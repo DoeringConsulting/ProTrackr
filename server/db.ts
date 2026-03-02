@@ -211,6 +211,62 @@ export async function upsertTaxSettings(data: any) {
   return await getTaxSettings();
 }
 
+export async function getTaxProfile(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { taxProfiles } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(taxProfiles)
+    .where(eq(taxProfiles.userId, userId))
+    .limit(1);
+  return result[0] || null;
+}
+
+export async function upsertTaxProfile(userId: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { taxProfiles } = await import("../drizzle/schema");
+
+  const existing = await getTaxProfile(userId);
+
+  if (existing) {
+    await db.update(taxProfiles).set(data).where(eq(taxProfiles.userId, userId));
+  } else {
+    await db.insert(taxProfiles).values({ ...data, userId });
+  }
+
+  return await getTaxProfile(userId);
+}
+
+export async function getTaxConfigByYear(year: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { taxConfigPl } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(taxConfigPl)
+    .where(eq(taxConfigPl.year, year))
+    .limit(1);
+  return result[0] || null;
+}
+
+export async function upsertTaxConfigByYear(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { taxConfigPl } = await import("../drizzle/schema");
+
+  const existing = await getTaxConfigByYear(data.year);
+
+  if (existing) {
+    await db.update(taxConfigPl).set(data).where(eq(taxConfigPl.year, data.year));
+  } else {
+    await db.insert(taxConfigPl).values(data);
+  }
+
+  return await getTaxConfigByYear(data.year);
+}
+
 // Expense queries
 export async function getExpensesByTimeEntry(timeEntryId: number) {
   const db = await getDb();
@@ -498,7 +554,19 @@ export async function exportDatabase() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  const { customers, timeEntries, expenses, documents, exchangeRates, fixedCosts, taxSettings, accountSettings, invoiceNumbers } = await import("../drizzle/schema");
+  const {
+    customers,
+    timeEntries,
+    expenses,
+    documents,
+    exchangeRates,
+    fixedCosts,
+    taxSettings,
+    taxProfiles,
+    taxConfigPl,
+    accountSettings,
+    invoiceNumbers,
+  } = await import("../drizzle/schema");
   
   // Export all tables
   const backup = {
@@ -512,6 +580,8 @@ export async function exportDatabase() {
       exchangeRates: await db.select().from(exchangeRates),
       fixedCosts: await db.select().from(fixedCosts),
       taxSettings: await db.select().from(taxSettings),
+      taxProfiles: await db.select().from(taxProfiles),
+      taxConfigPl: await db.select().from(taxConfigPl),
       accountSettings: await db.select().from(accountSettings),
       invoiceNumbers: await db.select().from(invoiceNumbers),
     },
@@ -588,7 +658,19 @@ export async function importDatabase(backup: any) {
     throw new Error("Invalid backup format");
   }
   
-  const { customers, timeEntries, expenses, documents, exchangeRates, fixedCosts, taxSettings, accountSettings, invoiceNumbers } = await import("../drizzle/schema");
+  const {
+    customers,
+    timeEntries,
+    expenses,
+    documents,
+    exchangeRates,
+    fixedCosts,
+    taxSettings,
+    taxProfiles,
+    taxConfigPl,
+    accountSettings,
+    invoiceNumbers,
+  } = await import("../drizzle/schema");
   
   // Import data (this will overwrite existing data)
   // In production, you might want to add more sophisticated merge logic
@@ -626,6 +708,18 @@ export async function importDatabase(backup: any) {
   if (backup.data.taxSettings && backup.data.taxSettings.length > 0) {
     for (const setting of backup.data.taxSettings) {
       await db.insert(taxSettings).values(setting).onDuplicateKeyUpdate({ set: setting });
+    }
+  }
+
+  if (backup.data.taxProfiles && backup.data.taxProfiles.length > 0) {
+    for (const profile of backup.data.taxProfiles) {
+      await db.insert(taxProfiles).values(profile).onDuplicateKeyUpdate({ set: profile });
+    }
+  }
+
+  if (backup.data.taxConfigPl && backup.data.taxConfigPl.length > 0) {
+    for (const config of backup.data.taxConfigPl) {
+      await db.insert(taxConfigPl).values(config).onDuplicateKeyUpdate({ set: config });
     }
   }
   

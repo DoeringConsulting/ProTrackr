@@ -12,6 +12,7 @@ import { trpc } from "@/lib/trpc";
 import { FileText, Download, Calculator } from "lucide-react";
 import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
 import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
+import { calculatePolishTaxResult } from "@/lib/taxEnginePl";
 
 export default function Reports() {
   const [startDate, setStartDate] = useState(() => {
@@ -28,6 +29,9 @@ export default function Reports() {
   const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({ startDate, endDate });
   const { data: expenses = [] } = trpc.expenses.list.useQuery({ startDate, endDate });
   const { data: fixedCosts = [] } = trpc.fixedCosts.list.useQuery();
+  const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
+  const reportYear = new Date(`${startDate}T00:00:00`).getFullYear();
+  const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: reportYear });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
   // Calculate accounting report data
@@ -61,28 +65,37 @@ export default function Reports() {
     // Variable costs (travel expenses)
     const variableCosts = totalExpenses;
 
-    // Use configured tax settings or defaults
-    const zusRate = taxSettings?.zusType === "percentage" ? taxSettings.zusValue / 10000 : 0.1952;
-    const zusFixed = taxSettings?.zusType === "fixed" ? taxSettings.zusValue : 0;
-    const healthRate = taxSettings?.healthInsuranceType === "percentage" ? taxSettings.healthInsuranceValue / 10000 : 0.09;
-    const healthFixed = taxSettings?.healthInsuranceType === "fixed" ? taxSettings.healthInsuranceValue : 0;
-    const taxRate = taxSettings?.taxType === "percentage" ? taxSettings.taxValue / 10000 : 0.19;
-    const taxFixed = taxSettings?.taxType === "fixed" ? taxSettings.taxValue : 0;
-    
-    // ZUS (Social security)
-    const zus = taxSettings?.zusType === "fixed" ? zusFixed : Math.round(grossRevenue * zusRate);
-
-    // Health insurance
-    const healthInsurance = taxSettings?.healthInsuranceType === "fixed" ? healthFixed : Math.round(grossRevenue * healthRate);
-
-    // Tax base
-    const taxBase = grossRevenue - totalFixedCosts - variableCosts - zus;
-
-    // Tax
-    const tax = taxSettings?.taxType === "fixed" ? taxFixed : Math.round(Math.max(0, taxBase) * taxRate);
-
-    // Net profit
-    const netProfit = grossRevenue - totalFixedCosts - variableCosts - zus - healthInsurance - tax;
+    const taxResult = calculatePolishTaxResult({
+      revenueCents: grossRevenue,
+      fixedCostsCents: totalFixedCosts,
+      variableCostsCents: variableCosts,
+      startDate,
+      endDate,
+      profile: taxProfile
+        ? {
+            taxForm: taxProfile.taxForm,
+            zusRegime: taxProfile.zusRegime,
+            choroboweEnabled: taxProfile.choroboweEnabled,
+            fpFsEnabled: taxProfile.fpFsEnabled,
+            wypadkowaRateBp: taxProfile.wypadkowaRateBp,
+            zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
+            pitRateBp: taxProfile.pitRateBp,
+          }
+        : null,
+      config: taxConfig
+        ? {
+            year: taxConfig.year,
+            socialMinBaseCents: taxConfig.socialMinBaseCents,
+            zdrowotnaMinBaseCents: taxConfig.zdrowotnaMinBaseCents,
+            zdrowotnaMinAmountCents: taxConfig.zdrowotnaMinAmountCents,
+            zdrowotnaDeductionLimitYearlyCents: taxConfig.zdrowotnaDeductionLimitYearlyCents,
+            socialContributionRateBp: taxConfig.socialContributionRateBp,
+            choroboweRateBp: taxConfig.choroboweRateBp,
+            fpFsRateBp: taxConfig.fpFsRateBp,
+          }
+        : null,
+      legacySettings: taxSettings,
+    });
 
     return {
       timeRevenue,
@@ -90,11 +103,13 @@ export default function Reports() {
       grossRevenue,
       totalFixedCosts,
       variableCosts,
-      zus,
-      healthInsurance,
-      taxBase,
-      tax,
-      netProfit,
+      zus: taxResult.zus,
+      healthInsurance: taxResult.healthInsurance,
+      taxBase: taxResult.taxBase,
+      tax: taxResult.tax,
+      netProfit: taxResult.netProfit,
+      deductibleHealth: taxResult.deductibleHealth,
+      calculationSource: taxResult.source,
     };
   };
 
@@ -285,15 +300,23 @@ export default function Reports() {
                       </TableCell>
                     </TableRow>
                     <TableRow className="border-t-2">
-                      <TableCell className="font-semibold">ZUS (Sozialversicherung 19,52%)</TableCell>
+                      <TableCell className="font-semibold">ZUS (Sozialversicherung)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
                         -{formatCurrency(accountingData.zus)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="font-semibold">Krankenversicherung (9%)</TableCell>
+                      <TableCell className="font-semibold">Krankenversicherung (Zdrowotna)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
                         -{formatCurrency(accountingData.healthInsurance)}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="pl-8 text-muted-foreground">
+                        Abzugsfähige Zdrowotna (Steuerbasis)
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatCurrency(accountingData.deductibleHealth)}
                       </TableCell>
                     </TableRow>
                     <TableRow className="border-t-2">
@@ -303,9 +326,17 @@ export default function Reports() {
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="font-semibold">Steuer (19%)</TableCell>
+                      <TableCell className="font-semibold">Einkommensteuer (PIT)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
                         -{formatCurrency(accountingData.tax)}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-muted-foreground">Berechnungsmodus</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {accountingData.calculationSource === "regime_config"
+                          ? `Regime + Jahreswerte (${reportYear})`
+                          : "Legacy-Fallback"}
                       </TableCell>
                     </TableRow>
                     <TableRow className="border-t-4 bg-muted/50">

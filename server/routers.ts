@@ -605,6 +605,97 @@ export const appRouter = router({
       const { upsertTaxSettings } = await import("./db");
       return await upsertTaxSettings(input);
     }),
+    getProfile: protectedProcedure.query(async ({ ctx }) => {
+      const { getTaxProfile } = await import("./db");
+      const profile = await getTaxProfile(ctx.user.id);
+
+      if (!profile) {
+        return {
+          taxForm: "liniowy_19" as const,
+          zusRegime: "pelny_zus" as const,
+          choroboweEnabled: false,
+          fpFsEnabled: true,
+          wypadkowaRateBp: 167,
+          zdrowotnaRateLiniowyBp: 490,
+          pitRateBp: 1900,
+        };
+      }
+
+      return {
+        ...profile,
+        choroboweEnabled: profile.choroboweEnabled === 1,
+        fpFsEnabled: profile.fpFsEnabled === 1,
+      };
+    }),
+    upsertProfile: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        taxForm: z.enum(["liniowy_19"]).default("liniowy_19"),
+        zusRegime: z.enum(["ulga_na_start", "preferencyjny_zus", "maly_zus_plus", "pelny_zus"]),
+        choroboweEnabled: z.boolean(),
+        fpFsEnabled: z.boolean(),
+        wypadkowaRateBp: z.number().int().min(0).max(5000),
+        zdrowotnaRateLiniowyBp: z.number().int().min(0).max(5000),
+        pitRateBp: z.number().int().min(0).max(10000),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { upsertTaxProfile } = await import("./db");
+      const profile = await upsertTaxProfile(ctx.user.id, {
+        ...input,
+        choroboweEnabled: input.choroboweEnabled ? 1 : 0,
+        fpFsEnabled: input.fpFsEnabled ? 1 : 0,
+      });
+
+      if (!profile) return null;
+
+      return {
+        ...profile,
+        choroboweEnabled: profile.choroboweEnabled === 1,
+        fpFsEnabled: profile.fpFsEnabled === 1,
+      };
+    }),
+    getConfig: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        year: z.number().int().min(2000).max(2100).optional(),
+      }).parse(val ?? {});
+    }).query(async ({ input }) => {
+      const { getTaxConfigByYear } = await import("./db");
+      const year = input.year ?? new Date().getFullYear();
+      const config = await getTaxConfigByYear(year);
+
+      if (!config) {
+        return {
+          year,
+          socialMinBaseCents: 565200,
+          zdrowotnaMinBaseCents: 565200,
+          zdrowotnaMinAmountCents: 27695,
+          zdrowotnaDeductionLimitYearlyCents: 0,
+          socialContributionRateBp: 1952,
+          choroboweRateBp: 245,
+          fpFsRateBp: 245,
+          isDefault: true,
+        };
+      }
+
+      return {
+        ...config,
+        isDefault: false,
+      };
+    }),
+    upsertConfig: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        year: z.number().int().min(2000).max(2100),
+        socialMinBaseCents: z.number().int().min(0),
+        zdrowotnaMinBaseCents: z.number().int().min(0),
+        zdrowotnaMinAmountCents: z.number().int().min(0),
+        zdrowotnaDeductionLimitYearlyCents: z.number().int().min(0),
+        socialContributionRateBp: z.number().int().min(0).max(10000),
+        choroboweRateBp: z.number().int().min(0).max(5000),
+        fpFsRateBp: z.number().int().min(0).max(5000),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { upsertTaxConfigByYear } = await import("./db");
+      return await upsertTaxConfigByYear(input);
+    }),
   }),
 
   // Backup
