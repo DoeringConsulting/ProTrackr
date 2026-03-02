@@ -4,9 +4,9 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 
 ## Letzte Aktualisierung
 
-- UTC: 2026-03-02 22:28:05Z
+- UTC: 2026-03-02 22:34:05Z
 - Branch: `ProTrackr_developing_path`
-- Commit: `3bf2d00e4867f9bb2c3658692b9050fd5909817b` (`3bf2d00`)
+- Commit: `284a84dc276f72f9be6e11ed5ea7c14f18c65b0b` (`284a84d`)
 - Remote: `origin/ProTrackr_developing_path`
 
 ## Zuletzt abgeschlossene Arbeit
@@ -55,6 +55,11 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 9. Legacy-Route vereinheitlicht:
    - `client/src/pages/TaxSettings.tsx` rendert jetzt den neuen `TaxesTab`
    - Kein divergenter Alt-Dialog mehr auf `/tax-settings`
+10. Dashboard-Zeitraum erweitert und synchronisiert:
+   - Auswahlbuttons fuer `3M / 6M / 12M` direkt im Dashboard.
+   - Umsatzentwicklung, Kostenverteilung und Projekt-Vergleich ziehen immer denselben Zeitraum.
+   - Zeitraum-Labels in den Chart-Karten dynamisch angepasst.
+   - Test erweitert: Vormonat (u. a. Februar) wird in der Umsatzreihe verifiziert.
 
 ## Nutzer-Praeferenzen (SEHR WICHTIG)
 
