@@ -32,13 +32,28 @@ export default function Reports() {
 
   // Calculate accounting report data
   const calculateAccountingReport = () => {
-    // Gross revenue from time entries
+    // Revenue from time entries
     const timeRevenue = timeEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
 
     // Get all expenses for the period
     const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
-    const grossRevenue = timeRevenue + totalExpenses;
+    // Only travel costs from "exclusive" customers are billable as extra revenue.
+    // "inclusive" customers already include travel in the day/hour rate.
+    const entriesById = new Map(timeEntries.map((entry) => [entry.id, entry]));
+    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
+    const travelRevenueInGross = expenses.reduce((sum, expense) => {
+      if (!expense.timeEntryId) return sum;
+      const relatedEntry = entriesById.get(expense.timeEntryId);
+      if (!relatedEntry) return sum;
+      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      if (relatedCustomer?.costModel === "exclusive") {
+        return sum + expense.amount;
+      }
+      return sum;
+    }, 0);
+
+    const grossRevenue = timeRevenue + travelRevenueInGross;
 
     // Fixed costs
     const totalFixedCosts = fixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
@@ -70,6 +85,8 @@ export default function Reports() {
     const netProfit = grossRevenue - totalFixedCosts - variableCosts - zus - healthInsurance - tax;
 
     return {
+      timeRevenue,
+      travelRevenueInGross,
       grossRevenue,
       totalFixedCosts,
       variableCosts,
@@ -101,6 +118,7 @@ export default function Reports() {
       return timeEntry && timeEntry.customerId === selectedCustomerId;
     });
     const totalExpenses = customerExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const billableExpenses = customer.costModel === "exclusive" ? totalExpenses : 0;
 
     return {
       customer,
@@ -109,7 +127,8 @@ export default function Reports() {
       totalAmount,
       totalManDays,
       totalExpenses,
-      grandTotal: totalAmount + totalExpenses,
+      billableExpenses,
+      grandTotal: totalAmount + billableExpenses,
     };
   };
 
@@ -201,6 +220,8 @@ export default function Reports() {
                     <Button variant="outline" onClick={() => {
                       exportAccountingReportToExcel({
                         revenue: accountingData.grossRevenue,
+                        timeRevenue: accountingData.timeRevenue,
+                        travelRevenueInGross: accountingData.travelRevenueInGross,
                         fixedCosts: fixedCosts.map(fc => ({ category: fc.category, amount: fc.amount })),
                         variableCosts: accountingData.variableCosts,
                         zus: accountingData.zus,
@@ -232,13 +253,15 @@ export default function Reports() {
                         Zeiterfassung ({timeEntries.length} Einträge)
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatCurrency(timeEntries.reduce((sum, e) => sum + e.calculatedAmount, 0))}
+                        {formatCurrency(accountingData.timeRevenue)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="pl-8 text-muted-foreground">Reisekosten</TableCell>
+                      <TableCell className="pl-8 text-muted-foreground">
+                        Reisekosten (abrechenbar, nur Exclusive)
+                      </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatCurrency(accountingData.variableCosts)}
+                        {formatCurrency(accountingData.travelRevenueInGross)}
                       </TableCell>
                     </TableRow>
                     <TableRow className="border-t-2">
@@ -345,6 +368,7 @@ export default function Reports() {
                             exportCustomerReportToExcel({
                               customerName: customerData.customer.provider,
                               projectName: customerData.customer.projectName,
+                              costModel: customerData.customer.costModel,
                               consultant: "Berater",
                               startDate,
                               endDate,
@@ -358,6 +382,7 @@ export default function Reports() {
                               totalHours: customerData.totalHours,
                               totalAmount: customerData.totalAmount,
                               totalExpenses: customerData.totalExpenses,
+                              billableExpenses: customerData.billableExpenses,
                               grandTotal: customerData.grandTotal,
                             });
                             toast.success("Excel-Datei wird heruntergeladen");
@@ -408,9 +433,17 @@ export default function Reports() {
                           </TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell className="font-semibold">Reisekosten</TableCell>
+                          <TableCell className="font-semibold">Reisekosten (gesamt)</TableCell>
                           <TableCell className="text-right font-semibold">
                             {formatCurrency(customerData.totalExpenses)}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8 text-muted-foreground">
+                            Reisekosten (abrechenbar)
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatCurrency(customerData.billableExpenses)}
                           </TableCell>
                         </TableRow>
                         <TableRow className="border-t-4 bg-muted/50">

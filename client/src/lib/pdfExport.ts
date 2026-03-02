@@ -2,6 +2,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 interface AccountingData {
+  timeRevenue?: number;
+  travelRevenueInGross?: number;
   grossRevenue: number;
   totalFixedCosts: number;
   variableCosts: number;
@@ -29,6 +31,7 @@ interface CustomerData {
   totalAmount: number;
   totalManDays: number;
   totalExpenses: number;
+  billableExpenses?: number;
   grandTotal: number;
 }
 
@@ -49,14 +52,17 @@ export async function exportAccountingReportToPDF(
 
   // Accounting table
   const formatCurrency = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+  const timeRevenue = data.timeRevenue ?? (data.grossRevenue - data.variableCosts);
+  const travelRevenueInGross =
+    data.travelRevenueInGross ?? Math.max(0, data.grossRevenue - timeRevenue);
 
   autoTable(doc, {
     startY: 45,
     head: [["Position", "Betrag"]],
     body: [
       ["Bruttoumsatz", formatCurrency(data.grossRevenue)],
-      ["  Zeiterfassung", formatCurrency(data.grossRevenue - data.variableCosts)],
-      ["  Reisekosten", formatCurrency(data.variableCosts)],
+      ["  Zeiterfassung", formatCurrency(timeRevenue)],
+      ["  Reisekosten (abrechenbar, nur Exclusive)", formatCurrency(travelRevenueInGross)],
       ["", ""],
       ["Fixkosten", formatCurrency(data.totalFixedCosts)],
       ["Variable Kosten", formatCurrency(data.variableCosts)],
@@ -143,10 +149,12 @@ export async function exportCustomerReportToPDF(
     startY: 60,
     head: [["Zusammenfassung", ""]],
     body: [
+      ["Abrechnungsmodell", data.customer.costModel ?? "n/a"],
       ["Gesamtstunden", formatHours(data.totalHours)],
       ["Manntage", formatManDays(data.totalManDays)],
       ["Leistungswert", formatCurrency(data.totalAmount)],
-      ["Reisekosten", formatCurrency(data.totalExpenses)],
+      ["Reisekosten (gesamt)", formatCurrency(data.totalExpenses)],
+      ["Reisekosten (abrechenbar)", formatCurrency(data.billableExpenses ?? data.totalExpenses)],
       ["Gesamtsumme", formatCurrency(data.grandTotal)],
     ],
     theme: "striped",

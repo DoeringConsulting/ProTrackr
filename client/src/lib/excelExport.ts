@@ -2,6 +2,8 @@ import * as XLSX from "xlsx";
 
 interface AccountingReportData {
   revenue: number;
+  timeRevenue?: number;
+  travelRevenueInGross?: number;
   fixedCosts: { category: string; amount: number }[];
   variableCosts: number;
   zus: number;
@@ -15,6 +17,7 @@ interface AccountingReportData {
 interface CustomerReportData {
   customerName: string;
   projectName: string;
+  costModel?: string;
   consultant: string;
   startDate: string;
   endDate: string;
@@ -28,11 +31,15 @@ interface CustomerReportData {
   totalHours: number;
   totalAmount: number;
   totalExpenses: number;
+  billableExpenses?: number;
   grandTotal: number;
 }
 
 export async function exportAccountingReportToExcel(data: AccountingReportData) {
   const wb = XLSX.utils.book_new();
+  const timeRevenue = data.timeRevenue ?? (data.revenue - data.variableCosts);
+  const travelRevenueInGross =
+    data.travelRevenueInGross ?? Math.max(0, data.revenue - timeRevenue);
 
   // Create worksheet data
   const wsData = [
@@ -41,6 +48,8 @@ export async function exportAccountingReportToExcel(data: AccountingReportData) 
     [],
     ["Einnahmen"],
     ["Bruttoumsatz", data.revenue / 100],
+    ["Zeiterfassung", timeRevenue / 100],
+    ["Reisekosten (abrechenbar, nur Exclusive)", travelRevenueInGross / 100],
     [],
     ["Fixkosten"],
     ...data.fixedCosts.map((fc) => [fc.category, fc.amount / 100]),
@@ -89,6 +98,8 @@ export async function exportAccountingReportToExcel(data: AccountingReportData) 
 
 export async function exportCustomerReportToExcel(data: CustomerReportData) {
   const wb = XLSX.utils.book_new();
+  const isExclusive = data.costModel === "exclusive";
+  const billableExpenses = data.billableExpenses ?? (isExclusive ? data.totalExpenses : 0);
 
   // Summary sheet
   const summaryData = [
@@ -96,12 +107,14 @@ export async function exportCustomerReportToExcel(data: CustomerReportData) {
     [`Kunde: ${data.customerName}`],
     [`Projekt: ${data.projectName}`],
     [`Berater: ${data.consultant}`],
+    [`Abrechnungsmodell: ${data.costModel ?? "n/a"}`],
     [`Zeitraum: ${data.startDate} bis ${data.endDate}`],
     [],
     ["Zusammenfassung"],
     ["Gesamtstunden", data.totalHours],
     ["Leistungswert", data.totalAmount / 100],
-    ["Reisekosten", data.totalExpenses / 100],
+    ["Reisekosten (gesamt)", data.totalExpenses / 100],
+    ["Reisekosten (abrechenbar)", billableExpenses / 100],
     ["Gesamtsumme", data.grandTotal / 100],
   ];
 
@@ -118,7 +131,7 @@ export async function exportCustomerReportToExcel(data: CustomerReportData) {
       entry.rate / 100,
       entry.amount / 100,
       entry.expenses / 100,
-      (entry.amount + entry.expenses) / 100,
+      (entry.amount + (isExclusive ? entry.expenses : 0)) / 100,
     ]),
     [],
     ["Summe", data.totalHours, "", data.totalAmount / 100, data.totalExpenses / 100, data.grandTotal / 100],
