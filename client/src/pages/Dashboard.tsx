@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { trpc } from "@/lib/trpc";
 import { Calendar, Euro, FileText, Users, TrendingUp, PieChart as PieChartIcon } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { calculatePolishTaxResult } from "@/lib/taxEnginePl";
+import { calculateDashboardCostBreakdown } from "@/lib/uiCalculations";
 
 export default function Dashboard() {
   // Get current month date range
@@ -47,22 +47,13 @@ export default function Dashboard() {
 
   // Calculate cost breakdown
   const getCostBreakdown = () => {
-    const totalFixed = fixedCosts?.reduce((sum, cost) => sum + cost.amount, 0) || 0;
-    const variableCosts = expenses?.reduce((sum, expense) => sum + expense.amount, 0) || 0;
-    const thisMonthRevenue = timeEntries?.filter(entry => {
-      const entryDate = new Date(entry.date);
-      const now = new Date();
-      return entryDate.getMonth() === now.getMonth() && 
-             entryDate.getFullYear() === now.getFullYear();
-    }).reduce((sum, entry) => sum + entry.calculatedAmount, 0) || 0;
-
-    const taxResult = calculatePolishTaxResult({
-      revenueCents: thisMonthRevenue,
-      fixedCostsCents: totalFixed,
-      variableCostsCents: variableCosts,
+    const breakdown = calculateDashboardCostBreakdown({
+      timeEntries: timeEntries ?? [],
+      expenses: expenses ?? [],
+      fixedCosts: fixedCosts ?? [],
       startDate,
       endDate,
-      profile: taxProfile
+      taxProfile: taxProfile
         ? {
             taxForm: taxProfile.taxForm,
             zusRegime: taxProfile.zusRegime,
@@ -73,7 +64,7 @@ export default function Dashboard() {
             pitRateBp: taxProfile.pitRateBp,
           }
         : null,
-      config: taxConfig
+      taxConfig: taxConfig
         ? {
             year: taxConfig.year,
             socialMinBaseCents: taxConfig.socialMinBaseCents,
@@ -86,15 +77,10 @@ export default function Dashboard() {
           }
         : null,
       legacySettings: taxSettings,
+      referenceDate: now,
     });
-    
-    return [
-      { name: 'Fixkosten', value: Math.round(totalFixed / 100), color: '#3b82f6' },
-      { name: 'Reisekosten', value: Math.round(variableCosts / 100), color: '#0ea5e9' },
-      { name: 'ZUS', value: Math.round(taxResult.zus / 100), color: '#8b5cf6' },
-      { name: 'Krankenvers.', value: Math.round(taxResult.healthInsurance / 100), color: '#ec4899' },
-      { name: 'Steuer', value: Math.round(taxResult.tax / 100), color: '#f59e0b' },
-    ];
+
+    return breakdown.items;
   };
 
   // Calculate project comparison

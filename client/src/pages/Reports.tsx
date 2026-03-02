@@ -12,7 +12,7 @@ import { trpc } from "@/lib/trpc";
 import { FileText, Download, Calculator } from "lucide-react";
 import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
 import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
-import { calculatePolishTaxResult } from "@/lib/taxEnginePl";
+import { calculateAccountingUiData } from "@/lib/uiCalculations";
 
 export default function Reports() {
   const [startDate, setStartDate] = useState(() => {
@@ -35,43 +35,15 @@ export default function Reports() {
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
   // Calculate accounting report data
-  const calculateAccountingReport = () => {
-    // Revenue from time entries
-    const timeRevenue = timeEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
-
-    // Get all expenses for the period
-    const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-
-    // Only travel costs from "exclusive" customers are billable as extra revenue.
-    // "inclusive" customers already include travel in the day/hour rate.
-    const entriesById = new Map(timeEntries.map((entry) => [entry.id, entry]));
-    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
-    const travelRevenueInGross = expenses.reduce((sum, expense) => {
-      if (!expense.timeEntryId) return sum;
-      const relatedEntry = entriesById.get(expense.timeEntryId);
-      if (!relatedEntry) return sum;
-      const relatedCustomer = customersById.get(relatedEntry.customerId);
-      if (relatedCustomer?.costModel === "exclusive") {
-        return sum + expense.amount;
-      }
-      return sum;
-    }, 0);
-
-    const grossRevenue = timeRevenue + travelRevenueInGross;
-
-    // Fixed costs
-    const totalFixedCosts = fixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
-
-    // Variable costs (travel expenses)
-    const variableCosts = totalExpenses;
-
-    const taxResult = calculatePolishTaxResult({
-      revenueCents: grossRevenue,
-      fixedCostsCents: totalFixedCosts,
-      variableCostsCents: variableCosts,
+  const calculateAccountingReport = () =>
+    calculateAccountingUiData({
+      customers,
+      timeEntries,
+      expenses,
+      fixedCosts,
       startDate,
       endDate,
-      profile: taxProfile
+      taxProfile: taxProfile
         ? {
             taxForm: taxProfile.taxForm,
             zusRegime: taxProfile.zusRegime,
@@ -82,7 +54,7 @@ export default function Reports() {
             pitRateBp: taxProfile.pitRateBp,
           }
         : null,
-      config: taxConfig
+      taxConfig: taxConfig
         ? {
             year: taxConfig.year,
             socialMinBaseCents: taxConfig.socialMinBaseCents,
@@ -96,22 +68,6 @@ export default function Reports() {
         : null,
       legacySettings: taxSettings,
     });
-
-    return {
-      timeRevenue,
-      travelRevenueInGross,
-      grossRevenue,
-      totalFixedCosts,
-      variableCosts,
-      zus: taxResult.zus,
-      healthInsurance: taxResult.healthInsurance,
-      taxBase: taxResult.taxBase,
-      tax: taxResult.tax,
-      netProfit: taxResult.netProfit,
-      deductibleHealth: taxResult.deductibleHealth,
-      calculationSource: taxResult.source,
-    };
-  };
 
   // Calculate customer report data
   const calculateCustomerReport = () => {
