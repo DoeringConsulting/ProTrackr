@@ -4,9 +4,9 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 
 ## Letzte Aktualisierung
 
-- UTC: 2026-03-02 14:36:41Z
+- UTC: 2026-03-02 19:13:14Z
 - Branch: `ProTrackr_developing_path`
-- Commit: `b0fb56d672dd20775647e1a44fefbb004b7b261d` (`b0fb56d`)
+- Commit: `e134be8b2a7ed1cdbf542462fa53410e8b4fd0d3` (`e134be8`)
 - Remote: `origin/ProTrackr_developing_path`
 
 ## Zuletzt abgeschlossene Arbeit
@@ -22,6 +22,13 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
    - SW interceptet keine `/api/*` und keine Nicht-GET-Requests.
 5. Dokumentation erweitert:
    - `docs/ANLEITUNG_WINDOWS_BEFEHLE_PROTRACKR.md` (komplette Windows-Befehlsreferenz).
+6. Zeiterfassung erweitert:
+   - Notizen werden beim Bearbeiten korrekt aus `description` geladen.
+   - Neue Felder fuer Onsite-Reisespesen bei Reisekosten:
+     - `Reise-start`
+     - `Reise-Ende`
+     - `Ganzer Tag`
+   - Felder sind fuer Onsite-Tage verpflichtend (oder `Ganzer Tag` aktivieren).
 
 ## Nutzer-Praeferenzen (SEHR WICHTIG)
 
