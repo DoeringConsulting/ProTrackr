@@ -127,6 +127,9 @@ export default function TimeTracking() {
   const [tempExpenseCategory, setTempExpenseCategory] = useState('car');
   const [tempExpenseCurrency, setTempExpenseCurrency] = useState('EUR');
   const [tempExpenseComment, setTempExpenseComment] = useState('');
+  const [tempTravelStart, setTempTravelStart] = useState('');
+  const [tempTravelEnd, setTempTravelEnd] = useState('');
+  const [tempFullDay, setTempFullDay] = useState(false);
   const [editingExpense, setEditingExpense] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -277,6 +280,14 @@ export default function TimeTracking() {
 
   const handleAddExpenses = (date: Date) => {
     setSelectedExpenseDate(date);
+    setEditingExpense(null);
+    setTempExpenseAmount('');
+    setTempExpenseCategory('car');
+    setTempExpenseCurrency('EUR');
+    setTempExpenseComment('');
+    setTempTravelStart('');
+    setTempTravelEnd('');
+    setTempFullDay(false);
     setIsExpensesDialogOpen(true);
   };
 
@@ -296,7 +307,7 @@ export default function TimeTracking() {
       entryType: entry.entryType,
       hours: hours.toString(),
       minutes: minutes.toString(),
-      notes: entry.notes || "",
+      notes: entry.description || entry.notes || "",
     });
     setIsDialogOpen(true);
   };
@@ -388,6 +399,11 @@ export default function TimeTracking() {
     });
   };
 
+  const isOnsiteDate = (date: Date) => {
+    const dayEntries = getEntriesForDate(date);
+    return dayEntries.some(entry => entry.entryType === "onsite");
+  };
+
   const calculateDayTotal = (entries: any[]) => {
     const totalMinutes = entries.reduce((sum, entry) => sum + entry.hours, 0);
     const hours = Math.floor(totalMinutes / 60);
@@ -418,6 +434,7 @@ export default function TimeTracking() {
 
   const days = getDaysInMonth();
   const monthTotal = calculateMonthTotal();
+  const isOnsiteExpenseDay = selectedExpenseDate ? isOnsiteDate(selectedExpenseDate) : false;
 
   return (
     <DashboardLayout>
@@ -650,6 +667,9 @@ export default function TimeTracking() {
                                   setTempExpenseCategory(expense.category);
                                   setTempExpenseCurrency(expense.currency || 'EUR');
                                   setTempExpenseComment(expense.comment || '');
+                                  setTempTravelStart(expense.travelStart || '');
+                                  setTempTravelEnd(expense.travelEnd || '');
+                                  setTempFullDay(Boolean(expense.fullDay));
                                   setSelectedExpenseDate(expense.date ? new Date(expense.date) : day);
                                   setIsExpensesDialogOpen(true);
                                 }}
@@ -869,6 +889,11 @@ export default function TimeTracking() {
                     toast.error('Bitte Betrag eingeben');
                     return;
                   }
+
+                  if (isOnsiteExpenseDay && !tempFullDay && (!tempTravelStart || !tempTravelEnd)) {
+                    toast.error('Für Onsite-Tage bitte Reise-start und Reise-Ende ausfüllen oder "Ganzer Tag" aktivieren');
+                    return;
+                  }
                   
                   try {
                     if (editingExpense) {
@@ -877,8 +902,11 @@ export default function TimeTracking() {
                         id: editingExpense,
                         category: tempExpenseCategory as any,
                         amount: Math.round(parseFloat(tempExpenseAmount) * 100),
-                        currency: 'EUR',
+                        currency: tempExpenseCurrency,
                         comment: tempExpenseComment || undefined,
+                        travelStart: isOnsiteExpenseDay && !tempFullDay ? tempTravelStart : undefined,
+                        travelEnd: isOnsiteExpenseDay && !tempFullDay ? tempTravelEnd : undefined,
+                        fullDay: isOnsiteExpenseDay ? tempFullDay : false,
                       });
                     } else {
                       // Create new expense
@@ -891,9 +919,12 @@ export default function TimeTracking() {
                       await createExpenseMutation.mutateAsync({
                         category: tempExpenseCategory as any,
                         amount: Math.round(parseFloat(tempExpenseAmount) * 100),
-                        currency: 'EUR',
+                        currency: tempExpenseCurrency,
                         comment: tempExpenseComment || undefined,
                         date: dateStr,
+                        travelStart: isOnsiteExpenseDay && !tempFullDay ? tempTravelStart : undefined,
+                        travelEnd: isOnsiteExpenseDay && !tempFullDay ? tempTravelEnd : undefined,
+                        fullDay: isOnsiteExpenseDay ? tempFullDay : false,
                       });
                       toast.success('Reisekosten erfolgreich gespeichert');
                     }
@@ -903,6 +934,9 @@ export default function TimeTracking() {
                     setTempExpenseCategory('car');
                     setTempExpenseCurrency('EUR');
                     setTempExpenseComment('');
+                    setTempTravelStart('');
+                    setTempTravelEnd('');
+                    setTempFullDay(false);
                   } catch (error: any) {
                     console.error('[TimeTracking] Error:', error);
                     toast.error(`Fehler beim Speichern: ${error.message}`);
@@ -949,7 +983,7 @@ export default function TimeTracking() {
                         <SelectItem value="transport">Sonstiger Transport</SelectItem>
                         <SelectItem value="hotel">Hotel</SelectItem>
                         <SelectItem value="food">Gastronomie</SelectItem>
-                        <SelectItem value="meal_allowance">Verpflegungspauschale</SelectItem>
+                        <SelectItem value="meal">Verpflegungspauschale</SelectItem>
                         <SelectItem value="fuel">Treibstoff</SelectItem>
                         <SelectItem value="other">Sonstiges</SelectItem>
                       </SelectContent>
@@ -966,6 +1000,53 @@ export default function TimeTracking() {
                     rows={2}
                   />
                 </div>
+                {isOnsiteExpenseDay && (
+                  <div className="space-y-3 rounded-md border p-3">
+                    <p className="text-sm font-medium">
+                      Onsite-Reisespesen (Pflichtangaben)
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="expense-full-day"
+                        type="checkbox"
+                        checked={tempFullDay}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setTempFullDay(checked);
+                          if (checked) {
+                            setTempTravelStart('');
+                            setTempTravelEnd('');
+                          }
+                        }}
+                      />
+                      <Label htmlFor="expense-full-day">Ganzer Tag</Label>
+                    </div>
+                    {!tempFullDay && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="expense-travel-start">Reise-start</Label>
+                          <Input
+                            id="expense-travel-start"
+                            type="time"
+                            value={tempTravelStart}
+                            onChange={(e) => setTempTravelStart(e.target.value)}
+                            required={isOnsiteExpenseDay && !tempFullDay}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="expense-travel-end">Reise-Ende</Label>
+                          <Input
+                            id="expense-travel-end"
+                            type="time"
+                            value={tempTravelEnd}
+                            onChange={(e) => setTempTravelEnd(e.target.value)}
+                            required={isOnsiteExpenseDay && !tempFullDay}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={() => {
                     setIsExpensesDialogOpen(false);
@@ -974,6 +1055,9 @@ export default function TimeTracking() {
                     setTempExpenseCategory('car');
                     setTempExpenseCurrency('EUR');
                     setTempExpenseComment('');
+                    setTempTravelStart('');
+                    setTempTravelEnd('');
+                    setTempFullDay(false);
                   }} className="flex-1">
                     Abbrechen
                   </Button>

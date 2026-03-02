@@ -368,6 +368,9 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
       amount: expenses.amount,
       currency: expenses.currency,
       comment: expenses.comment,
+      travelStart: expenses.travelStart,
+      travelEnd: expenses.travelEnd,
+      fullDay: expenses.fullDay,
       date: timeEntries.date,
       createdAt: expenses.createdAt,
     })
@@ -394,6 +397,9 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
       amount: expenses.amount,
       currency: expenses.currency,
       comment: expenses.comment,
+      travelStart: expenses.travelStart,
+      travelEnd: expenses.travelEnd,
+      fullDay: expenses.fullDay,
       date: expenses.date,
       createdAt: expenses.createdAt,
     })

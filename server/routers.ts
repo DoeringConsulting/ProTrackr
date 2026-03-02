@@ -244,6 +244,9 @@ export const appRouter = router({
         amount: z.number(),
         currency: z.string().length(3).optional().default("EUR"),
         comment: z.string().optional(),
+        travelStart: z.string().optional(),
+        travelEnd: z.string().optional(),
+        fullDay: z.boolean().optional(),
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
         departureTime: z.string().optional(),
@@ -261,6 +264,7 @@ export const appRouter = router({
         date: input.date ? new Date(input.date) : undefined,
         checkInDate: input.checkInDate ? new Date(input.checkInDate) : undefined,
         checkOutDate: input.checkOutDate ? new Date(input.checkOutDate) : undefined,
+        fullDay: input.fullDay ? 1 : 0,
       };
       return await createExpense(data);
     }),
@@ -274,6 +278,9 @@ export const appRouter = router({
           amount: z.number(),
           currency: z.string().length(3).optional().default("EUR"),
           comment: z.string().optional(),
+          travelStart: z.string().optional(),
+          travelEnd: z.string().optional(),
+          fullDay: z.boolean().optional(),
           ticketNumber: z.string().optional(),
           flightNumber: z.string().optional(),
           departureTime: z.string().optional(),
@@ -288,7 +295,11 @@ export const appRouter = router({
       const { createExpense } = await import("./db");
       const results = [];
       for (const expense of input.expenses) {
-        const result = await createExpense({ timeEntryId: input.timeEntryId, ...expense });
+        const result = await createExpense({
+          timeEntryId: input.timeEntryId,
+          ...expense,
+          fullDay: expense.fullDay ? 1 : 0,
+        });
         results.push(result);
       }
       return { success: true, count: results.length };
@@ -302,6 +313,9 @@ export const appRouter = router({
         amount: z.number().optional(),
         currency: z.string().length(3).optional(),
         comment: z.string().optional(),
+        travelStart: z.string().optional(),
+        travelEnd: z.string().optional(),
+        fullDay: z.boolean().optional(),
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
         departureTime: z.string().optional(),
@@ -314,7 +328,11 @@ export const appRouter = router({
     }).mutation(async ({ input }) => {
       const { id, ...data } = input;
       const { updateExpense } = await import("./db");
-      await updateExpense(id, data);
+      const normalizedData = {
+        ...data,
+        ...(data.fullDay !== undefined ? { fullDay: data.fullDay ? 1 : 0 } : {}),
+      };
+      await updateExpense(id, normalizedData);
       return { success: true };
     }),
     delete: protectedProcedure.input((val: unknown) => {

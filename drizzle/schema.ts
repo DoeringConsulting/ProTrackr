@@ -127,6 +127,10 @@ export const expenses = mysqlTable("expenses", {
   amount: int("amount").notNull(), // in currency cents
   currency: varchar("currency", { length: 3 }).notNull().default("EUR"), // ISO 4217 currency code
   comment: text("comment"),
+  // Onsite travel allowance fields (Polish accounting)
+  travelStart: varchar("travelStart", { length: 5 }), // HH:MM
+  travelEnd: varchar("travelEnd", { length: 5 }), // HH:MM
+  fullDay: int("fullDay").default(0).notNull(), // 0 = no, 1 = yes
   // Flight/Train specific
   ticketNumber: varchar("ticketNumber", { length: 100 }),
   flightNumber: varchar("flightNumber", { length: 100 }),
