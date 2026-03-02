@@ -4,9 +4,9 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 
 ## Letzte Aktualisierung
 
-- UTC: 2026-03-02 21:23:42Z
+- UTC: 2026-03-02 22:28:05Z
 - Branch: `ProTrackr_developing_path`
-- Commit: `b263612af1da877c9f656a0008116a6a71963452` (`b263612`)
+- Commit: `3bf2d00e4867f9bb2c3658692b9050fd5909817b` (`3bf2d00`)
 - Remote: `origin/ProTrackr_developing_path`
 
 ## Zuletzt abgeschlossene Arbeit
@@ -35,10 +35,24 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
    - `client/src/pages/settings/TaxesTab.tsx`
    - Felder fuer Regime, Chorobowe, FP/FS, Wypadkowa
    - Jahreswerte je Jahr (`tax_config_pl[year]`) inkl. Limits/Basen
-5. Build/Typecheck:
+5. Migration-Stabilisierung nach lokalen Konflikten:
+   - `drizzle/0005_tax_profile_and_year_config.sql` auf `CREATE TABLE IF NOT EXISTS` gehaertet.
+   - `package.json` Script angepasst:
+     - `db:generate` erzeugt Migrationen
+     - `db:push` migriert nur noch (`drizzle-kit migrate`)
+6. UI-Referenzvalidierung eingebaut:
+   - `client/src/lib/uiCalculations.ts` als gemeinsame Berechnungsbasis fuer Reports/Dashboard.
+   - Automatisierte Referenztests:
+     - `server/uiValidationReportsDashboard.test.ts`
+     - `server/taxEnginePl.test.ts`
+7. Dashboard-Umsatztrend korrigiert:
+   - Letzte 6 Monate werden explizit geladen (statt nur aktueller Monat).
+   - Monatszuordnung ist zeitzonen-robust (DateKey statt direkter `Date`-Monatslogik).
+   - Februar-/Vormonatsdaten werden korrekt in der Umsatzentwicklung angezeigt.
+8. Build/Typecheck:
    - `pnpm check` erfolgreich
    - `pnpm build` erfolgreich
-6. Legacy-Route vereinheitlicht:
+9. Legacy-Route vereinheitlicht:
    - `client/src/pages/TaxSettings.tsx` rendert jetzt den neuen `TaxesTab`
    - Kein divergenter Alt-Dialog mehr auf `/tax-settings`
 
