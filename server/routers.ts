@@ -8,6 +8,7 @@ import {
   publicProcedure,
   protectedProcedure,
   router,
+  webAppAdminProcedure,
 } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -34,7 +35,15 @@ async function canAccessUserOwnedData(
 }
 
 function canAssignRoleAsMandantAdmin(role: string): boolean {
-  return role === "user" || role === "admin" || role === "mandant_admin";
+  return role === "user";
+}
+
+function canAssignRoleAsWebAppAdmin(role: string): boolean {
+  // Enforced setup flow:
+  // 1) Mandant anlegen
+  // 2) Mandanten-Admin anlegen
+  // 3) Mandanten-Admin legt Mandanten-Benutzer an
+  return role === "mandant_admin" || role === "webapp_admin";
 }
 
 async function canAccessCustomerOwnedData(
@@ -1086,6 +1095,57 @@ export const appRouter = router({
     }),
   }),
 
+  // Mandant management (step 1 of setup flow)
+  mandantenAdmin: router({
+    list: webAppAdminProcedure.query(async () => {
+      const { getAllMandanten } = await import("./db-mandanten");
+      return await getAllMandanten();
+    }),
+    create: webAppAdminProcedure.input((val: unknown) => {
+      return z.object({
+        name: z.string().trim().min(2).max(255),
+        mandantNr: z
+          .string()
+          .trim()
+          .min(2)
+          .max(50)
+          .regex(/^[A-Za-z0-9._-]+$/, "mandantNr darf nur A-Z, 0-9, . _ - enthalten"),
+      }).parse(val);
+    }).mutation(async ({ input }) => {
+      const { createMandant, findMandantByName, findMandantByNr } = await import("./db-mandanten");
+
+      const byNr = await findMandantByNr(input.mandantNr);
+      if (byNr) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Mandant mit dieser Mandantennummer existiert bereits",
+        });
+      }
+
+      const byName = await findMandantByName(input.name);
+      if (byName) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Mandant mit diesem Namen existiert bereits",
+        });
+      }
+
+      const created = await createMandant({
+        name: input.name,
+        mandantNr: input.mandantNr,
+      });
+
+      if (!created) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Mandant konnte nicht angelegt werden",
+        });
+      }
+
+      return created;
+    }),
+  }),
+
   // User management (Phase 2 - direct admin creation, no invite flow yet)
   usersAdmin: router({
     list: adminOrMandantAdminProcedure.query(async ({ ctx }) => {
@@ -1111,12 +1171,26 @@ export const appRouter = router({
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { createUser, findUserByEmailAndMandant } = await import("./db");
+      const { findMandantById } = await import("./db-mandanten");
 
       const actorIsWebAppAdmin = isWebAppAdmin(ctx.user);
-      const targetMandantId = actorIsWebAppAdmin
-        ? input.mandantId
-        : ctx.user.mandantId;
 
+      if (actorIsWebAppAdmin) {
+        if (!canAssignRoleAsWebAppAdmin(input.role)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "WebApp-Admin darf im Mandanten-Setup nur Mandanten-Admins anlegen",
+          });
+        }
+      } else if (!canAssignRoleAsMandantAdmin(input.role)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Mandanten-Admins duerfen nur Benutzer anlegen",
+        });
+      }
+
+      const targetMandantId = actorIsWebAppAdmin ? input.mandantId : ctx.user.mandantId;
       if (!targetMandantId) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -1124,10 +1198,11 @@ export const appRouter = router({
         });
       }
 
-      if (!actorIsWebAppAdmin && !canAssignRoleAsMandantAdmin(input.role)) {
+      const mandant = await findMandantById(targetMandantId);
+      if (!mandant) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Mandanten-Admins duerfen diese Rolle nicht vergeben",
+          code: "BAD_REQUEST",
+          message: "Mandant existiert nicht",
         });
       }
 

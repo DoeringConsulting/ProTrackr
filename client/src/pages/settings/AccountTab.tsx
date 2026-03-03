@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Shield, Trash2, User, UserPlus, UserX } from "lucide-react";
+import { Building2, Shield, Trash2, UserPlus, UserX } from "lucide-react";
 
 type AuthUser = {
   id: number;
@@ -27,6 +27,12 @@ type AuthUser = {
   role: string;
   email: string;
   displayName?: string | null;
+};
+
+type MandantItem = {
+  id: number;
+  name: string;
+  mandantNr: string;
 };
 
 function getRoleLabel(role: string) {
@@ -44,15 +50,18 @@ function getRoleLabel(role: string) {
 export default function AccountTab() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isCreateMandantOpen, setIsCreateMandantOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
+  const [mandantName, setMandantName] = useState("");
+  const [mandantNr, setMandantNr] = useState("");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("user");
+  const [role, setRole] = useState<"user" | "mandant_admin" | "webapp_admin">("user");
   const [mandantId, setMandantId] = useState("");
 
   useEffect(() => {
@@ -83,24 +92,44 @@ export default function AccountTab() {
   const isWebAppAdmin = authUser?.role === "webapp_admin";
   const canManageUsers = ["webapp_admin", "mandant_admin", "admin"].includes(authUser?.role || "");
 
+  useEffect(() => {
+    setRole(isWebAppAdmin ? "mandant_admin" : "user");
+  }, [isWebAppAdmin]);
+
   const roleOptions = useMemo(
     () =>
       isWebAppAdmin
         ? [
-            { value: "user", label: "Benutzer" },
             { value: "mandant_admin", label: "Mandanten-Admin" },
             { value: "webapp_admin", label: "WebApp-Admin" },
           ]
-        : [
-            { value: "user", label: "Benutzer" },
-            { value: "mandant_admin", label: "Mandanten-Admin" },
-          ],
+        : [{ value: "user", label: "Benutzer" }],
     [isWebAppAdmin]
   );
 
   const utils = trpc.useUtils();
   const { data: users = [], isLoading } = trpc.usersAdmin.list.useQuery(undefined, {
     enabled: canManageUsers,
+  });
+  const { data: mandanten = [], isLoading: mandantenLoading } = trpc.mandantenAdmin.list.useQuery(
+    undefined,
+    { enabled: isWebAppAdmin }
+  );
+
+  const createMandantMutation = trpc.mandantenAdmin.create.useMutation({
+    onSuccess: (created) => {
+      utils.mandantenAdmin.list.invalidate();
+      toast.success("Mandant erfolgreich angelegt");
+      setIsCreateMandantOpen(false);
+      setMandantName("");
+      setMandantNr("");
+      if (created?.id) {
+        setMandantId(String(created.id));
+      }
+    },
+    onError: (error) => {
+      toast.error(`Fehler beim Anlegen des Mandanten: ${error.message}`);
+    },
   });
 
   const createMutation = trpc.usersAdmin.create.useMutation({
@@ -111,7 +140,7 @@ export default function AccountTab() {
       setEmail("");
       setDisplayName("");
       setPassword("");
-      setRole("user");
+      setRole(isWebAppAdmin ? "mandant_admin" : "user");
       setMandantId("");
     },
     onError: (error) => {
@@ -154,16 +183,33 @@ export default function AccountTab() {
     }
 
     if (isWebAppAdmin && !mandantId) {
-      toast.error("Bitte mandantId fuer den neuen Benutzer angeben");
+      toast.error("Bitte zuerst einen Mandanten auswaehlen");
       return;
     }
+
+    const targetRole = isWebAppAdmin ? role : "user";
 
     createMutation.mutate({
       email,
       displayName: displayName || undefined,
       password,
-      role: role as "user" | "admin" | "mandant_admin" | "webapp_admin",
+      role: targetRole,
       mandantId: isWebAppAdmin ? Number(mandantId) : undefined,
+    });
+  };
+
+  const handleCreateMandant = () => {
+    const trimmedName = mandantName.trim();
+    const trimmedNr = mandantNr.trim();
+
+    if (!trimmedName || !trimmedNr) {
+      toast.error("Name und Mandantennummer sind Pflichtfelder");
+      return;
+    }
+
+    createMandantMutation.mutate({
+      name: trimmedName,
+      mandantNr: trimmedNr,
     });
   };
 
@@ -197,14 +243,75 @@ export default function AccountTab() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Konto-Verwaltung</h2>
           <p className="text-muted-foreground">
-            Benutzer im Berechtigungsbereich verwalten (anlegen, sperren, loeschen)
+            {isWebAppAdmin
+              ? "Setup-Flow: Mandant anlegen, Mandanten-Admin anlegen, dann Benutzer je Mandant verwalten"
+              : "Mandanten-Benutzer verwalten (anlegen, sperren, loeschen)"}
           </p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Benutzer anlegen
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {isWebAppAdmin && (
+            <Button variant="outline" onClick={() => setIsCreateMandantOpen(true)}>
+              <Building2 className="mr-2 h-4 w-4" />
+              Mandant anlegen
+            </Button>
+          )}
+          <Button onClick={() => setIsCreateOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            {isWebAppAdmin ? "Mandanten-Admin anlegen" : "Benutzer anlegen"}
+          </Button>
+        </div>
       </div>
+
+      {isWebAppAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Verbindlicher Setup-Flow</CardTitle>
+            <CardDescription>
+              Schritt 1: Mandant anlegen. Schritt 2: Mandanten-Admin anlegen. Schritt 3: Mandanten-Admin legt Benutzer an.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-1">
+            <p>1) Ohne Mandant keine Benutzeranlage im Mandantenkontext.</p>
+            <p>2) Der erste Benutzer eines Mandanten ist der Mandanten-Admin.</p>
+            <p>3) Weitere Mandanten-Benutzer werden durch den Mandanten-Admin angelegt.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {isWebAppAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Mandantenliste</CardTitle>
+            <CardDescription>Alle vorhandenen Mandanten fuer den Setup-Schritt 1</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {mandantenLoading ? (
+              <p className="text-sm text-muted-foreground">Lade Mandanten...</p>
+            ) : mandanten.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Keine Mandanten vorhanden.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Mandant</TableHead>
+                    <TableHead>Mandant-Nr</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(mandanten as MandantItem[]).map((mandant) => (
+                    <TableRow key={mandant.id}>
+                      <TableCell>{mandant.id}</TableCell>
+                      <TableCell>{mandant.name}</TableCell>
+                      <TableCell>{mandant.mandantNr}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -284,12 +391,53 @@ export default function AccountTab() {
         </CardContent>
       </Card>
 
+      <Dialog open={isCreateMandantOpen} onOpenChange={setIsCreateMandantOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Neuen Mandanten anlegen</DialogTitle>
+            <DialogDescription>
+              Schritt 1: Mandantenstammsatz erstellen, danach Mandanten-Admin anlegen.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-mandant-name">Mandantenname *</Label>
+              <Input
+                id="new-mandant-name"
+                value={mandantName}
+                onChange={(e) => setMandantName(e.target.value)}
+                placeholder="z. B. Muster GmbH"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-mandant-nr">Mandantennummer *</Label>
+              <Input
+                id="new-mandant-nr"
+                value={mandantNr}
+                onChange={(e) => setMandantNr(e.target.value)}
+                placeholder="z. B. MANDANT_001"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateMandantOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleCreateMandant} disabled={createMandantMutation.isPending}>
+              {createMandantMutation.isPending ? "Speichere..." : "Mandant anlegen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Neuen Benutzer anlegen</DialogTitle>
+            <DialogTitle>{isWebAppAdmin ? "Mandanten-Admin anlegen" : "Neuen Benutzer anlegen"}</DialogTitle>
             <DialogDescription>
-              Direkte Anlage ohne Einladungs-E-Mail (gemäß Freeze-Entscheidung).
+              {isWebAppAdmin
+                ? "Schritt 2: Admin-Benutzer fuer den ausgewaehlten Mandanten anlegen."
+                : "Direkte Anlage im eigenen Mandanten ohne Einladungs-E-Mail."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -323,32 +471,58 @@ export default function AccountTab() {
                 placeholder="Mindestens 8 Zeichen"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Rolle *</Label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             {isWebAppAdmin && (
-              <div className="space-y-2">
-                <Label htmlFor="new-mandant-id">mandantId *</Label>
-                <Input
-                  id="new-mandant-id"
-                  type="number"
-                  min={1}
-                  value={mandantId}
-                  onChange={(e) => setMandantId(e.target.value)}
-                  placeholder="z. B. 1"
-                />
+              <>
+                <div className="space-y-2">
+                  <Label>Rolle *</Label>
+                  <Select
+                    value={role}
+                    onValueChange={(value) =>
+                      setRole(value as "user" | "mandant_admin" | "webapp_admin")
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roleOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Mandant *</Label>
+                  <Select value={mandantId} onValueChange={setMandantId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Mandant auswaehlen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(mandanten as MandantItem[]).map((mandant) => (
+                        <SelectItem key={mandant.id} value={String(mandant.id)}>
+                          {mandant.name} ({mandant.mandantNr})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            {!isWebAppAdmin && (
+              <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                Rolle fuer neue Benutzer: <span className="font-medium text-foreground">Benutzer</span>
+              </div>
+            )}
+            {isWebAppAdmin && !mandantenLoading && mandanten.length === 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                Es ist noch kein Mandant vorhanden. Bitte zuerst "Mandant anlegen".
+              </div>
+            )}
+            {isWebAppAdmin && (
+              <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                Nach der Anlage meldet sich der Mandanten-Admin an und legt dann die Mandanten-Benutzer an.
               </div>
             )}
           </div>
@@ -356,8 +530,18 @@ export default function AccountTab() {
             <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
               Abbrechen
             </Button>
-            <Button onClick={handleCreateUser} disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Speichere..." : "Benutzer anlegen"}
+            <Button
+              onClick={handleCreateUser}
+              disabled={
+                createMutation.isPending ||
+                (isWebAppAdmin && (!mandantId || mandanten.length === 0))
+              }
+            >
+              {createMutation.isPending
+                ? "Speichere..."
+                : isWebAppAdmin
+                  ? "Mandanten-Admin anlegen"
+                  : "Benutzer anlegen"}
             </Button>
           </DialogFooter>
         </DialogContent>
