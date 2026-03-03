@@ -156,7 +156,16 @@ export const appRouter = router({
         vatId: z.string().optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { createCustomer } = await import("./db");
+      const { createCustomer, getCustomersByMandatenNr } = await import("./db");
+      const existingWithSameNumber = await getCustomersByMandatenNr(input.mandatenNr);
+      for (const existing of existingWithSameNumber) {
+        if (await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null })) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Mandanten-Nr ist im aktuellen Mandantenbereich bereits vergeben",
+          });
+        }
+      }
       return await createCustomer({
         ...input,
         userId: ctx.user.id,
@@ -186,7 +195,7 @@ export const appRouter = router({
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      const { getCustomerById, updateCustomer } = await import("./db");
+      const { getCustomerById, getCustomersByMandatenNr, updateCustomer } = await import("./db");
       const customer = await getCustomerById(id);
       if (!customer) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
@@ -194,6 +203,20 @@ export const appRouter = router({
       if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
       }
+
+      if (data.mandatenNr && data.mandatenNr !== customer.mandatenNr) {
+        const existingWithSameNumber = await getCustomersByMandatenNr(data.mandatenNr);
+        for (const existing of existingWithSameNumber) {
+          if (existing.id === id) continue;
+          if (await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null })) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Mandanten-Nr ist im aktuellen Mandantenbereich bereits vergeben",
+            });
+          }
+        }
+      }
+
       await updateCustomer(id, data);
       return { success: true };
     }),

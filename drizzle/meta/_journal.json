@@ -71,6 +71,13 @@
       "when": 1772690400000,
       "tag": "0009_users_role_varchar",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1772691600000,
+      "tag": "0010_customers_unique_per_owner",
+      "breakpoints": true
     }
   ]
 }

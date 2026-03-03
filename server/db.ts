@@ -77,6 +77,16 @@ export async function getCustomerById(id: number) {
   return result[0] || null;
 }
 
+export async function getCustomersByMandatenNr(mandatenNr: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const { customers } = await import("../drizzle/schema");
+  return await db
+    .select()
+    .from(customers)
+    .where(eq(customers.mandatenNr, mandatenNr));
+}
+
 export async function createCustomer(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

@@ -57,7 +57,7 @@ export const customers = mysqlTable("customers", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId"), // owner (creator/backfilled from first related time entry)
   provider: varchar("provider", { length: 255 }).notNull(),
-  mandatenNr: varchar("mandatenNr", { length: 50 }).notNull().unique(),
+  mandatenNr: varchar("mandatenNr", { length: 50 }).notNull(),
   projectName: varchar("projectName", { length: 255 }).notNull(),
   location: varchar("location", { length: 255 }).notNull(),
   onsiteRate: int("onsiteRate").notNull(), // in cents
@@ -78,7 +78,9 @@ export const customers = mysqlTable("customers", {
   vatId: varchar("vatId", { length: 50 }), // VAT/USt-ID
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  userMandantenNrUnique: uniqueIndex("customers_user_mandaten_unique").on(table.userId, table.mandatenNr),
+}));
 
 export type Customer = typeof customers.$inferSelect;
 
