@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Building2, Shield, Trash2, UserPlus, UserX } from "lucide-react";
+import { Building2, Pencil, Shield, Trash2, UserPlus, UserX } from "lucide-react";
 
 type AuthUser = {
   id: number;
@@ -33,6 +33,15 @@ type MandantItem = {
   id: number;
   name: string;
   mandantNr: string;
+};
+
+type ManagedUser = {
+  id: number;
+  mandantId: number;
+  email: string;
+  displayName?: string | null;
+  role: string;
+  isActive?: number;
 };
 
 function getRoleLabel(role: string) {
@@ -52,9 +61,10 @@ export default function AccountTab() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isCreateMandantOpen, setIsCreateMandantOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
 
   const [mandantName, setMandantName] = useState("");
   const [mandantNr, setMandantNr] = useState("");
@@ -63,6 +73,11 @@ export default function AccountTab() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"user" | "mandant_admin" | "webapp_admin">("user");
   const [mandantId, setMandantId] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editRole, setEditRole] = useState<"user" | "mandant_admin" | "webapp_admin">("user");
+  const [editMandantId, setEditMandantId] = useState("");
+  const [editPassword, setEditPassword] = useState("");
 
   useEffect(() => {
     const loadMe = async () => {
@@ -89,7 +104,9 @@ export default function AccountTab() {
     loadMe();
   }, []);
 
-  const isGlobalSetupAdmin = ["webapp_admin", "admin"].includes(authUser?.role || "");
+  const isGlobalSetupAdmin =
+    authUser?.role === "webapp_admin" ||
+    (authUser?.role === "admin" && Number(authUser?.id) === 1);
   const canManageUsers = ["webapp_admin", "mandant_admin", "admin"].includes(authUser?.role || "");
 
   useEffect(() => {
@@ -100,6 +117,7 @@ export default function AccountTab() {
     () =>
       isGlobalSetupAdmin
         ? [
+            { value: "user", label: "Benutzer" },
             { value: "mandant_admin", label: "Mandanten-Admin" },
             { value: "webapp_admin", label: "WebApp-Admin" },
           ]
@@ -145,6 +163,23 @@ export default function AccountTab() {
     },
     onError: (error) => {
       toast.error(`Fehler beim Anlegen: ${error.message}`);
+    },
+  });
+
+  const updateMutation = trpc.usersAdmin.update.useMutation({
+    onSuccess: () => {
+      utils.usersAdmin.list.invalidate();
+      toast.success("Benutzer erfolgreich aktualisiert");
+      setIsEditOpen(false);
+      setSelectedUser(null);
+      setEditEmail("");
+      setEditDisplayName("");
+      setEditPassword("");
+      setEditRole("user");
+      setEditMandantId("");
+    },
+    onError: (error) => {
+      toast.error(`Fehler beim Bearbeiten: ${error.message}`);
     },
   });
 
@@ -213,6 +248,47 @@ export default function AccountTab() {
     });
   };
 
+  const openEditDialog = (user: ManagedUser) => {
+    setSelectedUser(user);
+    setEditEmail(user.email || "");
+    setEditDisplayName(user.displayName || "");
+    setEditRole(
+      user.role === "webapp_admin"
+        ? "webapp_admin"
+        : user.role === "mandant_admin" || user.role === "admin"
+          ? "mandant_admin"
+          : "user"
+    );
+    setEditMandantId(String(user.mandantId || ""));
+    setEditPassword("");
+    setIsEditOpen(true);
+  };
+
+  const handleUpdateUser = () => {
+    if (!selectedUser) return;
+    if (!editEmail.trim()) {
+      toast.error("E-Mail ist ein Pflichtfeld");
+      return;
+    }
+    if (isGlobalSetupAdmin && !editMandantId) {
+      toast.error("Bitte Mandant auswaehlen");
+      return;
+    }
+    if (editPassword && editPassword.length < 8) {
+      toast.error("Passwort muss mindestens 8 Zeichen haben");
+      return;
+    }
+
+    updateMutation.mutate({
+      userId: selectedUser.id,
+      email: editEmail.trim(),
+      displayName: editDisplayName.trim(),
+      role: isGlobalSetupAdmin ? editRole : "user",
+      mandantId: isGlobalSetupAdmin ? Number(editMandantId) : undefined,
+      password: editPassword || undefined,
+    });
+  };
+
   if (authLoading) {
     return (
       <Card>
@@ -257,7 +333,7 @@ export default function AccountTab() {
           )}
           <Button onClick={() => setIsCreateOpen(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
-            {isGlobalSetupAdmin ? "Mandanten-Admin anlegen" : "Benutzer anlegen"}
+            Benutzer anlegen
           </Button>
         </div>
       </div>
@@ -358,6 +434,15 @@ export default function AccountTab() {
                         <div className="flex justify-end gap-2">
                           <Button
                             size="sm"
+                            variant="secondary"
+                            disabled={isSelf || updateMutation.isPending}
+                            onClick={() => openEditDialog(user as ManagedUser)}
+                          >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Bearbeiten
+                          </Button>
+                          <Button
+                            size="sm"
                             variant="outline"
                             disabled={isSelf || !isActive || suspendMutation.isPending}
                             onClick={() => {
@@ -433,10 +518,10 @@ export default function AccountTab() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isGlobalSetupAdmin ? "Mandanten-Admin anlegen" : "Neuen Benutzer anlegen"}</DialogTitle>
+            <DialogTitle>{isGlobalSetupAdmin ? "Benutzer / Admin anlegen" : "Neuen Benutzer anlegen"}</DialogTitle>
             <DialogDescription>
               {isGlobalSetupAdmin
-                ? "Schritt 2: Admin-Benutzer fuer den ausgewaehlten Mandanten anlegen."
+                ? "Schritt 2/3: Rolle waehlen und Benutzer fuer den ausgewaehlten Mandanten anlegen."
                 : "Direkte Anlage im eigenen Mandanten ohne Einladungs-E-Mail."}
             </DialogDescription>
           </DialogHeader>
@@ -540,8 +625,100 @@ export default function AccountTab() {
               {createMutation.isPending
                 ? "Speichere..."
                 : isGlobalSetupAdmin
-                  ? "Mandanten-Admin anlegen"
+                  ? "Benutzer anlegen"
                   : "Benutzer anlegen"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Benutzer bearbeiten</DialogTitle>
+            <DialogDescription>
+              E-Mail, Name, Rolle, Mandant und optional Passwort aktualisieren.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">E-Mail *</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editDisplayName}
+                onChange={(e) => setEditDisplayName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">Neues Passwort (optional)</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                minLength={8}
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                placeholder="Leer lassen, um Passwort nicht zu aendern"
+              />
+            </div>
+            {isGlobalSetupAdmin ? (
+              <>
+                <div className="space-y-2">
+                  <Label>Rolle</Label>
+                  <Select
+                    value={editRole}
+                    onValueChange={(value) =>
+                      setEditRole(value as "user" | "mandant_admin" | "webapp_admin")
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roleOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Mandant</Label>
+                  <Select value={editMandantId} onValueChange={setEditMandantId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Mandant auswaehlen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(mandanten as MandantItem[]).map((mandant) => (
+                        <SelectItem key={mandant.id} value={String(mandant.id)}>
+                          {mandant.name} ({mandant.mandantNr})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                Rolle bleibt im Mandantenbereich auf <span className="font-medium text-foreground">Benutzer</span>.
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleUpdateUser} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Speichere..." : "Aenderungen speichern"}
             </Button>
           </DialogFooter>
         </DialogContent>
