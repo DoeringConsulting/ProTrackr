@@ -4,9 +4,9 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 
 ## Letzte Aktualisierung
 
-- UTC: 2026-03-03 09:38:07Z
+- UTC: 2026-03-03 10:16:52Z
 - Branch: `ProTrackr_developing_path`
-- Commit: `a7a9a9f09190d5f907b07f3e9ea6c0d6546486f2` (`a7a9a9f`)
+- Commit: `fc58cb9e4f39b5f6bb9cbde0d35a35c55ef87727` (`fc58cb9`)
 - Remote: `origin/ProTrackr_developing_path`
 
 ## Zuletzt abgeschlossene Arbeit
@@ -66,6 +66,13 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
    - Neue optionale Umschaltung: "Einheitliche Waehrung" + Zielwaehrung (Dropdown).
    - Bei aktiver Umschaltung werden Positionen und Summe in Zielwaehrung dargestellt (auf Basis hinterlegter Wechselkurse).
    - Hinweis bei fehlenden Kursen pro Position/Summe.
+12. Wechselkurs-Anzeige korrigiert:
+   - Skalierung in der Historientabelle korrigiert (`42304` wird korrekt als `4.2304` interpretiert).
+   - Spaltenbezeichnung korrigiert auf:
+     - `Kurs (1 PLN = x X)`
+     - `Kurs (1 X = x PLN)`
+   - Werte werden jetzt im richtigen Verhaeltnis zu `1.00` Einheit der Fremdwaehrung angezeigt.
+   - Nebenfix: NBP-Kurse werden nicht mehr fälschlich als `Manuell` markiert.
 
 ## Nutzer-Praeferenzen (SEHR WICHTIG)
 
