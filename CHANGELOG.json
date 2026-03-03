@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.23",
+      "date": "2026-03-03",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Steuer-Modulstatus wird beim Klick sofort gespeichert",
+          "description": "Neuer API-Flow speichert den Aktiv/Deaktiv-Status von „% Steuern“ direkt beim Umschalten. Der Zustand springt nach Speichern nicht mehr ungefragt auf „Aktiv“ zurück."
+        },
+        {
+          "type": "fix",
+          "title": "Steuer-Speichern für beide Admin-Rollen freigegeben",
+          "description": "Steuer-Änderungen (Profil, Modulstatus und Jahreswerte) sind jetzt für WebApp-Admin und Mandanten-Admin erlaubt und entsprechen damit der vereinbarten Rollenpolitik."
+        }
+      ]
+    },
+    {
       "version": "1.0.22",
       "date": "2026-03-03",
       "changes": [

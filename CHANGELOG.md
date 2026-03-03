@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.23] - 2026-03-03
+
+### Behoben
+
+**Steuer-Modulstatus wird sofort gespeichert** - Das Umschalten von „% Steuern“ persistiert jetzt direkt beim Klick über einen eigenen API-Endpunkt. Dadurch springt der Status nicht mehr beim Speichern oder Verlassen zurück.
+
+**Steuer-Speichern für beide Admin-Rollen** - Steuer-Änderungen sind nun für WebApp-Admin und Mandanten-Admin zugelassen, wie in der Rollenregel definiert.
+
+---
+
 ## [1.0.22] - 2026-03-03
 
 ### Behoben

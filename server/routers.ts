@@ -965,7 +965,7 @@ export const appRouter = router({
       const { getTaxSettings } = await import("./db");
       return await getTaxSettings();
     }),
-    upsert: mandantAdminProcedure.input((val: unknown) => {
+    upsert: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({
         zusType: z.enum(["percentage", "fixed"]),
         zusValue: z.number(),
@@ -1002,7 +1002,7 @@ export const appRouter = router({
         fpFsEnabled: profile.fpFsEnabled === 1,
       };
     }),
-    upsertProfile: mandantAdminProcedure.input((val: unknown) => {
+    upsertProfile: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({
         taxModuleEnabled: z.boolean(),
         taxForm: z.enum(["liniowy_19"]).default("liniowy_19"),
@@ -1020,6 +1020,33 @@ export const appRouter = router({
         taxModuleEnabled: input.taxModuleEnabled ? 1 : 0,
         choroboweEnabled: input.choroboweEnabled ? 1 : 0,
         fpFsEnabled: input.fpFsEnabled ? 1 : 0,
+      });
+
+      if (!profile) return null;
+
+      return {
+        ...profile,
+        taxModuleEnabled: profile.taxModuleEnabled === 1,
+        choroboweEnabled: profile.choroboweEnabled === 1,
+        fpFsEnabled: profile.fpFsEnabled === 1,
+      };
+    }),
+    setModuleEnabled: adminOrMandantAdminProcedure.input((val: unknown) => {
+      return z.object({
+        enabled: z.boolean(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { getTaxProfile, upsertTaxProfile } = await import("./db");
+      const existing = await getTaxProfile(ctx.user.id);
+      const profile = await upsertTaxProfile(ctx.user.id, {
+        taxModuleEnabled: input.enabled ? 1 : 0,
+        taxForm: existing?.taxForm ?? "liniowy_19",
+        zusRegime: existing?.zusRegime ?? "pelny_zus",
+        choroboweEnabled: existing?.choroboweEnabled ?? 0,
+        fpFsEnabled: existing?.fpFsEnabled ?? 1,
+        wypadkowaRateBp: existing?.wypadkowaRateBp ?? 167,
+        zdrowotnaRateLiniowyBp: existing?.zdrowotnaRateLiniowyBp ?? 490,
+        pitRateBp: existing?.pitRateBp ?? 1900,
       });
 
       if (!profile) return null;
@@ -1059,7 +1086,7 @@ export const appRouter = router({
         isDefault: false,
       };
     }),
-    upsertConfig: mandantAdminProcedure.input((val: unknown) => {
+    upsertConfig: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({
         year: z.number().int().min(2000).max(2100),
         socialMinBaseCents: z.number().int().min(0),

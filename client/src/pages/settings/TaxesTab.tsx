@@ -49,9 +49,14 @@ export default function TaxesTab() {
   const utils = trpc.useUtils();
   const { data: profile, isLoading: profileLoading } = trpc.taxSettings.getProfile.useQuery();
   const { data: config, isLoading: configLoading } = trpc.taxSettings.getConfig.useQuery({ year: selectedYear });
+  const upsertProfileMutation = trpc.taxSettings.upsertProfile.useMutation();
+  const upsertConfigMutation = trpc.taxSettings.upsertConfig.useMutation();
+  const setModuleEnabledMutation = trpc.taxSettings.setModuleEnabled.useMutation();
+
+  const isTogglingModule = setModuleEnabledMutation.isPending;
 
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || isTogglingModule) return;
     setTaxModuleEnabled(profile.taxModuleEnabled ?? true);
     setTaxForm(profile.taxForm);
     setZusRegime(profile.zusRegime);
@@ -60,7 +65,7 @@ export default function TaxesTab() {
     setWypadkowaRate(toPercent(profile.wypadkowaRateBp));
     setZdrowotnaRateLiniowy(toPercent(profile.zdrowotnaRateLiniowyBp));
     setPitRate(toPercent(profile.pitRateBp));
-  }, [profile]);
+  }, [profile, isTogglingModule]);
 
   useEffect(() => {
     if (!config) return;
@@ -73,11 +78,29 @@ export default function TaxesTab() {
     setFpFsRate(toPercent(config.fpFsRateBp));
   }, [config]);
 
-  const upsertProfileMutation = trpc.taxSettings.upsertProfile.useMutation();
-  const upsertConfigMutation = trpc.taxSettings.upsertConfig.useMutation();
-
-  const isSaving = upsertProfileMutation.isPending || upsertConfigMutation.isPending;
+  const isSaving =
+    upsertProfileMutation.isPending ||
+    upsertConfigMutation.isPending ||
+    setModuleEnabledMutation.isPending;
   const isLoading = profileLoading || configLoading;
+
+  const handleToggleTaxModule = async () => {
+    const nextEnabled = !taxModuleEnabled;
+    setTaxModuleEnabled(nextEnabled);
+
+    try {
+      await setModuleEnabledMutation.mutateAsync({ enabled: nextEnabled });
+      await utils.taxSettings.getProfile.invalidate();
+      toast.success(
+        nextEnabled
+          ? "Modul „% Steuern“ wurde aktiviert."
+          : "Modul „% Steuern“ wurde deaktiviert."
+      );
+    } catch (error: any) {
+      setTaxModuleEnabled(!nextEnabled);
+      toast.error(`Fehler beim Speichern des Moduls: ${error.message}`);
+    }
+  };
 
   const handleSave = async () => {
     const wypadkowaRateNumber = parseFloatSafe(wypadkowaRate);
@@ -171,7 +194,8 @@ export default function TaxesTab() {
             type="button"
             size="sm"
             variant={taxModuleEnabled ? "default" : "outline"}
-            onClick={() => setTaxModuleEnabled((prev) => !prev)}
+            onClick={handleToggleTaxModule}
+            disabled={setModuleEnabledMutation.isPending}
             className="shrink-0"
           >
             {taxModuleEnabled ? "Aktiv" : "Deaktiviert"}
