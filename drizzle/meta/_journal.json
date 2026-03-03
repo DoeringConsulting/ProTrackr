@@ -50,6 +50,13 @@
       "when": 1772550000000,
       "tag": "0006_password_reset_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1772556000000,
+      "tag": "0007_scope_hardening_expenses_exchange_rates",
+      "breakpoints": true
     }
   ]
 }

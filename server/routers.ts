@@ -13,7 +13,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import { generateInvoiceNumber, getInvoiceNumbers, getDb } from "./db";
-import { sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { expenses } from "../drizzle/schema";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
@@ -27,8 +27,8 @@ async function canAccessUserOwnedData(
   actor: { id: number; mandantId: number | null; role: string },
   targetUserId: number
 ): Promise<boolean> {
-  if (actor.id === targetUserId) return true;
   if (isWebAppAdmin(actor)) return false;
+  if (actor.id === targetUserId) return true;
   if (!isMandantAdmin(actor)) return false;
   return await isSameMandantForUser(actor.mandantId, targetUserId);
 }
@@ -283,13 +283,35 @@ export const appRouter = router({
         endDate: z.string().optional(),
       }).parse(val);
     }).query(async ({ ctx, input }) => {
-      const { getAllExpenses } = await import("./db");
+      const { getAllExpenses, listUsersByMandantId } = await import("./db");
+
+      if (isWebAppAdmin(ctx.user)) {
+        return [];
+      }
+
+      if (isMandantAdmin(ctx.user) && ctx.user.mandantId) {
+        const mandantUsers = await listUsersByMandantId(ctx.user.mandantId);
+        const result = await Promise.all(
+          mandantUsers.map((user) =>
+            getAllExpenses(user.id, input.startDate, input.endDate)
+          )
+        );
+        return result.flat();
+      }
+
       return await getAllExpenses(ctx.user.id, input.startDate, input.endDate);
     }),
     listByTimeEntry: protectedProcedure.input((val: unknown) => {
       return z.object({ timeEntryId: z.number() }).parse(val);
-    }).query(async ({ input }) => {
-      const { getExpensesByTimeEntry } = await import("./db");
+    }).query(async ({ ctx, input }) => {
+      const { getExpensesByTimeEntry, getTimeEntryById } = await import("./db");
+      const timeEntry = await getTimeEntryById(input.timeEntryId);
+      if (!timeEntry) {
+        return [];
+      }
+      if (!(await canAccessUserOwnedData(ctx.user, timeEntry.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diese Reisekosten" });
+      }
       return await getExpensesByTimeEntry(input.timeEntryId);
     }),
     create: protectedProcedure.input((val: unknown) => {
@@ -314,11 +336,25 @@ export const appRouter = router({
         liters: z.number().optional(),
         pricePerLiter: z.number().optional(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { createExpense } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { createExpense, getTimeEntryById } = await import("./db");
+      let ownerUserId = ctx.user.id;
+
+      if (input.timeEntryId) {
+        const timeEntry = await getTimeEntryById(input.timeEntryId);
+        if (!timeEntry) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Zugehoeriger Zeiteintrag nicht gefunden" });
+        }
+        if (!(await canAccessUserOwnedData(ctx.user, timeEntry.userId))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
+        }
+        ownerUserId = timeEntry.userId;
+      }
+
       // Convert date string to Date object if provided
       const data = {
         ...input,
+        userId: ownerUserId,
         date: input.date ? new Date(input.date) : undefined,
         checkInDate: input.checkInDate ? new Date(input.checkInDate) : undefined,
         checkOutDate: input.checkOutDate ? new Date(input.checkOutDate) : undefined,
@@ -349,12 +385,20 @@ export const appRouter = router({
           pricePerLiter: z.number().optional(),
         })),
       }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { createExpense } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { createExpense, getTimeEntryById } = await import("./db");
+      const timeEntry = await getTimeEntryById(input.timeEntryId);
+      if (!timeEntry) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Zugehoeriger Zeiteintrag nicht gefunden" });
+      }
+      if (!(await canAccessUserOwnedData(ctx.user, timeEntry.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
+      }
       const results = [];
       for (const expense of input.expenses) {
         const result = await createExpense({
           timeEntryId: input.timeEntryId,
+          userId: timeEntry.userId,
           ...expense,
           fullDay: expense.fullDay ? 1 : 0,
         });
@@ -383,9 +427,24 @@ export const appRouter = router({
         liters: z.number().optional(),
         pricePerLiter: z.string().optional(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      const { updateExpense } = await import("./db");
+      const { getExpenseById, getTimeEntryById, updateExpense } = await import("./db");
+      const expense = await getExpenseById(id);
+      if (!expense) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Reisekosten-Eintrag nicht gefunden" });
+      }
+
+      let ownerUserId: number | null = expense.userId ?? null;
+      if (!ownerUserId && expense.timeEntryId) {
+        const parentEntry = await getTimeEntryById(expense.timeEntryId);
+        ownerUserId = parentEntry?.userId ?? null;
+      }
+
+      if (!ownerUserId || !(await canAccessUserOwnedData(ctx.user, ownerUserId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Reisekosten-Eintrag" });
+      }
+
       const normalizedData = {
         ...data,
         ...(data.fullDay !== undefined ? { fullDay: data.fullDay ? 1 : 0 } : {}),
@@ -395,8 +454,23 @@ export const appRouter = router({
     }),
     delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { deleteExpense } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { deleteExpense, getExpenseById, getTimeEntryById } = await import("./db");
+      const expense = await getExpenseById(input.id);
+      if (!expense) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Reisekosten-Eintrag nicht gefunden" });
+      }
+
+      let ownerUserId: number | null = expense.userId ?? null;
+      if (!ownerUserId && expense.timeEntryId) {
+        const parentEntry = await getTimeEntryById(expense.timeEntryId);
+        ownerUserId = parentEntry?.userId ?? null;
+      }
+
+      if (!ownerUserId || !(await canAccessUserOwnedData(ctx.user, ownerUserId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Reisekosten-Eintrag" });
+      }
+
       await deleteExpense(input.id);
       return { success: true };
     }),
@@ -407,9 +481,24 @@ export const appRouter = router({
         endDate: z.string().optional(),
       }).parse(val);
     }).query(async ({ ctx, input }) => {
-      const { getExpensesByCustomer } = await import("./db");
+      const { getExpensesByCustomer, listUsersByMandantId } = await import("./db");
       const startDate = input.startDate ? new Date(input.startDate) : undefined;
       const endDate = input.endDate ? new Date(input.endDate) : undefined;
+
+      if (isWebAppAdmin(ctx.user)) {
+        return [];
+      }
+
+      if (isMandantAdmin(ctx.user) && ctx.user.mandantId) {
+        const mandantUsers = await listUsersByMandantId(ctx.user.mandantId);
+        const result = await Promise.all(
+          mandantUsers.map((user) =>
+            getExpensesByCustomer(user.id, input.customerId, startDate, endDate)
+          )
+        );
+        return result.flat();
+      }
+
       return await getExpensesByCustomer(ctx.user.id, input.customerId, startDate, endDate);
     }),
   }),
@@ -435,28 +524,35 @@ export const appRouter = router({
 
   // Exchange rates
   exchangeRates: router({
-    list: protectedProcedure.query(async () => {
+    list: protectedProcedure.query(async ({ ctx }) => {
       const { getExchangeRates } = await import("./db");
-      return await getExchangeRates();
+      if (isWebAppAdmin(ctx.user)) return [];
+      return await getExchangeRates({ userId: ctx.user.id });
     }),
     getByDate: protectedProcedure.input((val: unknown) => {
       return z.object({ date: z.string() }).parse(val);
-    }).query(async ({ input }) => {
+    }).query(async ({ ctx, input }) => {
       const { getExchangeRateByDate, createExchangeRate } = await import("./db");
       const { fetchNBPExchangeRate } = await import("./nbp");
+      if (isWebAppAdmin(ctx.user)) return null;
       
       const date = new Date(input.date);
-      let rate = await getExchangeRateByDate("EUR/PLN", date);
+      // Prefer user-specific manual override, fallback to global rate.
+      let rate = await getExchangeRateByDate("EUR/PLN", date, ctx.user.id);
+      if (!rate) {
+        rate = await getExchangeRateByDate("EUR/PLN", date, 0);
+      }
       
       if (!rate) {
         const nbpRate = await fetchNBPExchangeRate("EUR", date);
         await createExchangeRate({
           date,
           currencyPair: "EUR/PLN",
+          userId: 0,
           rate: Math.round(nbpRate * 10000),
           source: "NBP",
         });
-        rate = await getExchangeRateByDate("EUR/PLN", date);
+        rate = await getExchangeRateByDate("EUR/PLN", date, 0);
       }
       
       return rate;
@@ -466,9 +562,12 @@ export const appRouter = router({
         currencyCode: z.string(),
         date: z.string(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { createExchangeRate } = await import("./db");
       const { fetchNBPExchangeRate } = await import("./nbp");
+      if (isWebAppAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
+      }
       
       const date = new Date(input.date);
       const nbpRate = await fetchNBPExchangeRate(input.currencyCode, date);
@@ -476,6 +575,7 @@ export const appRouter = router({
       return await createExchangeRate({
         date,
         currencyPair: `${input.currencyCode}/PLN`,
+        userId: 0,
         rate: Math.round(nbpRate * 10000),
         source: "NBP",
       });
@@ -487,11 +587,15 @@ export const appRouter = router({
         rate: z.number(),
         source: z.string(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { createExchangeRate } = await import("./db");
+      if (isWebAppAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
+      }
       return await createExchangeRate({
         date: new Date(input.date),
         currencyPair: input.currencyPair,
+        userId: String(input.source).toLowerCase() === "manual" ? ctx.user.id : 0,
         rate: Math.round(input.rate * 10000),
         source: input.source,
       });
@@ -571,8 +675,21 @@ export const appRouter = router({
   // Documents
   documents: router({ listByExpense: protectedProcedure.input((val: unknown) => {
       return z.object({ expenseId: z.number() }).parse(val);
-    }).query(async ({ input }) => {
-      const { getDocumentsByExpense } = await import("./db");
+    }).query(async ({ ctx, input }) => {
+      const { getDocumentsByExpense, getExpenseById, getTimeEntryById } = await import("./db");
+      const expense = await getExpenseById(input.expenseId);
+      if (!expense) return [];
+
+      let ownerUserId: number | null = expense.userId ?? null;
+      if (!ownerUserId && expense.timeEntryId) {
+        const parentEntry = await getTimeEntryById(expense.timeEntryId);
+        ownerUserId = parentEntry?.userId ?? null;
+      }
+
+      if (!ownerUserId || !(await canAccessUserOwnedData(ctx.user, ownerUserId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diese Dokumente" });
+      }
+
       return await getDocumentsByExpense(input.expenseId);
     }),
     create: protectedProcedure.input((val: unknown) => {
@@ -586,7 +703,33 @@ export const appRouter = router({
         fileSize: z.number(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { createDocument } = await import("./db");
+      const { createDocument, getExpenseById, getTimeEntryById } = await import("./db");
+
+      if (input.timeEntryId) {
+        const timeEntry = await getTimeEntryById(input.timeEntryId);
+        if (!timeEntry) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Zeiteintrag nicht gefunden" });
+        }
+        if (!(await canAccessUserOwnedData(ctx.user, timeEntry.userId))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
+        }
+      }
+
+      if (input.expenseId) {
+        const expense = await getExpenseById(input.expenseId);
+        if (!expense) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Reisekosten-Eintrag nicht gefunden" });
+        }
+        let ownerUserId: number | null = expense.userId ?? null;
+        if (!ownerUserId && expense.timeEntryId) {
+          const parentEntry = await getTimeEntryById(expense.timeEntryId);
+          ownerUserId = parentEntry?.userId ?? null;
+        }
+        if (!ownerUserId || !(await canAccessUserOwnedData(ctx.user, ownerUserId))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Reisekosten-Eintrag" });
+        }
+      }
+
       return await createDocument({
         ...input,
         userId: ctx.user.id,
@@ -1013,12 +1156,14 @@ export const appRouter = router({
         endDate: z.string().optional(),
         currency: z.string().optional(),
       }).parse(val);
-    }).query(async ({ input }) => {
+    }).query(async ({ ctx, input }) => {
       const { getExchangeRates } = await import("./db");
+      if (isWebAppAdmin(ctx.user)) return [];
       return await getExchangeRates({
         startDate: input.startDate ? new Date(input.startDate) : undefined,
         endDate: input.endDate ? new Date(input.endDate) : undefined,
         currency: input.currency,
+        userId: ctx.user.id,
       });
     }),
     upsert: protectedProcedure.input((val: unknown) => {
@@ -1028,22 +1173,30 @@ export const appRouter = router({
         rate: z.number(),
         source: z.string().default("Manual"),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { upsertExchangeRate } = await import("./db");
+      if (isWebAppAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
+      }
+      const manualSource = String(input.source).toLowerCase() === "manual";
       return await upsertExchangeRate({
         date: new Date(input.date),
         currencyPair: input.currencyPair,
         rate: Math.round(input.rate * 10000),
         source: input.source,
+        userId: manualSource ? ctx.user.id : 0,
       });
     }),
     updateFromNBP: protectedProcedure.input((val: unknown) => {
       return z.object({
         currencies: z.array(z.string()),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { fetchNBPExchangeRate } = await import("./nbp");
       const { upsertExchangeRate } = await import("./db");
+      if (isWebAppAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
+      }
       
       const results = [];
       for (const currency of input.currencies) {
@@ -1054,6 +1207,7 @@ export const appRouter = router({
             currencyPair: `${currency}/PLN`,
             rate: Math.round(rate * 10000),
             source: "NBP",
+            userId: 0,
           });
           results.push({ currency, success: true, rate });
         } catch (error: any) {
@@ -1068,22 +1222,139 @@ export const appRouter = router({
         currencyPair: z.string(),
         rate: z.number(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { upsertExchangeRate } = await import("./db");
+      if (isWebAppAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
+      }
       return await upsertExchangeRate({
         date: new Date(input.date),
         currencyPair: input.currencyPair,
         rate: Math.round(input.rate * 10000),
         source: "Manual",
+        userId: ctx.user.id,
       });
     }),
   }),
 
   // Database export/import
   database: router({
-    export: mandantAdminProcedure.mutation(async () => {
-      const { exportDatabase } = await import("./db");
-      return await exportDatabase();
+    export: adminOrMandantAdminProcedure.mutation(async ({ ctx }) => {
+      if (isWebAppAdmin(ctx.user)) {
+        // Blind admin operation: execution allowed, domain data is not exposed.
+        return { success: true, message: "Export ausgefuehrt (blind)" };
+      }
+
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+      if (!ctx.user.mandantId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Mandant fehlt im Kontext" });
+      }
+
+      const {
+        accountSettings,
+        customers,
+        documents,
+        exchangeRates,
+        fixedCosts,
+        invoiceNumbers,
+        taxConfigPl,
+        taxProfiles,
+        taxSettings,
+        timeEntries,
+        users,
+        expenses: expensesTable,
+      } = await import("../drizzle/schema");
+
+      const mandantUsers = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.mandantId, ctx.user.mandantId));
+      const userIds = mandantUsers.map((u) => u.id);
+
+      const timeEntriesData =
+        userIds.length > 0
+          ? await db.select().from(timeEntries).where(inArray(timeEntries.userId, userIds))
+          : [];
+      const timeEntryIds = timeEntriesData.map((entry) => entry.id);
+      const customerIds = Array.from(new Set(timeEntriesData.map((entry) => entry.customerId)));
+
+      const expensesData =
+        userIds.length > 0 || timeEntryIds.length > 0
+          ? await db
+              .select()
+              .from(expensesTable)
+              .where(
+                or(
+                  userIds.length > 0 ? inArray(expensesTable.userId, userIds) : sql`FALSE`,
+                  timeEntryIds.length > 0
+                    ? inArray(expensesTable.timeEntryId, timeEntryIds)
+                    : sql`FALSE`
+                )
+              )
+          : [];
+
+      const fixedCostsData =
+        userIds.length > 0
+          ? await db.select().from(fixedCosts).where(inArray(fixedCosts.userId, userIds))
+          : [];
+      const documentsData =
+        userIds.length > 0
+          ? await db.select().from(documents).where(inArray(documents.userId, userIds))
+          : [];
+      const accountSettingsData =
+        userIds.length > 0
+          ? await db.select().from(accountSettings).where(inArray(accountSettings.userId, userIds))
+          : [];
+      const taxSettingsData =
+        userIds.length > 0
+          ? await db.select().from(taxSettings).where(inArray(taxSettings.userId, userIds))
+          : [];
+      const taxProfilesData =
+        userIds.length > 0
+          ? await db.select().from(taxProfiles).where(inArray(taxProfiles.userId, userIds))
+          : [];
+      const customersData =
+        customerIds.length > 0
+          ? await db.select().from(customers).where(inArray(customers.id, customerIds))
+          : [];
+      const invoiceNumbersData =
+        customerIds.length > 0
+          ? await db
+              .select()
+              .from(invoiceNumbers)
+              .where(inArray(invoiceNumbers.customerId, customerIds))
+          : [];
+      const exchangeRatesData = await db
+        .select()
+        .from(exchangeRates)
+        .where(
+          or(
+            eq(exchangeRates.userId, 0),
+            userIds.length > 0 ? inArray(exchangeRates.userId, userIds) : sql`FALSE`
+          )
+        );
+      const taxConfigData = await db.select().from(taxConfigPl);
+
+      return {
+        version: "1.0",
+        exportDate: new Date().toISOString(),
+        data: {
+          customers: customersData,
+          timeEntries: timeEntriesData,
+          expenses: expensesData,
+          documents: documentsData,
+          exchangeRates: exchangeRatesData,
+          fixedCosts: fixedCostsData,
+          taxSettings: taxSettingsData,
+          taxProfiles: taxProfilesData,
+          taxConfigPl: taxConfigData,
+          accountSettings: accountSettingsData,
+          invoiceNumbers: invoiceNumbersData,
+        },
+      };
     }),
     import: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({
