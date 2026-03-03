@@ -9,6 +9,7 @@ const projectRoot = join(__dirname, '..');
 // Read current version from CHANGELOG.json
 const changelogPath = join(projectRoot, 'CHANGELOG.json');
 const publicChangelogPath = join(projectRoot, 'client/public/CHANGELOG.json');
+const packageJsonPath = join(projectRoot, 'package.json');
 const changelog = JSON.parse(readFileSync(changelogPath, 'utf-8'));
 const currentVersion = changelog.versions[0].version;
 
@@ -17,6 +18,12 @@ const [major, minor, patch] = currentVersion.split('.').map(Number);
 const newVersion = `${major}.${minor}.${patch + 1}`;
 
 console.log(`📦 Incrementing version: ${currentVersion} → ${newVersion}`);
+
+// Update package.json version to keep build metadata consistent
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+packageJson.version = newVersion;
+writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+console.log(`✅ Updated package.json`);
 
 // Update useUpdateCheck.ts
 const hookPath = join(projectRoot, 'client/src/hooks/useUpdateCheck.ts');
