@@ -2,6 +2,7 @@
 import { systemRouter } from "./_core/systemRouter";
 import {
   adminOrMandantAdminProcedure,
+  isMandantAdmin,
   isWebAppAdmin,
   mandantAdminProcedure,
   publicProcedure,
@@ -13,6 +14,23 @@ import { z } from "zod";
 import { generateInvoiceNumber, getInvoiceNumbers, getDb } from "./db";
 import { sql } from "drizzle-orm";
 import { expenses } from "../drizzle/schema";
+
+async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
+  if (!actorMandantId) return false;
+  const { findUserById } = await import("./db");
+  const owner = await findUserById(targetUserId);
+  return !!owner && owner.mandantId === actorMandantId;
+}
+
+async function canAccessUserOwnedData(
+  actor: { id: number; mandantId: number | null; role: string },
+  targetUserId: number
+): Promise<boolean> {
+  if (actor.id === targetUserId) return true;
+  if (isWebAppAdmin(actor)) return false;
+  if (!isMandantAdmin(actor)) return false;
+  return await isSameMandantForUser(actor.mandantId, targetUserId);
+}
 
 export const appRouter = router({
   invoiceNumbers: router({
@@ -134,9 +152,16 @@ export const appRouter = router({
     }),
     getById: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).query(async ({ input }) => {
+    }).query(async ({ ctx, input }) => {
       const { getTimeEntryById } = await import("./db");
-      return await getTimeEntryById(input.id);
+      const entry = await getTimeEntryById(input.id);
+      if (!entry) return null;
+
+      if (!(await canAccessUserOwnedData(ctx.user, entry.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
+      }
+
+      return entry;
     }),
     create: protectedProcedure.input((val: unknown) => {
       return z.object({
@@ -173,9 +198,18 @@ export const appRouter = router({
         calculatedAmount: z.number().optional(),
         manDays: z.number().optional(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { id, date, ...data } = input;
-      const { updateTimeEntry } = await import("./db");
+      const { getTimeEntryById, updateTimeEntry } = await import("./db");
+      const existing = await getTimeEntryById(id);
+
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Zeiteintrag nicht gefunden" });
+      }
+      if (!(await canAccessUserOwnedData(ctx.user, existing.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
+      }
+
       await updateTimeEntry(id, {
         ...data,
         ...(date ? { date: new Date(date) } : {}),
@@ -184,8 +218,17 @@ export const appRouter = router({
     }),
     delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { deleteTimeEntry } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { deleteTimeEntry, getTimeEntryById } = await import("./db");
+      const existing = await getTimeEntryById(input.id);
+
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Zeiteintrag nicht gefunden" });
+      }
+      if (!(await canAccessUserOwnedData(ctx.user, existing.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
+      }
+
       await deleteTimeEntry(input.id);
       return { success: true };
     }),
@@ -200,6 +243,9 @@ export const appRouter = router({
       
       if (!sourceEntry) {
         throw new Error("Source entry not found");
+      }
+      if (!(await canAccessUserOwnedData(ctx.user, sourceEntry.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Quell-Zeiteintrag" });
       }
       
       const createdEntries = [];
@@ -552,9 +598,35 @@ export const appRouter = router({
 
   // Fixed costs
   fixedCosts: router({
-    list: protectedProcedure.query(async () => {
+    list: protectedProcedure.query(async ({ ctx }) => {
       const { getFixedCosts } = await import("./db");
-      return await getFixedCosts();
+      const allCosts = await getFixedCosts();
+
+      // WebApp admins must stay blind regarding tenant business data.
+      if (isWebAppAdmin(ctx.user)) {
+        return [];
+      }
+
+      if (isMandantAdmin(ctx.user)) {
+        const ownerCache = new Map<number, boolean>();
+        const filtered = [];
+
+        for (const cost of allCosts) {
+          if (!ownerCache.has(cost.userId)) {
+            ownerCache.set(
+              cost.userId,
+              await isSameMandantForUser(ctx.user.mandantId, cost.userId)
+            );
+          }
+          if (ownerCache.get(cost.userId)) {
+            filtered.push(cost);
+          }
+        }
+
+        return filtered;
+      }
+
+      return allCosts.filter((cost) => cost.userId === ctx.user.id);
     }),
     create: protectedProcedure.input((val: unknown) => {
       return z.object({
@@ -564,6 +636,10 @@ export const appRouter = router({
         description: z.string().optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
+      if (isWebAppAdmin(ctx.user)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
+      }
+
       const { createFixedCost } = await import("./db");
       return await createFixedCost({
         ...input,
@@ -578,16 +654,36 @@ export const appRouter = router({
         currency: z.string().length(3).optional(),
         description: z.string().optional(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      const { updateFixedCost } = await import("./db");
+      const { getFixedCostById, updateFixedCost } = await import("./db");
+      const existing = await getFixedCostById(id);
+
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Fixkosten-Eintrag nicht gefunden" });
+      }
+
+      if (!(await canAccessUserOwnedData(ctx.user, existing.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Fixkosten-Eintrag" });
+      }
+
       await updateFixedCost(id, data);
       return { success: true };
     }),
     delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { deleteFixedCost } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { deleteFixedCost, getFixedCostById } = await import("./db");
+      const existing = await getFixedCostById(input.id);
+
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Fixkosten-Eintrag nicht gefunden" });
+      }
+
+      if (!(await canAccessUserOwnedData(ctx.user, existing.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Fixkosten-Eintrag" });
+      }
+
       await deleteFixedCost(input.id);
       return { success: true };
     }),

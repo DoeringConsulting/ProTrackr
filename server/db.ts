@@ -163,6 +163,14 @@ export async function getFixedCosts() {
   return await db.select().from(fixedCosts);
 }
 
+export async function getFixedCostById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { fixedCosts } = await import("../drizzle/schema");
+  const result = await db.select().from(fixedCosts).where(eq(fixedCosts.id, id)).limit(1);
+  return result[0] || null;
+}
+
 export async function createFixedCost(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
