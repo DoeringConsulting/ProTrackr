@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,6 +14,14 @@ import { FileText, Download, Calculator } from "lucide-react";
 import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
 import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
 import { calculateAccountingUiData } from "@/lib/uiCalculations";
+import {
+  SUPPORTED_CURRENCIES,
+  aggregateByCurrency,
+  buildLatestRateMap,
+  convertAmountCents,
+  formatMoney,
+  type SupportedCurrency,
+} from "@/lib/currencyUtils";
 
 export default function Reports() {
   const [startDate, setStartDate] = useState(() => {
@@ -24,23 +33,108 @@ export default function Reports() {
     return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
   });
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
+  const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
 
   const { data: customers = [] } = trpc.customers.list.useQuery();
   const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({ startDate, endDate });
   const { data: expenses = [] } = trpc.expenses.list.useQuery({ startDate, endDate });
   const { data: fixedCosts = [] } = trpc.fixedCosts.list.useQuery();
+  const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
   const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
   const reportYear = new Date(`${startDate}T00:00:00`).getFullYear();
   const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: reportYear });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
+  const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
+
+  const convertToEur = (amountCents: number, sourceCurrency?: string | null) => {
+    const source = (sourceCurrency || "EUR").toUpperCase();
+    if (source === "EUR") return amountCents;
+    return convertAmountCents(amountCents, source, "EUR", rateMap);
+  };
+
+  const formatCalculatedCurrency = (amountInEurCents: number) => {
+    if (!showUnifiedCurrency) return formatMoney(amountInEurCents, "EUR");
+    const converted = convertAmountCents(amountInEurCents, "EUR", targetCurrency, rateMap);
+    if (converted === null) {
+      return `Kurs fehlt (EUR → ${targetCurrency})`;
+    }
+    return formatMoney(converted, targetCurrency);
+  };
+
+  const formatCalculatedCurrencyNegative = (amountInEurCents: number) => {
+    const formatted = formatCalculatedCurrency(amountInEurCents);
+    return formatted.startsWith("Kurs fehlt") ? formatted : `-${formatted}`;
+  };
+
+  const renderCurrencyBadges = (totals: Map<string, number>) => {
+    if (totals.size === 0) {
+      return <span className="text-muted-foreground">-</span>;
+    }
+    return (
+      <div className="flex flex-wrap justify-end gap-1">
+        {Array.from(totals.entries()).map(([code, total]) => (
+          <Badge key={code} variant="secondary" className="font-medium">
+            {formatMoney(total, code)}
+          </Badge>
+        ))}
+      </div>
+    );
+  };
+
   // Calculate accounting report data
-  const calculateAccountingReport = () =>
-    calculateAccountingUiData({
+  const calculateAccountingReport = () => {
+    const fixedCostsDetailed = fixedCosts.map((cost) => {
+      const sourceCurrency = (cost.currency || "EUR").toUpperCase();
+      const amountEur = convertToEur(cost.amount, sourceCurrency);
+      return {
+        ...cost,
+        sourceCurrency,
+        amountEur,
+      };
+    });
+
+    const expensesDetailed = expenses.map((expense) => {
+      const sourceCurrency = (expense.currency || "EUR").toUpperCase();
+      const amountEur = convertToEur(expense.amount, sourceCurrency);
+      return {
+        ...expense,
+        sourceCurrency,
+        amountEur,
+      };
+    });
+
+    // Revenue from time entries is in EUR in current system
+    const timeRevenue = timeEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
+
+    // Only travel costs from "exclusive" customers are billable as extra revenue.
+    const entriesById = new Map(timeEntries.map((entry) => [entry.id, entry]));
+    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
+    const travelRevenueInGross = expensesDetailed.reduce((sum, expense) => {
+      if (!expense.timeEntryId) return sum;
+      const relatedEntry = entriesById.get(expense.timeEntryId);
+      if (!relatedEntry) return sum;
+      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      if (relatedCustomer?.costModel !== "exclusive") return sum;
+      return sum + (expense.amountEur ?? 0);
+    }, 0);
+
+    const grossRevenue = timeRevenue + travelRevenueInGross;
+    const totalFixedCosts = fixedCostsDetailed.reduce((sum, cost) => sum + (cost.amountEur ?? 0), 0);
+    const variableCosts = expensesDetailed.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0);
+
+    const taxResult = calculateAccountingUiData({
       customers,
-      timeEntries,
-      expenses,
-      fixedCosts,
+      timeEntries: timeEntries.map((entry) => ({ ...entry, calculatedAmount: entry.calculatedAmount })),
+      expenses: expensesDetailed.map((expense) => ({
+        ...expense,
+        amount: expense.amountEur ?? 0,
+      })),
+      fixedCosts: fixedCostsDetailed.map((cost) => ({
+        ...cost,
+        amount: cost.amountEur ?? 0,
+      })),
       startDate,
       endDate,
       taxProfile: taxProfile
@@ -69,6 +163,39 @@ export default function Reports() {
       legacySettings: taxSettings,
     });
 
+    const fixedCostsByCurrency = aggregateByCurrency(
+      fixedCostsDetailed.map((cost) => ({
+        amount: cost.amount,
+        currency: cost.sourceCurrency,
+      }))
+    );
+    const variableCostsByCurrency = aggregateByCurrency(
+      expensesDetailed.map((expense) => ({
+        amount: expense.amount,
+        currency: expense.sourceCurrency,
+      }))
+    );
+
+    const missingConversionCount =
+      fixedCostsDetailed.filter((cost) => cost.amountEur === null).length +
+      expensesDetailed.filter((expense) => expense.amountEur === null).length;
+
+    return {
+      ...taxResult,
+      // keep these fields in EUR for calculation/export compatibility
+      timeRevenue,
+      travelRevenueInGross,
+      grossRevenue,
+      totalFixedCosts,
+      variableCosts,
+      fixedCostsDetailed,
+      expensesDetailed,
+      fixedCostsByCurrency,
+      variableCostsByCurrency,
+      missingConversionCount,
+    };
+  };
+
   // Calculate customer report data
   const calculateCustomerReport = () => {
     if (!selectedCustomerId) return null;
@@ -79,7 +206,7 @@ export default function Reports() {
     if (!customer) return null;
 
     const totalHours = customerEntries.reduce((sum, entry) => sum + entry.hours, 0);
-    const totalAmount = customerEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
+    const totalAmount = customerEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0); // EUR
     const totalManDays = customerEntries.reduce((sum, entry) => sum + entry.manDays, 0);
 
     // Calculate expenses for this customer
@@ -88,8 +215,24 @@ export default function Reports() {
       const timeEntry = timeEntries.find(te => te.id === expense.timeEntryId);
       return timeEntry && timeEntry.customerId === selectedCustomerId;
     });
-    const totalExpenses = customerExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const billableExpenses = customer.costModel === "exclusive" ? totalExpenses : 0;
+    const customerExpensesDetailed = customerExpenses.map((expense) => {
+      const sourceCurrency = (expense.currency || "EUR").toUpperCase();
+      const amountEur = convertToEur(expense.amount, sourceCurrency);
+      return {
+        ...expense,
+        sourceCurrency,
+        amountEur,
+      };
+    });
+
+    const totalExpenses = customerExpensesDetailed.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0); // EUR
+    const billableExpenses = customer.costModel === "exclusive" ? totalExpenses : 0; // EUR
+    const totalExpensesByCurrency = aggregateByCurrency(
+      customerExpensesDetailed.map((expense) => ({
+        amount: expense.amount,
+        currency: expense.sourceCurrency,
+      }))
+    );
 
     return {
       customer,
@@ -100,15 +243,13 @@ export default function Reports() {
       totalExpenses,
       billableExpenses,
       grandTotal: totalAmount + billableExpenses,
+      totalExpensesByCurrency,
+      customerExpensesDetailed,
     };
   };
 
   const accountingData = calculateAccountingReport();
   const customerData = calculateCustomerReport();
-
-  const formatCurrency = (cents: number) => {
-    return `€${(cents / 100).toFixed(2)}`;
-  };
 
   const formatHours = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -157,6 +298,32 @@ export default function Reports() {
                   onChange={(e) => setEndDate(e.target.value)}
                 />
               </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant={showUnifiedCurrency ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowUnifiedCurrency((prev) => !prev)}
+              >
+                {showUnifiedCurrency ? "Einheitliche Währung aktiv" : "Einheitliche Währung"}
+              </Button>
+              <Select
+                value={targetCurrency}
+                onValueChange={(value) => setTargetCurrency(value as SupportedCurrency)}
+                disabled={!showUnifiedCurrency}
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUPPORTED_CURRENCIES.map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
@@ -216,7 +383,7 @@ export default function Reports() {
                     <TableRow>
                       <TableCell className="font-semibold">Bruttoumsatz</TableCell>
                       <TableCell className="text-right font-semibold">
-                        {formatCurrency(accountingData.grossRevenue)}
+                        {formatCalculatedCurrency(accountingData.grossRevenue)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
@@ -224,7 +391,7 @@ export default function Reports() {
                         Zeiterfassung ({timeEntries.length} Einträge)
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatCurrency(accountingData.timeRevenue)}
+                        {formatCalculatedCurrency(accountingData.timeRevenue)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
@@ -232,39 +399,90 @@ export default function Reports() {
                         Reisekosten (abrechenbar, nur Exclusive)
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatCurrency(accountingData.travelRevenueInGross)}
+                        {showUnifiedCurrency
+                          ? formatCalculatedCurrency(accountingData.travelRevenueInGross)
+                          : renderCurrencyBadges(
+                              aggregateByCurrency(
+                                accountingData.expensesDetailed
+                                  .filter((expense) => {
+                                    if (!expense.timeEntryId) return false;
+                                    const relatedEntry = timeEntries.find(
+                                      (entry) => entry.id === expense.timeEntryId
+                                    );
+                                    if (!relatedEntry) return false;
+                                    const relatedCustomer = customers.find(
+                                      (customer) => customer.id === relatedEntry.customerId
+                                    );
+                                    return relatedCustomer?.costModel === "exclusive";
+                                  })
+                                  .map((expense) => ({
+                                    amount: expense.amount,
+                                    currency: expense.sourceCurrency,
+                                  }))
+                              )
+                            )}
                       </TableCell>
                     </TableRow>
                     <TableRow className="border-t-2">
                       <TableCell className="font-semibold">Fixkosten</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        -{formatCurrency(accountingData.totalFixedCosts)}
+                        {showUnifiedCurrency
+                          ? formatCalculatedCurrencyNegative(accountingData.totalFixedCosts)
+                          : renderCurrencyBadges(accountingData.fixedCostsByCurrency)}
                       </TableCell>
                     </TableRow>
-                    {fixedCosts.map((cost) => (
+                    {accountingData.fixedCostsDetailed.map((cost) => (
                       <TableRow key={cost.id}>
                         <TableCell className="pl-8 text-muted-foreground">{cost.category}</TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          {formatCurrency(cost.amount)}
+                          {!showUnifiedCurrency ? (
+                            formatMoney(cost.amount, cost.sourceCurrency)
+                          ) : (() => {
+                              const converted = convertAmountCents(
+                                cost.amount,
+                                cost.sourceCurrency,
+                                targetCurrency,
+                                rateMap
+                              );
+                              if (converted === null) {
+                                return (
+                                  <span className="text-amber-600">
+                                    Kurs fehlt ({cost.sourceCurrency} → {targetCurrency})
+                                  </span>
+                                );
+                              }
+                              return (
+                                <div className="flex flex-col items-end">
+                                  <span>{formatMoney(converted, targetCurrency)}</span>
+                                  {cost.sourceCurrency !== targetCurrency && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Original: {formatMoney(cost.amount, cost.sourceCurrency)}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                         </TableCell>
                       </TableRow>
                     ))}
                     <TableRow className="border-t-2">
                       <TableCell className="font-semibold">Variable Kosten (Reisen)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        -{formatCurrency(accountingData.variableCosts)}
+                        {showUnifiedCurrency
+                          ? formatCalculatedCurrencyNegative(accountingData.variableCosts)
+                          : renderCurrencyBadges(accountingData.variableCostsByCurrency)}
                       </TableCell>
                     </TableRow>
                     <TableRow className="border-t-2">
                       <TableCell className="font-semibold">ZUS (Sozialversicherung)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        -{formatCurrency(accountingData.zus)}
+                        {formatCalculatedCurrencyNegative(accountingData.zus)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-semibold">Krankenversicherung (Zdrowotna)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        -{formatCurrency(accountingData.healthInsurance)}
+                        {formatCalculatedCurrencyNegative(accountingData.healthInsurance)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
@@ -272,19 +490,19 @@ export default function Reports() {
                         Abzugsfähige Zdrowotna (Steuerbasis)
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatCurrency(accountingData.deductibleHealth)}
+                        {formatCalculatedCurrency(accountingData.deductibleHealth)}
                       </TableCell>
                     </TableRow>
                     <TableRow className="border-t-2">
                       <TableCell className="font-medium">Steuerbasis</TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(accountingData.taxBase)}
+                        {formatCalculatedCurrency(accountingData.taxBase)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-semibold">Einkommensteuer (PIT)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        -{formatCurrency(accountingData.tax)}
+                        {formatCalculatedCurrencyNegative(accountingData.tax)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
@@ -292,13 +510,27 @@ export default function Reports() {
                       <TableCell className="text-right text-muted-foreground">
                         {accountingData.calculationSource === "regime_config"
                           ? `Regime + Jahreswerte (${reportYear})`
-                          : "Legacy-Fallback"}
+                          : "Legacy-Fallback"}{" "}
+                        |{" "}
+                        {showUnifiedCurrency
+                          ? `Anzeige in ${targetCurrency}`
+                          : "Anzeige in Originalwährung (Berechnung in EUR)"}
                       </TableCell>
                     </TableRow>
+                    {accountingData.missingConversionCount > 0 && (
+                      <TableRow>
+                        <TableCell className="text-amber-700">
+                          Hinweis (Wechselkurs fehlt)
+                        </TableCell>
+                        <TableCell className="text-right text-amber-700">
+                          {accountingData.missingConversionCount} Position(en) ohne Kurs; in Berechnung als 0 angesetzt.
+                        </TableCell>
+                      </TableRow>
+                    )}
                     <TableRow className="border-t-4 bg-muted/50">
                       <TableCell className="font-bold text-lg">Nettogewinn</TableCell>
                       <TableCell className="text-right font-bold text-lg text-green-600">
-                        {formatCurrency(accountingData.netProfit)}
+                        {formatCalculatedCurrency(accountingData.netProfit)}
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -408,7 +640,7 @@ export default function Reports() {
                         <TableRow>
                           <TableCell className="font-semibold">Leistungswert</TableCell>
                           <TableCell className="text-right font-semibold">
-                            {formatCurrency(customerData.totalAmount)}
+                            {formatCalculatedCurrency(customerData.totalAmount)}
                           </TableCell>
                         </TableRow>
                         <TableRow>
@@ -416,13 +648,15 @@ export default function Reports() {
                             Arbeitsstunden: {formatHours(customerData.totalHours)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {formatCurrency(customerData.totalAmount)}
+                            {formatCalculatedCurrency(customerData.totalAmount)}
                           </TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="font-semibold">Reisekosten (gesamt)</TableCell>
                           <TableCell className="text-right font-semibold">
-                            {formatCurrency(customerData.totalExpenses)}
+                            {showUnifiedCurrency
+                              ? formatCalculatedCurrency(customerData.totalExpenses)
+                              : renderCurrencyBadges(customerData.totalExpensesByCurrency)}
                           </TableCell>
                         </TableRow>
                         <TableRow>
@@ -430,13 +664,17 @@ export default function Reports() {
                             Reisekosten (abrechenbar)
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {formatCurrency(customerData.billableExpenses)}
+                            {customerData.customer.costModel === "exclusive"
+                              ? showUnifiedCurrency
+                                ? formatCalculatedCurrency(customerData.billableExpenses)
+                                : renderCurrencyBadges(customerData.totalExpensesByCurrency)
+                              : formatMoney(0, "EUR")}
                           </TableCell>
                         </TableRow>
                         <TableRow className="border-t-4 bg-muted/50">
                           <TableCell className="font-bold text-lg">Gesamtsumme</TableCell>
                           <TableCell className="text-right font-bold text-lg">
-                            {formatCurrency(customerData.grandTotal)}
+                            {formatCalculatedCurrency(customerData.grandTotal)}
                           </TableCell>
                         </TableRow>
                       </TableBody>
@@ -467,8 +705,19 @@ export default function Reports() {
                       <TableBody>
                         {customerData.entries.map((entry) => {
                           // Calculate expenses for this entry
-                          const entryExpenses = expenses.filter(e => e.timeEntryId === entry.id);
-                          const entryExpenseTotal = entryExpenses.reduce((sum, e) => sum + e.amount, 0);
+                          const entryExpenses = customerData.customerExpensesDetailed.filter(
+                            (expense) => expense.timeEntryId === entry.id
+                          );
+                          const entryExpenseTotalEur = entryExpenses.reduce(
+                            (sum, expense) => sum + (expense.amountEur ?? 0),
+                            0
+                          );
+                          const entryExpenseByCurrency = aggregateByCurrency(
+                            entryExpenses.map((expense) => ({
+                              amount: expense.amount,
+                              currency: expense.sourceCurrency,
+                            }))
+                          );
                           
                           return (
                             <TableRow key={entry.id}>
@@ -479,8 +728,14 @@ export default function Reports() {
                               <TableCell className="capitalize">{entry.entryType}</TableCell>
                               <TableCell className="text-right">{formatHours(entry.hours)}</TableCell>
                               <TableCell className="text-right">{formatManDays(entry.manDays)}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(entry.calculatedAmount)}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(entryExpenseTotal)}</TableCell>
+                              <TableCell className="text-right">
+                                {formatCalculatedCurrency(entry.calculatedAmount)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {showUnifiedCurrency
+                                  ? formatCalculatedCurrency(entryExpenseTotalEur)
+                                  : renderCurrencyBadges(entryExpenseByCurrency)}
+                              </TableCell>
                             </TableRow>
                           );
                         })}
@@ -488,8 +743,14 @@ export default function Reports() {
                           <TableCell colSpan={3}>Gesamt</TableCell>
                           <TableCell className="text-right">{formatHours(customerData.totalHours)}</TableCell>
                           <TableCell className="text-right">{formatManDays(customerData.totalManDays)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(customerData.totalAmount)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(customerData.totalExpenses)}</TableCell>
+                          <TableCell className="text-right">
+                            {formatCalculatedCurrency(customerData.totalAmount)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {showUnifiedCurrency
+                              ? formatCalculatedCurrency(customerData.totalExpenses)
+                              : renderCurrencyBadges(customerData.totalExpensesByCurrency)}
+                          </TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
