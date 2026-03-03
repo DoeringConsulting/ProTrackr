@@ -1,5 +1,5 @@
 ALTER TABLE `customers`
-	ADD COLUMN IF NOT EXISTS `userId` int NULL;
+	ADD COLUMN `userId` int NULL;
 --> statement-breakpoint
 UPDATE `customers` c
 JOIN (
