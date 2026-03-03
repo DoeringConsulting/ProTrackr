@@ -1,6 +1,177 @@
 {
   "versions": [
     {
+      "version": "1.0.12",
+      "date": "2026-03-03",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Polnische Steuerlogik (Regime + Jahreswerte) eingeführt",
+          "description": "Neue Datenstruktur mit taxProfiles und taxConfigPl, aktualisierte Tax-Settings-UI sowie konsolidierte Berechnung über taxEnginePl/uiCalculations für Reports und Dashboard."
+        },
+        {
+          "type": "improvement",
+          "title": "Dashboard und Fixkosten für Mehrwährung erweitert",
+          "description": "Zeitraumauswahl 3/6/12 Monate im Dashboard, korrekte Mehrmonats-Auswertungen sowie native Währungsanzeige und optionale Umrechnung auf eine einheitliche Zielwährung in Fixkosten."
+        },
+        {
+          "type": "fix",
+          "title": "Wechselkurs-Anzeige korrigiert",
+          "description": "Skalierung und Spaltenbezeichnungen im Wechselkurs-Tab berichtigt, inklusive korrekter Darstellung 1 X = x PLN und 1 PLN = x X."
+        },
+        {
+          "type": "fix",
+          "title": "Währungsfehler in Berichten behoben",
+          "description": "Buchhaltungsbericht und Kundenbericht zeigen Fix-/Reisekosten jetzt korrekt in Originalwährung und unterstützen optional die einheitliche Zielwährung wie in den Einstellungen."
+        }
+      ]
+    },
+    {
+      "version": "1.0.11",
+      "date": "2026-02-15",
+      "changes": [
+        {
+          "type": "documentation",
+          "title": "Vollständige Dokumentations-Struktur erstellt",
+          "description": "DEVELOPMENT_HISTORY.md (technische Historie für LLMs), CHANGELOG.md (nutzer-freundliche Versions-Historie), ARCHITECTURE.md (High-Level-Überblick), todo.md (bereinigt und aktualisiert)"
+        },
+        {
+          "type": "improvement",
+          "title": "Dokumentation für Cursor und andere LLMs optimiert",
+          "description": "Klare Trennung zwischen technischer Dokumentation (für AI-Agents) und Business-Dokumentation (für Menschen). Alle Datei-Pfade, Code-Änderungen und Design-Entscheidungen dokumentiert."
+        }
+      ]
+    },
+    {
+      "version": "1.0.10",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Login-Problem behoben",
+          "description": "Admin-User Passwort-Hash korrigiert (bcryptjs, 10 rounds) und E-Mail-Adresse auf a.doering@doering-consulting.eu aktualisiert"
+        },
+        {
+          "type": "feature",
+          "title": "Mandanten-Verwaltung implementiert",
+          "description": "3-Felder-Login (Mandant, E-Mail, Passwort) mit Mandanten-Tabelle, mandantId in users-Tabelle und Mandanten-Validierung in Auth-Strategie. Erster Mandant: DC001 - Döring Consulting"
+        },
+        {
+          "type": "security",
+          "title": "Multi-Mandanten-Fähigkeit",
+          "description": "Klare Trennung von Daten verschiedener Mandanten durch mandantId in Session und Context. Sicherere Authentifizierung durch zusätzlichen Faktor."
+        },
+        {
+          "type": "improvement",
+          "title": "Tests angepasst",
+          "description": "Alle 28 Tests bestehen mit Mock-User inkl. mandantId"
+        }
+      ]
+    },
+    {
+      "version": "1.0.9",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Authentifizierung mit Passport.js",
+          "description": "Vollständiges Login-System mit E-Mail/Passwort, Session-Management und rollenbasierter Zugriffskontrolle. Admin-Login: admin@doering-consulting.eu / ChangeMe123!"
+        },
+        {
+          "type": "security",
+          "title": "Zugriffskontrolle aktiviert",
+          "description": "Alle geschäftskritischen Routen sind jetzt geschützt (protectedProcedure). Scheduler-Endpoints mit API-Key abgesichert."
+        },
+        {
+          "type": "improvement",
+          "title": "Auth-Guard mit Retry-Schutz",
+          "description": "Verhindert Login-Schleife durch Race Condition beim Cookie-Setzen (800ms Retry-Logik)"
+        },
+        {
+          "type": "fix",
+          "title": "Tests angepasst",
+          "description": "Alle 28 Tests bestehen mit Mock-User für Auth-Context"
+        }
+      ]
+    },
+    {
+      "version": "1.0.8",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Update-System Timeout & Doppel-Reload behoben",
+          "description": "Service Worker skipWaiting-Timing korrigiert, iOS Safari controllerchange-Abhängigkeit entfernt, automatischer Reload deaktiviert (User kontrolliert Zeitpunkt)"
+        }
+      ]
+    },
+    {
+      "version": "1.0.7",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Reisekosten Timezone-Problem behoben",
+          "description": "Reisekosteneinträge werden jetzt am korrekten Tag gespeichert (Timezone-Konvertierung korrigiert)"
+        }
+      ]
+    },
+    {
+      "version": "1.0.6",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Version Update",
+          "description": "Neue Version mit Verbesserungen und Fehlerbehebungen"
+        }
+      ]
+    },
+    {
+      "version": "1.0.5",
+      "date": "2026-02-14",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Version Update",
+          "description": "Neue Version mit Verbesserungen und Fehlerbehebungen"
+        }
+      ]
+    },
+    {
+      "version": "1.0.4",
+      "date": "2026-02-10",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Version Update",
+          "description": "Neue Version mit Verbesserungen und Fehlerbehebungen"
+        }
+      ]
+    },
+    {
+      "version": "1.0.3",
+      "date": "2026-02-10",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Version Update",
+          "description": "Neue Version mit Verbesserungen und Fehlerbehebungen"
+        }
+      ]
+    },
+    {
+      "version": "1.0.2",
+      "date": "2026-02-10",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Version Update",
+          "description": "Neue Version mit Verbesserungen und Fehlerbehebungen"
+        }
+      ]
+    },
+    {
       "version": "1.0.1",
       "date": "2026-02-10",
       "changes": [

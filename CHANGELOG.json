@@ -1,6 +1,32 @@
 {
   "versions": [
     {
+      "version": "1.0.12",
+      "date": "2026-03-03",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Polnische Steuerlogik (Regime + Jahreswerte) eingeführt",
+          "description": "Neue Datenstruktur mit taxProfiles und taxConfigPl, aktualisierte Tax-Settings-UI sowie konsolidierte Berechnung über taxEnginePl/uiCalculations für Reports und Dashboard."
+        },
+        {
+          "type": "improvement",
+          "title": "Dashboard und Fixkosten für Mehrwährung erweitert",
+          "description": "Zeitraumauswahl 3/6/12 Monate im Dashboard, korrekte Mehrmonats-Auswertungen sowie native Währungsanzeige und optionale Umrechnung auf eine einheitliche Zielwährung in Fixkosten."
+        },
+        {
+          "type": "fix",
+          "title": "Wechselkurs-Anzeige korrigiert",
+          "description": "Skalierung und Spaltenbezeichnungen im Wechselkurs-Tab berichtigt, inklusive korrekter Darstellung 1 X = x PLN und 1 PLN = x X."
+        },
+        {
+          "type": "fix",
+          "title": "Währungsfehler in Berichten behoben",
+          "description": "Buchhaltungsbericht und Kundenbericht zeigen Fix-/Reisekosten jetzt korrekt in Originalwährung und unterstützen optional die einheitliche Zielwährung wie in den Einstellungen."
+        }
+      ]
+    },
+    {
       "version": "1.0.11",
       "date": "2026-02-15",
       "changes": [
