@@ -4,9 +4,9 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
 
 ## Letzte Aktualisierung
 
-- UTC: 2026-03-02 22:34:05Z
+- UTC: 2026-03-03 09:38:07Z
 - Branch: `ProTrackr_developing_path`
-- Commit: `284a84dc276f72f9be6e11ed5ea7c14f18c65b0b` (`284a84d`)
+- Commit: `a7a9a9f09190d5f907b07f3e9ea6c0d6546486f2` (`a7a9a9f`)
 - Remote: `origin/ProTrackr_developing_path`
 
 ## Zuletzt abgeschlossene Arbeit
@@ -60,6 +60,12 @@ Zweck: Diese Datei fixiert den Entwicklungsstand, damit nach einem Cursor-Neusta
    - Umsatzentwicklung, Kostenverteilung und Projekt-Vergleich ziehen immer denselben Zeitraum.
    - Zeitraum-Labels in den Chart-Karten dynamisch angepasst.
    - Test erweitert: Vormonat (u. a. Februar) wird in der Umsatzreihe verifiziert.
+11. Fixkosten-Waehrungsdarstellung und Konvertierungsmodus umgesetzt:
+   - Betragsanzeige verwendet jetzt die hinterlegte Waehrung pro Position (kein erzwungenes EUR mehr).
+   - Summen werden ohne Konvertierung pro Waehrung gruppiert angezeigt.
+   - Neue optionale Umschaltung: "Einheitliche Waehrung" + Zielwaehrung (Dropdown).
+   - Bei aktiver Umschaltung werden Positionen und Summe in Zielwaehrung dargestellt (auf Basis hinterlegter Wechselkurse).
+   - Hinweis bei fehlenden Kursen pro Position/Summe.
 
 ## Nutzer-Praeferenzen (SEHR WICHTIG)
 
