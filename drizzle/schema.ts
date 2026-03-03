@@ -55,6 +55,7 @@ export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
  */
 export const customers = mysqlTable("customers", {
   id: int("id").autoincrement().primaryKey(),
+  userId: int("userId"), // owner (creator/backfilled from first related time entry)
   provider: varchar("provider", { length: 255 }).notNull(),
   mandatenNr: varchar("mandatenNr", { length: 50 }).notNull().unique(),
   projectName: varchar("projectName", { length: 255 }).notNull(),

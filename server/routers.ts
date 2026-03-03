@@ -37,18 +37,50 @@ function canAssignRoleAsMandantAdmin(role: string): boolean {
   return role === "user" || role === "admin" || role === "mandant_admin";
 }
 
+async function canAccessCustomerOwnedData(
+  actor: { id: number; mandantId: number | null; role: string },
+  customer: { userId: number | null }
+): Promise<boolean> {
+  if (isWebAppAdmin(actor)) return false;
+  if (!customer.userId) return false;
+  return await canAccessUserOwnedData(actor, customer.userId);
+}
+
 export const appRouter = router({
   invoiceNumbers: router({
     generate: protectedProcedure
       .input(z.object({ customerId: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        const { getCustomerById } = await import("./db");
+        const customer = await getCustomerById(input.customerId);
+        if (!customer) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+        }
+        if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+        }
         const invoiceNumber = await generateInvoiceNumber(input.customerId);
         return { invoiceNumber };
       }),
     list: protectedProcedure
       .input(z.object({ year: z.number().optional() }))
-      .query(async ({ input }) => {
-        return await getInvoiceNumbers(input.year);
+      .query(async ({ ctx, input }) => {
+        const { getCustomerById } = await import("./db");
+        const invoices = await getInvoiceNumbers(input.year);
+
+        if (isWebAppAdmin(ctx.user)) {
+          return [];
+        }
+
+        const result = [];
+        for (const invoice of invoices) {
+          const customer = await getCustomerById(invoice.customerId);
+          if (!customer) continue;
+          if (await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null })) {
+            result.push(invoice);
+          }
+        }
+        return result;
       }),
   }),
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -56,15 +88,28 @@ export const appRouter = router({
 
   // Customer management
   customers: router({
-    list: protectedProcedure.query(async () => {
+    list: protectedProcedure.query(async ({ ctx }) => {
       const { getCustomers } = await import("./db");
-      return await getCustomers();
+      if (isWebAppAdmin(ctx.user)) return [];
+      const customers = await getCustomers();
+      const result = [];
+      for (const customer of customers) {
+        if (await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null })) {
+          result.push(customer);
+        }
+      }
+      return result;
     }),
     getById: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).query(async ({ input }) => {
+    }).query(async ({ ctx, input }) => {
       const { getCustomerById } = await import("./db");
-      return await getCustomerById(input.id);
+      const customer = await getCustomerById(input.id);
+      if (!customer) return null;
+      if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+      }
+      return customer;
     }),
     create: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
@@ -87,9 +132,12 @@ export const appRouter = router({
         country: z.string().optional(),
         vatId: z.string().optional(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { createCustomer } = await import("./db");
-      return await createCustomer(input);
+      return await createCustomer({
+        ...input,
+        userId: ctx.user.id,
+      });
     }),
     update: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
@@ -113,30 +161,58 @@ export const appRouter = router({
         country: z.string().optional(),
         vatId: z.string().optional(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      const { updateCustomer } = await import("./db");
+      const { getCustomerById, updateCustomer } = await import("./db");
+      const customer = await getCustomerById(id);
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+      }
+      if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+      }
       await updateCustomer(id, data);
       return { success: true };
     }),
     delete: mandantAdminProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { deleteCustomer } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { deleteCustomer, getCustomerById } = await import("./db");
+      const customer = await getCustomerById(input.id);
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+      }
+      if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+      }
       await deleteCustomer(input.id);
       return { success: true };
     }),
     archive: mandantAdminProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { archiveCustomer } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { archiveCustomer, getCustomerById } = await import("./db");
+      const customer = await getCustomerById(input.id);
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+      }
+      if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+      }
       await archiveCustomer(input.id);
       return { success: true };
     }),
     unarchive: mandantAdminProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { unarchiveCustomer } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { getCustomerById, unarchiveCustomer } = await import("./db");
+      const customer = await getCustomerById(input.id);
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+      }
+      if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+      }
       await unarchiveCustomer(input.id);
       return { success: true };
     }),
