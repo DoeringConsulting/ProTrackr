@@ -1,4 +1,4 @@
-import { and, eq, desc, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { invoiceNumbers, customers } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -163,6 +163,14 @@ export async function getFixedCosts() {
   return await db.select().from(fixedCosts);
 }
 
+export async function getFixedCostById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { fixedCosts } = await import("../drizzle/schema");
+  const result = await db.select().from(fixedCosts).where(eq(fixedCosts.id, id)).limit(1);
+  return result[0] || null;
+}
+
 export async function createFixedCost(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -275,6 +283,14 @@ export async function getExpensesByTimeEntry(timeEntryId: number) {
   return await db.select().from(expenses).where(eq(expenses.timeEntryId, timeEntryId));
 }
 
+export async function getExpenseById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { expenses } = await import("../drizzle/schema");
+  const result = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+  return result[0] || null;
+}
+
 export async function getExpensesByCustomer(userId: number, customerId: number, startDate?: Date, endDate?: Date) {
   const db = await getDb();
   if (!db) return [];
@@ -333,35 +349,63 @@ export async function createExchangeRate(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { exchangeRates } = await import("../drizzle/schema");
+  const userId = typeof data.userId === "number" ? data.userId : 0;
+  const payload = { ...data, userId };
   
   // Check if rate already exists for this date and currency pair
-  const existing = await getExchangeRateByDate(data.currencyPair, data.date);
+  const existing = await getExchangeRateByDate(data.currencyPair, data.date, userId);
   
   if (existing) {
     // Update existing rate
     await db.update(exchangeRates)
-      .set(data)
+      .set(payload)
       .where(and(
         eq(exchangeRates.currencyPair, data.currencyPair),
-        eq(exchangeRates.date, data.date)
+        eq(exchangeRates.date, data.date),
+        eq(exchangeRates.userId, userId)
       ));
   } else {
     // Insert new rate
-    await db.insert(exchangeRates).values(data);
+    await db.insert(exchangeRates).values(payload);
   }
 }
 
-export async function getExchangeRates(filters?: { startDate?: Date; endDate?: Date; currency?: string }) {
+export async function getExchangeRates(filters?: {
+  startDate?: Date;
+  endDate?: Date;
+  currency?: string;
+  userId?: number;
+}) {
   const db = await getDb();
   if (!db) return [];
   const { exchangeRates } = await import("../drizzle/schema");
-  
-  // For now, return all exchange rates
-  // TODO: Add filtering logic based on filters parameter
-  return await db.select().from(exchangeRates).orderBy(desc(exchangeRates.date));
+
+  const conditions = [];
+
+  if (typeof filters?.userId === "number") {
+    conditions.push(or(eq(exchangeRates.userId, 0), eq(exchangeRates.userId, filters.userId)));
+  } else {
+    conditions.push(eq(exchangeRates.userId, 0));
+  }
+
+  if (filters?.startDate) {
+    conditions.push(sql`DATE(${exchangeRates.date}) >= ${filters.startDate.toISOString().split("T")[0]}`);
+  }
+  if (filters?.endDate) {
+    conditions.push(sql`DATE(${exchangeRates.date}) <= ${filters.endDate.toISOString().split("T")[0]}`);
+  }
+  if (filters?.currency) {
+    conditions.push(sql`${exchangeRates.currencyPair} LIKE ${`${filters.currency.toUpperCase()}/%`}`);
+  }
+
+  return await db
+    .select()
+    .from(exchangeRates)
+    .where(and(...conditions))
+    .orderBy(desc(exchangeRates.date));
 }
 
-export async function getExchangeRateByDate(currencyPair: string, date: Date) {
+export async function getExchangeRateByDate(currencyPair: string, date: Date, userId: number = 0) {
   const db = await getDb();
   if (!db) return null;
   const { exchangeRates } = await import("../drizzle/schema");
@@ -371,7 +415,8 @@ export async function getExchangeRateByDate(currencyPair: string, date: Date) {
     .from(exchangeRates)
     .where(and(
       eq(exchangeRates.currencyPair, currencyPair),
-      eq(exchangeRates.date, date)
+      eq(exchangeRates.date, date),
+      eq(exchangeRates.userId, userId)
     ))
     .limit(1);
   
@@ -435,7 +480,10 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
     .where(and(...timeEntryConditions));
   
   // Build where conditions for standalone expenses
-  const standaloneConditions = [sql`${expenses.timeEntryId} IS NULL`];
+  const standaloneConditions = [
+    sql`${expenses.timeEntryId} IS NULL`,
+    eq(expenses.userId, userId),
+  ];
   
   if (startDate) {
     standaloneConditions.push(sql`DATE(${expenses.date}) >= ${startDate}`);
@@ -521,22 +569,25 @@ export async function upsertExchangeRate(data: any) {
   if (!db) throw new Error("Database not available");
   const { exchangeRates } = await import("../drizzle/schema");
   const isManual = String(data.source || "").toLowerCase() === "manual" ? 1 : 0;
+  const userId = typeof data.userId === "number" ? data.userId : 0;
+  const payload = { ...data, userId };
   
   // Check if rate exists for this date and currency pair
-  const existing = await getExchangeRateByDate(data.currencyPair, data.date);
+  const existing = await getExchangeRateByDate(data.currencyPair, data.date, userId);
   
   if (existing) {
     await db.update(exchangeRates)
-      .set({ ...data, isManual })
+      .set({ ...payload, isManual })
       .where(and(
         eq(exchangeRates.currencyPair, data.currencyPair),
-        eq(exchangeRates.date, data.date)
+        eq(exchangeRates.date, data.date),
+        eq(exchangeRates.userId, userId)
       ));
   } else {
-    await db.insert(exchangeRates).values({ ...data, isManual });
+    await db.insert(exchangeRates).values({ ...payload, isManual });
   }
   
-  return await getExchangeRateByDate(data.currencyPair, data.date);
+  return await getExchangeRateByDate(data.currencyPair, data.date, userId);
 }
 
 export async function deleteExchangeRate(currencyPair: string, date: Date) {
@@ -629,12 +680,62 @@ export async function findUserById(id: number) {
   return result[0] ?? null;
 }
 
+export async function createPasswordResetToken(data: {
+  userId: number;
+  tokenHash: string;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { passwordResetTokens } = await import("../drizzle/schema");
+  await db.insert(passwordResetTokens).values({
+    userId: data.userId,
+    tokenHash: data.tokenHash,
+    expiresAt: data.expiresAt,
+  });
+}
+
+export async function getValidPasswordResetToken(tokenHash: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const { passwordResetTokens } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(passwordResetTokens)
+    .where(
+      and(
+        eq(passwordResetTokens.tokenHash, tokenHash),
+        isNull(passwordResetTokens.usedAt),
+        gt(passwordResetTokens.expiresAt, new Date())
+      )
+    )
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function consumePasswordResetToken(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { passwordResetTokens } = await import("../drizzle/schema");
+  await db
+    .update(passwordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(eq(passwordResetTokens.id, id));
+}
+
+export async function updateUserPasswordHash(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}
+
 export async function createUser(data: {
   mandantId: number;
   email: string;
   passwordHash: string;
   displayName?: string | null;
-  role?: "user" | "admin";
+  role?: "user" | "admin" | "mandant_admin" | "webapp_admin";
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -644,8 +745,61 @@ export async function createUser(data: {
     email: data.email,
     passwordHash: data.passwordHash,
     displayName: data.displayName ?? null,
-    role: data.role ?? "user",
+    role: (data.role ?? "user") as any,
   });
+}
+
+export async function listUsersGlobal() {
+  const db = await getDb();
+  if (!db) return [];
+  const { users } = await import("../drizzle/schema");
+  return await db
+    .select({
+      id: users.id,
+      mandantId: users.mandantId,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      isActive: sql<number>`CASE WHEN ${users.passwordHash} IS NULL THEN 0 ELSE 1 END`,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    })
+    .from(users)
+    .orderBy(desc(users.id));
+}
+
+export async function listUsersByMandantId(mandantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { users } = await import("../drizzle/schema");
+  return await db
+    .select({
+      id: users.id,
+      mandantId: users.mandantId,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      isActive: sql<number>`CASE WHEN ${users.passwordHash} IS NULL THEN 0 ELSE 1 END`,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    })
+    .from(users)
+    .where(eq(users.mandantId, mandantId))
+    .orderBy(desc(users.id));
+}
+
+export async function suspendUserById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db.update(users).set({ passwordHash: null }).where(eq(users.id, id));
+}
+
+export async function deleteUserById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db.delete(users).where(eq(users.id, id));
 }
 
 // ─── END AUTH ─────────────────────────────────────────────────────────

@@ -1,37 +1,38 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import { useLocation } from "wouter";
 
-export default function Login() {
+export default function ForgotPassword() {
   const [mandant, setMandant] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [, navigate] = useLocation();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ mandant, email, password }),
+        body: JSON.stringify({ mandant, email }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Login fehlgeschlagen");
+        toast.error(data.error ?? "Anfrage fehlgeschlagen");
         return;
       }
-      toast.success(`Willkommen, ${data.user.displayName ?? data.user.email}!`);
-      navigate("/");
-    } catch (err) {
-      toast.error("Verbindungsfehler – bitte versuchen Sie es erneut");
+      toast.success(
+        data.message ??
+          "Wenn ein Konto existiert, wurde ein Link zum Zuruecksetzen versendet."
+      );
+      navigate("/login");
+    } catch {
+      toast.error("Verbindungsfehler - bitte erneut versuchen");
     } finally {
       setIsLoading(false);
     }
@@ -41,21 +42,21 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Döring Consulting</CardTitle>
-          <CardDescription>Projekt & Abrechnungsmanagement</CardDescription>
+          <CardTitle className="text-2xl">Passwort vergessen</CardTitle>
+          <CardDescription>
+            Wir senden Ihnen einen Link zum Zuruecksetzen per E-Mail
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="mandant">Mandant</Label>
               <Input
                 id="mandant"
-                type="text"
-                placeholder="Mandanten-Nr. oder Name"
                 value={mandant}
                 onChange={(e) => setMandant(e.target.value)}
+                placeholder="Mandanten-Nr. oder Name"
                 required
-                autoComplete="organization"
               />
             </div>
             <div className="space-y-2">
@@ -63,34 +64,22 @@ export default function Login() {
               <Input
                 id="email"
                 type="email"
-                placeholder="ihre@email.de"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="ihre@email.de"
                 required
-                autoComplete="email"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Passwort</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Anmelden..." : "Anmelden"}
+              {isLoading ? "Sende Link..." : "Reset-Link senden"}
             </Button>
             <Button
               type="button"
               variant="ghost"
               className="w-full"
-              onClick={() => navigate("/forgot-password")}
+              onClick={() => navigate("/login")}
             >
-              Passwort vergessen?
+              Zurueck zum Login
             </Button>
           </form>
         </CardContent>
@@ -98,3 +87,4 @@ export default function Login() {
     </div>
   );
 }
+

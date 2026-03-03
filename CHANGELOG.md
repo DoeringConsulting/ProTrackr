@@ -7,6 +7,34 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.12] - 2026-03-03
+
+### Hinzugefügt
+
+**Polnische Steuerengine (Variante B)** - Neue strukturierte Berechnungsbasis mit `taxProfiles` (Regime/Profile je Nutzer) und `taxConfigPl` (Jahreswerte), inkl. überarbeiteter Steuer-Einstellungen und konsolidierter Berechnungslogik für Reports/Dashboard.
+
+### Geändert
+
+**Dashboard-Zeitraum erweitert** - Diagramme und Kennzahlen unterstützen jetzt konsistent 3/6/12 Monate inklusive korrekter Mehrmonatsdarstellung.
+
+**Fixkosten-Mehrwährung verbessert** - Beträge werden in der hinterlegten Originalwährung angezeigt; optional können alle Werte auf eine einheitliche Zielwährung umgerechnet werden.
+
+### Behoben
+
+**Wechselkurs-Tabelle korrigiert** - Skalierung und Beschriftung der Spalten wurden berichtigt (`1 X = x PLN` und `1 PLN = x X`), inklusive korrekter Wertebasis.
+
+**Berichte-Währungsfehler behoben** - Buchhaltungsbericht und Kundenbericht verwenden jetzt dieselbe Mehrwährungslogik wie Fixkosten in den Einstellungen (Originalwährung + optionale einheitliche Zielwährung).
+
+---
+
+## [1.0.11] - 2026-02-15
+
+### Geändert
+
+**Dokumentationsstruktur ausgebaut** - Technische Historie, Changelog und Architektur-Dokumentation wurden konsistent getrennt und erweitert.
+
+---
+
 ## [1.0.10] - 2026-02-14
 
 ### Hinzugefügt

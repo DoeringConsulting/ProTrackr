@@ -8,6 +8,7 @@ const projectRoot = join(__dirname, '..');
 
 // Read current version from CHANGELOG.json
 const changelogPath = join(projectRoot, 'CHANGELOG.json');
+const publicChangelogPath = join(projectRoot, 'client/public/CHANGELOG.json');
 const changelog = JSON.parse(readFileSync(changelogPath, 'utf-8'));
 const currentVersion = changelog.versions[0].version;
 
@@ -62,6 +63,10 @@ changelog.versions.unshift({
 });
 writeFileSync(changelogPath, JSON.stringify(changelog, null, 2));
 console.log(`✅ Updated CHANGELOG.json`);
+
+// Keep public changelog in sync with the canonical root file
+writeFileSync(publicChangelogPath, JSON.stringify(changelog, null, 2));
+console.log(`✅ Synced client/public/CHANGELOG.json`);
 
 console.log(`\n🎉 Version successfully incremented to ${newVersion}`);
 console.log(`📝 Don't forget to update CHANGELOG.json with actual changes!`);

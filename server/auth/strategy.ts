@@ -55,6 +55,7 @@ passport.deserializeUser(async (id: number, done) => {
     if (!user) return done(null, false);
     done(null, {
       id: user.id,
+      mandantId: user.mandantId,
       email: user.email,
       displayName: user.displayName,
       role: user.role,

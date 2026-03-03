@@ -25,6 +25,8 @@ import TaxSettings from "./pages/TaxSettings";
 
 import ProjectDetail from "./pages/ProjectDetail";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function Router() {
   return (
@@ -32,6 +34,8 @@ function Router() {
 
       {/* Auth routes - without DashboardLayout */}
       <Route path="/login" component={Login} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
 
       {/* App routes - with DashboardLayout */}
       <Route path="/" component={Dashboard} />

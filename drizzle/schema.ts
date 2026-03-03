@@ -33,10 +33,29 @@ export type Mandant = typeof mandanten.$inferSelect;
 export type InsertMandant = typeof mandanten.$inferInsert;
 
 /**
+ * Password reset tokens - one-time tokens for secure password recovery
+ */
+export const passwordResetTokens = mysqlTable("passwordResetTokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tokenHash: varchar("tokenHash", { length: 128 }).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tokenHashUnique: uniqueIndex("password_reset_tokens_hash_unique").on(table.tokenHash),
+  userIdIdx: index("password_reset_tokens_user_idx").on(table.userId),
+}));
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+/**
  * Customers table - stores client master data
  */
 export const customers = mysqlTable("customers", {
   id: int("id").autoincrement().primaryKey(),
+  userId: int("userId"), // owner (creator/backfilled from first related time entry)
   provider: varchar("provider", { length: 255 }).notNull(),
   mandatenNr: varchar("mandatenNr", { length: 50 }).notNull().unique(),
   projectName: varchar("projectName", { length: 255 }).notNull(),
@@ -109,6 +128,7 @@ export type InsertTimeEntry = typeof timeEntries.$inferInsert;
 export const expenses = mysqlTable("expenses", {
   id: int("id").autoincrement().primaryKey(),
   timeEntryId: int("timeEntryId"),
+  userId: int("userId"), // owner for standalone expenses (and optional duplicate for linked)
   date: timestamp("date").notNull(), // Direct date for standalone expenses
   category: mysqlEnum("category", [
     "car",           // Mietwagen
@@ -175,13 +195,14 @@ export const exchangeRates = mysqlTable("exchangeRates", {
   id: int("id").autoincrement().primaryKey(),
   date: timestamp("date").notNull(),
   currencyPair: varchar("currencyPair", { length: 10 }).notNull().default("EUR/PLN"),
+  userId: int("userId").notNull().default(0), // 0 = global/NBP, >0 = user-specific manual
   rate: int("rate").notNull(), // stored as ten-thousandths (e.g., 42369 = 4.2369)
   source: varchar("source", { length: 50 }).notNull().default("NBP"),
   isManual: int("isManual").default(0).notNull(), // 0 = auto, 1 = manual override
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
-  // Unique constraint on date + currencyPair combination to allow multiple currencies per date
-  dateAndCurrencyUnique: uniqueIndex("date_currency_unique").on(table.date, table.currencyPair),
+  // Unique per date+pair+scope (global scope = userId 0, user scope = userId > 0)
+  dateCurrencyUserUnique: uniqueIndex("date_currency_user_unique").on(table.date, table.currencyPair, table.userId),
 }));
 
 export type ExchangeRate = typeof exchangeRates.$inferSelect;
