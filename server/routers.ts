@@ -984,6 +984,7 @@ export const appRouter = router({
 
       if (!profile) {
         return {
+          taxModuleEnabled: true,
           taxForm: "liniowy_19" as const,
           zusRegime: "pelny_zus" as const,
           choroboweEnabled: false,
@@ -996,12 +997,14 @@ export const appRouter = router({
 
       return {
         ...profile,
+        taxModuleEnabled: profile.taxModuleEnabled === 1,
         choroboweEnabled: profile.choroboweEnabled === 1,
         fpFsEnabled: profile.fpFsEnabled === 1,
       };
     }),
     upsertProfile: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
+        taxModuleEnabled: z.boolean(),
         taxForm: z.enum(["liniowy_19"]).default("liniowy_19"),
         zusRegime: z.enum(["ulga_na_start", "preferencyjny_zus", "maly_zus_plus", "pelny_zus"]),
         choroboweEnabled: z.boolean(),
@@ -1014,6 +1017,7 @@ export const appRouter = router({
       const { upsertTaxProfile } = await import("./db");
       const profile = await upsertTaxProfile(ctx.user.id, {
         ...input,
+        taxModuleEnabled: input.taxModuleEnabled ? 1 : 0,
         choroboweEnabled: input.choroboweEnabled ? 1 : 0,
         fpFsEnabled: input.fpFsEnabled ? 1 : 0,
       });
@@ -1022,6 +1026,7 @@ export const appRouter = router({
 
       return {
         ...profile,
+        taxModuleEnabled: profile.taxModuleEnabled === 1,
         choroboweEnabled: profile.choroboweEnabled === 1,
         fpFsEnabled: profile.fpFsEnabled === 1,
       };

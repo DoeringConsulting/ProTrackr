@@ -30,6 +30,7 @@ export default function TaxesTab() {
   // Profile state
   const [taxForm, setTaxForm] = useState<"liniowy_19">("liniowy_19");
   const [zusRegime, setZusRegime] = useState<"ulga_na_start" | "preferencyjny_zus" | "maly_zus_plus" | "pelny_zus">("pelny_zus");
+  const [taxModuleEnabled, setTaxModuleEnabled] = useState(true);
   const [choroboweEnabled, setChoroboweEnabled] = useState(false);
   const [fpFsEnabled, setFpFsEnabled] = useState(true);
   const [wypadkowaRate, setWypadkowaRate] = useState("1.67");
@@ -51,6 +52,7 @@ export default function TaxesTab() {
 
   useEffect(() => {
     if (!profile) return;
+    setTaxModuleEnabled(profile.taxModuleEnabled ?? true);
     setTaxForm(profile.taxForm);
     setZusRegime(profile.zusRegime);
     setChoroboweEnabled(profile.choroboweEnabled);
@@ -110,6 +112,7 @@ export default function TaxesTab() {
 
     try {
       await upsertProfileMutation.mutateAsync({
+        taxModuleEnabled,
         taxForm,
         zusRegime,
         choroboweEnabled,
@@ -155,12 +158,28 @@ export default function TaxesTab() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Steuern (PL) – Regime + Jahreswerte</h2>
-        <p className="text-muted-foreground">
-          Struktur B: tax_profile + tax_config_pl[year] für saubere und zukunftssichere Berechnungen.
-        </p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Steuern (PL) – Regime + Jahreswerte</h2>
+          <p className="text-muted-foreground">
+            Struktur B: tax_profile + tax_config_pl[year] für saubere und zukunftssichere Berechnungen.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant={taxModuleEnabled ? "default" : "outline"}
+          onClick={() => setTaxModuleEnabled((prev) => !prev)}
+          className="md:mt-1"
+        >
+          {taxModuleEnabled ? "Modul % Steuern: Aktiv" : "Modul % Steuern: Deaktiviert"}
+        </Button>
       </div>
+
+      {!taxModuleEnabled && (
+        <p className="text-sm text-amber-600">
+          Das Modul „% Steuern“ ist deaktiviert. Alle Berechnungen werden ohne ZUS/Krankenversicherung/Steuer durchgeführt.
+        </p>
+      )}
 
       <Card>
         <CardHeader>

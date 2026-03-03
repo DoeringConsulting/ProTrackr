@@ -387,6 +387,7 @@ export default function Dashboard() {
       endDate: rangeEnd,
       profile: taxProfile
         ? {
+            taxModuleEnabled: taxProfile.taxModuleEnabled,
             taxForm: taxProfile.taxForm,
             zusRegime: taxProfile.zusRegime,
             choroboweEnabled: taxProfile.choroboweEnabled,

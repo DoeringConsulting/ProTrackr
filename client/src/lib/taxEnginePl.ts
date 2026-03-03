@@ -1,6 +1,7 @@
 type ZusRegime = "ulga_na_start" | "preferencyjny_zus" | "maly_zus_plus" | "pelny_zus";
 
 export type TaxProfilePl = {
+  taxModuleEnabled?: boolean;
   taxForm: "liniowy_19";
   zusRegime: ZusRegime;
   choroboweEnabled: boolean;
@@ -170,6 +171,23 @@ export function calculatePolishTaxResult(input: {
   legacySettings?: LegacyTaxSettings | null;
 }): TaxCalculationResult {
   const { profile, config } = input;
+
+  if (profile?.taxModuleEnabled === false) {
+    const taxBase = Math.max(
+      0,
+      input.revenueCents - input.fixedCostsCents - input.variableCostsCents
+    );
+    return {
+      zus: 0,
+      healthInsurance: 0,
+      taxBase,
+      tax: 0,
+      netProfit: input.revenueCents - input.fixedCostsCents - input.variableCostsCents,
+      deductibleHealth: 0,
+      source: profile && config ? "regime_config" : "legacy",
+    };
+  }
+
   if (profile && config) {
     return calculateWithRegimeAndConfig({
       revenueCents: input.revenueCents,
