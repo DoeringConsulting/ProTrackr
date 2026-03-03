@@ -299,7 +299,7 @@ export default function Dashboard() {
 
     const currencySet = new Set<string>();
     for (const project of sorted) {
-      for (const currency of project.byCurrency.keys()) {
+      for (const currency of Array.from(project.byCurrency.keys())) {
         currencySet.add(currency);
       }
     }
