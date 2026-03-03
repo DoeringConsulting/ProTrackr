@@ -30,6 +30,12 @@ const CURRENCIES = [
   { code: "USD", name: "US-Dollar" },
 ];
 
+function normalizeStoredRate(rawRate: number) {
+  // Rates are stored as ten-thousandths in DB (e.g. 4.2369 => 42369).
+  // Keep backward compatibility in case old rows are already decimal.
+  return rawRate > 100 ? rawRate / 10000 : rawRate;
+}
+
 export default function ExchangeRatesTab() {
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
   const [manualRate, setManualRate] = useState("");
@@ -180,7 +186,7 @@ export default function ExchangeRatesTab() {
             Wechselkurs-Historie
           </CardTitle>
           <CardDescription>
-            Alle gespeicherten Wechselkurse (Basis: 1,0000 PLN = X EUR/USD/CHF/GBP)
+            Alle gespeicherten Wechselkurse (Darstellung: 1 PLN = x X und 1 X = x PLN)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -242,27 +248,28 @@ export default function ExchangeRatesTab() {
                   <TableRow>
                     <TableHead>Datum</TableHead>
                     <TableHead>Währungspaar</TableHead>
-                    <TableHead className="text-right">Kurs (1 PLN = X)</TableHead>
-                    <TableHead className="text-right">Kurs (X = 1 PLN)</TableHead>
+                    <TableHead className="text-right">Kurs (1 PLN = x X)</TableHead>
+                    <TableHead className="text-right">Kurs (1 X = x PLN)</TableHead>
                     <TableHead>Quelle</TableHead>
                     <TableHead>Manuell</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {exchangeRates.map((rate: any) => {
-                    // Convert rate to "1 PLN = X EUR" format
-                    const plnToForeign = 1 / rate.rate;
-                    const foreignToPln = rate.rate;
+                    const [baseCurrency] = String(rate.currencyPair || "").split("/");
+                    const normalizedRate = normalizeStoredRate(rate.rate);
+                    const plnToForeign = normalizedRate > 0 ? 1 / normalizedRate : 0;
+                    const foreignToPln = normalizedRate;
                     
                     return (
                       <TableRow key={rate.id}>
                         <TableCell>{new Date(rate.date).toLocaleDateString('de-DE')}</TableCell>
                         <TableCell className="font-medium">{rate.currencyPair}</TableCell>
                         <TableCell className="text-right font-mono">
-                          {plnToForeign.toFixed(4)}
+                          {plnToForeign.toFixed(4)} {baseCurrency}
                         </TableCell>
                         <TableCell className="text-right font-mono">
-                          {foreignToPln.toFixed(4)}
+                          {foreignToPln.toFixed(4)} PLN
                         </TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${

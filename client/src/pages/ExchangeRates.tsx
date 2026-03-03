@@ -18,6 +18,10 @@ const CURRENCIES = [
   { code: "GBP", name: "Britisches Pfund" },
 ];
 
+function normalizeStoredRate(rawRate: number) {
+  return rawRate > 100 ? rawRate / 10000 : rawRate;
+}
+
 export default function ExchangeRates() {
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
   const [manualRate, setManualRate] = useState("");
@@ -254,7 +258,7 @@ export default function ExchangeRates() {
                   <TableRow key={rate.id}>
                     <TableCell>{new Date(rate.date).toLocaleDateString("de-DE")}</TableCell>
                     <TableCell>{rate.currencyPair}</TableCell>
-                    <TableCell>{rate.rate.toFixed(4)}</TableCell>
+                    <TableCell>{normalizeStoredRate(rate.rate).toFixed(4)}</TableCell>
                     <TableCell>
                       <span className={`text-xs px-2 py-1 rounded ${
                         rate.source === "manual" 

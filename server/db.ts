@@ -520,19 +520,20 @@ export async function upsertExchangeRate(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { exchangeRates } = await import("../drizzle/schema");
+  const isManual = String(data.source || "").toLowerCase() === "manual" ? 1 : 0;
   
   // Check if rate exists for this date and currency pair
   const existing = await getExchangeRateByDate(data.currencyPair, data.date);
   
   if (existing) {
     await db.update(exchangeRates)
-      .set({ ...data, isManual: 1 })
+      .set({ ...data, isManual })
       .where(and(
         eq(exchangeRates.currencyPair, data.currencyPair),
         eq(exchangeRates.date, data.date)
       ));
   } else {
-    await db.insert(exchangeRates).values({ ...data, isManual: 1 });
+    await db.insert(exchangeRates).values({ ...data, isManual });
   }
   
   return await getExchangeRateByDate(data.currencyPair, data.date);
