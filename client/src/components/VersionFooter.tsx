@@ -1,7 +1,21 @@
 import { useState, useEffect } from 'react';
 
 // Version is managed by scripts/increment-version.mjs
-const APP_VERSION = '1.0.21';
+const APP_VERSION = '1.0.22';
+
+function compareSemver(a: string, b: string): number {
+  const parse = (value: string) => value.split('.').map((part) => Number.parseInt(part, 10));
+  const left = parse(a);
+  const right = parse(b);
+  if (left.length !== 3 || right.length !== 3) return 0;
+  if (left.some((part) => Number.isNaN(part)) || right.some((part) => Number.isNaN(part))) return 0;
+
+  for (let i = 0; i < 3; i += 1) {
+    const diff = left[i] - right[i];
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
 
 export function VersionFooter() {
   const [currentVersion, setCurrentVersion] = useState(APP_VERSION);
@@ -12,7 +26,14 @@ export function VersionFooter() {
     fetch('/version.json')
       .then(res => res.json())
       .then(data => {
-        if (data.version) setCurrentVersion(data.version);
+        if (typeof data.version === 'string') {
+          // Never downgrade the displayed app version because of stale/cached metadata.
+          if (compareSemver(data.version, APP_VERSION) >= 0) {
+            setCurrentVersion(data.version);
+          } else {
+            setCurrentVersion(APP_VERSION);
+          }
+        }
         if (data.buildTime) setBuildTime(data.buildTime);
       })
       .catch(() => {

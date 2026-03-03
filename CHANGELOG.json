@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.22",
+      "date": "2026-03-03",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Versionsanzeige nicht mehr auf ältere Metadaten zurücksetzen",
+          "description": "VersionFooter übernimmt die Version aus version.json nur noch, wenn diese nicht älter ist als die lokale App-Version. Dadurch verschwindet das kurze Umspringen von 1.0.2x auf 1.0.0."
+        },
+        {
+          "type": "fix",
+          "title": "Steuer-Button sichtbar im Steuern-Reiter",
+          "description": "Der Aktivieren/Deaktivieren-Button wurde in eine eigene, klar sichtbare Steuerleiste unterhalb der Reiter-Überschrift verschoben."
+        }
+      ]
+    },
+    {
       "version": "1.0.21",
       "date": "2026-03-03",
       "changes": [

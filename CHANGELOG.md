@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.22] - 2026-03-03
+
+### Behoben
+
+**Versionsanzeige stabilisiert** - Die Fußzeile setzt die angezeigte Version nicht mehr auf ältere/cached Metadaten zurück. Dadurch verschwindet das kurze Umspringen von `1.0.2x` auf `1.0.0`.
+
+**Steuer-Button klar sichtbar platziert** - Der Aktivieren/Deaktivieren-Button für das Modul `% Steuern` steht jetzt in einer eigenen Leiste direkt unter der Steuern-Reiter-Überschrift.
+
+---
+
 ## [1.0.21] - 2026-03-03
 
 ### Behoben
