@@ -634,7 +634,7 @@ export async function createUser(data: {
   email: string;
   passwordHash: string;
   displayName?: string | null;
-  role?: "user" | "admin";
+  role?: "user" | "admin" | "mandant_admin" | "webapp_admin";
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -644,7 +644,7 @@ export async function createUser(data: {
     email: data.email,
     passwordHash: data.passwordHash,
     displayName: data.displayName ?? null,
-    role: data.role ?? "user",
+    role: (data.role ?? "user") as any,
   });
 }
 

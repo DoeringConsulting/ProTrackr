@@ -1,6 +1,13 @@
 
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import {
+  adminOrMandantAdminProcedure,
+  isWebAppAdmin,
+  mandantAdminProcedure,
+  publicProcedure,
+  protectedProcedure,
+  router,
+} from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { generateInvoiceNumber, getInvoiceNumbers, getDb } from "./db";
@@ -9,13 +16,13 @@ import { expenses } from "../drizzle/schema";
 
 export const appRouter = router({
   invoiceNumbers: router({
-    generate: publicProcedure
+    generate: protectedProcedure
       .input(z.object({ customerId: z.number() }))
       .mutation(async ({ input }) => {
         const invoiceNumber = await generateInvoiceNumber(input.customerId);
         return { invoiceNumber };
       }),
-    list: publicProcedure
+    list: protectedProcedure
       .input(z.object({ year: z.number().optional() }))
       .query(async ({ input }) => {
         return await getInvoiceNumbers(input.year);
@@ -36,7 +43,7 @@ export const appRouter = router({
       const { getCustomerById } = await import("./db");
       return await getCustomerById(input.id);
     }),
-    create: protectedProcedure.input((val: unknown) => {
+    create: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
         provider: z.string(),
         mandatenNr: z.string(),
@@ -61,7 +68,7 @@ export const appRouter = router({
       const { createCustomer } = await import("./db");
       return await createCustomer(input);
     }),
-    update: protectedProcedure.input((val: unknown) => {
+    update: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
         provider: z.string().optional(),
@@ -89,21 +96,21 @@ export const appRouter = router({
       await updateCustomer(id, data);
       return { success: true };
     }),
-    delete: protectedProcedure.input((val: unknown) => {
+    delete: mandantAdminProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { deleteCustomer } = await import("./db");
       await deleteCustomer(input.id);
       return { success: true };
     }),
-    archive: protectedProcedure.input((val: unknown) => {
+    archive: mandantAdminProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { archiveCustomer } = await import("./db");
       await archiveCustomer(input.id);
       return { success: true };
     }),
-    unarchive: protectedProcedure.input((val: unknown) => {
+    unarchive: mandantAdminProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ input }) => {
       const { unarchiveCustomer } = await import("./db");
@@ -592,7 +599,7 @@ export const appRouter = router({
       const { getTaxSettings } = await import("./db");
       return await getTaxSettings();
     }),
-    upsert: protectedProcedure.input((val: unknown) => {
+    upsert: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
         zusType: z.enum(["percentage", "fixed"]),
         zusValue: z.number(),
@@ -627,7 +634,7 @@ export const appRouter = router({
         fpFsEnabled: profile.fpFsEnabled === 1,
       };
     }),
-    upsertProfile: protectedProcedure.input((val: unknown) => {
+    upsertProfile: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
         taxForm: z.enum(["liniowy_19"]).default("liniowy_19"),
         zusRegime: z.enum(["ulga_na_start", "preferencyjny_zus", "maly_zus_plus", "pelny_zus"]),
@@ -681,7 +688,7 @@ export const appRouter = router({
         isDefault: false,
       };
     }),
-    upsertConfig: protectedProcedure.input((val: unknown) => {
+    upsertConfig: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
         year: z.number().int().min(2000).max(2100),
         socialMinBaseCents: z.number().int().min(0),
@@ -700,17 +707,25 @@ export const appRouter = router({
 
   // Backup
   backup: router({
-    create: protectedProcedure.mutation(async () => {
+    create: mandantAdminProcedure.mutation(async () => {
       const { createBackup } = await import("./backup");
       return await createBackup();
     }),
-    restore: protectedProcedure.input((val: unknown) => {
+    restore: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({
         backup: z.any(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { restoreBackup } = await import("./backup");
-      return await restoreBackup(input.backup);
+      const result = await restoreBackup(input.backup);
+
+      // WebApp admins are allowed to execute restore blindly (DSGVO),
+      // but must not receive any payload with domain data.
+      if (isWebAppAdmin(ctx.user)) {
+        return { success: true, message: "Restore ausgefuehrt" };
+      }
+
+      return result;
     }),
   }),
 
@@ -827,17 +842,24 @@ export const appRouter = router({
 
   // Database export/import
   database: router({
-    export: publicProcedure.mutation(async () => {
+    export: mandantAdminProcedure.mutation(async () => {
       const { exportDatabase } = await import("./db");
       return await exportDatabase();
     }),
-    import: publicProcedure.input((val: unknown) => {
+    import: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({
         backup: z.any(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { importDatabase } = await import("./db");
-      return await importDatabase(input.backup);
+      const result = await importDatabase(input.backup);
+
+      // Blind admin operation for global WebApp admins (DSGVO).
+      if (isWebAppAdmin(ctx.user)) {
+        return { success: true, message: "Import ausgefuehrt" };
+      }
+
+      return result;
     }),
   }),
 });

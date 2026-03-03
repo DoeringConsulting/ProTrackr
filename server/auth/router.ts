@@ -21,6 +21,7 @@ authRouter.post("/login", (req: Request, res: Response, next: NextFunction) => {
       return res.json({
         user: {
           id: user.id,
+          mandantId: user.mandantId,
           email: user.email,
           displayName: user.displayName,
           role: user.role,
