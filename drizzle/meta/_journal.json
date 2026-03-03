@@ -43,6 +43,13 @@
       "when": 1772486397719,
       "tag": "0005_tax_profile_and_year_config",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1772550000000,
+      "tag": "0006_password_reset_tokens",
+      "breakpoints": true
     }
   ]
 }

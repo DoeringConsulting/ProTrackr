@@ -33,6 +33,24 @@ export type Mandant = typeof mandanten.$inferSelect;
 export type InsertMandant = typeof mandanten.$inferInsert;
 
 /**
+ * Password reset tokens - one-time tokens for secure password recovery
+ */
+export const passwordResetTokens = mysqlTable("passwordResetTokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  tokenHash: varchar("tokenHash", { length: 128 }).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tokenHashUnique: uniqueIndex("password_reset_tokens_hash_unique").on(table.tokenHash),
+  userIdIdx: index("password_reset_tokens_user_idx").on(table.userId),
+}));
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+/**
  * Customers table - stores client master data
  */
 export const customers = mysqlTable("customers", {

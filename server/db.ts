@@ -1,4 +1,4 @@
-import { and, eq, desc, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { invoiceNumbers, customers } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -635,6 +635,56 @@ export async function findUserById(id: number) {
     .where(eq(users.id, id))
     .limit(1);
   return result[0] ?? null;
+}
+
+export async function createPasswordResetToken(data: {
+  userId: number;
+  tokenHash: string;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { passwordResetTokens } = await import("../drizzle/schema");
+  await db.insert(passwordResetTokens).values({
+    userId: data.userId,
+    tokenHash: data.tokenHash,
+    expiresAt: data.expiresAt,
+  });
+}
+
+export async function getValidPasswordResetToken(tokenHash: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const { passwordResetTokens } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(passwordResetTokens)
+    .where(
+      and(
+        eq(passwordResetTokens.tokenHash, tokenHash),
+        isNull(passwordResetTokens.usedAt),
+        gt(passwordResetTokens.expiresAt, new Date())
+      )
+    )
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function consumePasswordResetToken(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { passwordResetTokens } = await import("../drizzle/schema");
+  await db
+    .update(passwordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(eq(passwordResetTokens.id, id));
+}
+
+export async function updateUserPasswordHash(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
 }
 
 export async function createUser(data: {
