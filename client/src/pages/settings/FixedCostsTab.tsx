@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  SUPPORTED_CURRENCIES,
+  aggregateByCurrency,
+  buildLatestRateMap,
+  convertAmountCents,
+  formatMoney,
+  type SupportedCurrency,
+} from "@/lib/currencyUtils";
+
+type FixedCostItem = {
+  id: number;
+  category: string;
+  amount: number;
+  currency?: string | null;
+  description?: string | null;
+};
 
 export default function FixedCostsTab() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -31,9 +48,57 @@ export default function FixedCostsTab() {
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("PLN");
   const [description, setDescription] = useState("");
+  const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
+  const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
 
   const utils = trpc.useUtils();
   const { data: fixedCosts = [], isLoading } = trpc.fixedCosts.list.useQuery();
+  const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
+
+  const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
+  const totalsByCurrency = useMemo(
+    () =>
+      aggregateByCurrency(
+        (fixedCosts as FixedCostItem[]).map((cost) => ({
+          amount: cost.amount,
+          currency: cost.currency || "EUR",
+        }))
+      ),
+    [fixedCosts]
+  );
+
+  const fixedCostsWithConversion = useMemo(
+    () =>
+      (fixedCosts as FixedCostItem[]).map((cost) => {
+        const sourceCurrency = (cost.currency || "EUR").toUpperCase();
+        const convertedAmount = showUnifiedCurrency
+          ? convertAmountCents(cost.amount, sourceCurrency, targetCurrency, rateMap)
+          : null;
+        return {
+          ...cost,
+          sourceCurrency,
+          convertedAmount,
+        };
+      }),
+    [fixedCosts, rateMap, showUnifiedCurrency, targetCurrency]
+  );
+
+  const unifiedTotal = useMemo(
+    () =>
+      fixedCostsWithConversion.reduce((sum, cost) => {
+        if (cost.convertedAmount === null) return sum;
+        return sum + cost.convertedAmount;
+      }, 0),
+    [fixedCostsWithConversion]
+  );
+
+  const missingConversionCount = useMemo(
+    () =>
+      fixedCostsWithConversion.filter(
+        (cost) => showUnifiedCurrency && cost.convertedAmount === null
+      ).length,
+    [fixedCostsWithConversion, showUnifiedCurrency]
+  );
 
   const createMutation = trpc.fixedCosts.create.useMutation({
     onSuccess: () => {
@@ -119,6 +184,7 @@ export default function FixedCostsTab() {
       id: selectedCost.id,
       category,
       amount: amountInCents,
+      currency,
       description: description || undefined,
     });
   };
@@ -132,6 +198,7 @@ export default function FixedCostsTab() {
     setSelectedCost(cost);
     setCategory(cost.category);
     setAmount((cost.amount / 100).toFixed(2));
+    setCurrency(cost.currency || "PLN");
     setDescription(cost.description || "");
     setIsEditDialogOpen(true);
   };
@@ -140,12 +207,6 @@ export default function FixedCostsTab() {
     setSelectedCost(cost);
     setIsDeleteDialogOpen(true);
   };
-
-  const formatCurrency = (cents: number) => {
-    return `€${(cents / 100).toFixed(2)}`;
-  };
-
-  const totalFixedCosts = fixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
 
   return (
     <div className="space-y-6">
@@ -187,9 +248,53 @@ export default function FixedCostsTab() {
                   {selectedCosts.size} löschen
                 </Button>
               )}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={showUnifiedCurrency ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowUnifiedCurrency((prev) => !prev)}
+                >
+                  {showUnifiedCurrency ? "Einheitliche Währung aktiv" : "Einheitliche Währung"}
+                </Button>
+                <Select
+                  value={targetCurrency}
+                  onValueChange={(value) => setTargetCurrency(value as SupportedCurrency)}
+                  disabled={!showUnifiedCurrency}
+                >
+                  <SelectTrigger className="w-[130px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPORTED_CURRENCIES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="text-right">
-                <p className="text-sm text-muted-foreground">Gesamt</p>
-                <p className="text-2xl font-bold">{formatCurrency(totalFixedCosts)}</p>
+                <p className="text-sm text-muted-foreground">
+                  Gesamt {showUnifiedCurrency ? `(${targetCurrency})` : "(pro Währung)"}
+                </p>
+                {showUnifiedCurrency ? (
+                  <>
+                    <p className="text-2xl font-bold">{formatMoney(unifiedTotal, targetCurrency)}</p>
+                    {missingConversionCount > 0 && (
+                      <p className="text-xs text-amber-600">
+                        {missingConversionCount} Position(en) ohne verfügbaren Kurs
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-wrap justify-end gap-1">
+                    {Array.from(totalsByCurrency.entries()).map(([code, total]) => (
+                      <Badge key={code} variant="secondary" className="font-medium">
+                        {formatMoney(total, code)}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -237,14 +342,31 @@ export default function FixedCostsTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fixedCosts.map((cost) => (
+                {fixedCostsWithConversion.map((cost) => (
                   <TableRow key={cost.id}>
                     <TableCell className="font-medium">{cost.category}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {cost.description || "-"}
                     </TableCell>
                     <TableCell className="text-right font-semibold">
-                      {formatCurrency(cost.amount)}
+                      {showUnifiedCurrency ? (
+                        cost.convertedAmount === null ? (
+                          <span className="text-amber-600 text-sm">
+                            Kurs fehlt ({cost.sourceCurrency} → {targetCurrency})
+                          </span>
+                        ) : (
+                          <div>
+                            <div>{formatMoney(cost.convertedAmount, targetCurrency)}</div>
+                            {cost.sourceCurrency !== targetCurrency && (
+                              <div className="text-xs text-muted-foreground">
+                                {formatMoney(cost.amount, cost.sourceCurrency)}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      ) : (
+                        formatMoney(cost.amount, cost.sourceCurrency)
+                      )}
                     </TableCell>
                     <TableCell>
                       <Button
@@ -328,10 +450,11 @@ export default function FixedCostsTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="EUR">EUR (€)</SelectItem>
-                    <SelectItem value="PLN">PLN (zł)</SelectItem>
-                    <SelectItem value="USD">USD ($)</SelectItem>
-                    <SelectItem value="GBP">GBP (£)</SelectItem>
+                    {SUPPORTED_CURRENCIES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -379,16 +502,33 @@ export default function FixedCostsTab() {
                 onChange={(e) => setCategory(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-amount">Betrag (EUR) *</Label>
-              <Input
-                id="edit-amount"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-amount">Betrag *</Label>
+                <Input
+                  id="edit-amount"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-currency">Währung *</Label>
+                <Select value={currency} onValueChange={setCurrency}>
+                  <SelectTrigger id="edit-currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPORTED_CURRENCIES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-description">Beschreibung</Label>
