@@ -656,6 +656,57 @@ export async function createUser(data: {
   });
 }
 
+export async function listUsersGlobal() {
+  const db = await getDb();
+  if (!db) return [];
+  const { users } = await import("../drizzle/schema");
+  return await db
+    .select({
+      id: users.id,
+      mandantId: users.mandantId,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    })
+    .from(users)
+    .orderBy(desc(users.id));
+}
+
+export async function listUsersByMandantId(mandantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { users } = await import("../drizzle/schema");
+  return await db
+    .select({
+      id: users.id,
+      mandantId: users.mandantId,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    })
+    .from(users)
+    .where(eq(users.mandantId, mandantId))
+    .orderBy(desc(users.id));
+}
+
+export async function suspendUserById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db.update(users).set({ passwordHash: null }).where(eq(users.id, id));
+}
+
+export async function deleteUserById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db.delete(users).where(eq(users.id, id));
+}
+
 // ─── END AUTH ─────────────────────────────────────────────────────────
 
 export async function importDatabase(backup: any) {

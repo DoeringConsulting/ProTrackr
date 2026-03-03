@@ -11,6 +11,7 @@ import {
 } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import bcrypt from "bcrypt";
 import { generateInvoiceNumber, getInvoiceNumbers, getDb } from "./db";
 import { sql } from "drizzle-orm";
 import { expenses } from "../drizzle/schema";
@@ -30,6 +31,10 @@ async function canAccessUserOwnedData(
   if (isWebAppAdmin(actor)) return false;
   if (!isMandantAdmin(actor)) return false;
   return await isSameMandantForUser(actor.mandantId, targetUserId);
+}
+
+function canAssignRoleAsMandantAdmin(role: string): boolean {
+  return role === "user" || role === "admin" || role === "mandant_admin";
 }
 
 export const appRouter = router({
@@ -859,6 +864,144 @@ export const appRouter = router({
     }).mutation(async ({ ctx, input }) => {
       const { upsertAccountSettings } = await import("./db");
       return await upsertAccountSettings(ctx.user.id, input);
+    }),
+  }),
+
+  // User management (Phase 2 - direct admin creation, no invite flow yet)
+  usersAdmin: router({
+    list: adminOrMandantAdminProcedure.query(async ({ ctx }) => {
+      const { listUsersByMandantId, listUsersGlobal } = await import("./db");
+
+      if (isWebAppAdmin(ctx.user)) {
+        return await listUsersGlobal();
+      }
+
+      if (!ctx.user.mandantId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Mandant fehlt im Kontext" });
+      }
+
+      return await listUsersByMandantId(ctx.user.mandantId);
+    }),
+    create: adminOrMandantAdminProcedure.input((val: unknown) => {
+      return z.object({
+        mandantId: z.number().int().positive().optional(),
+        email: z.string().email(),
+        displayName: z.string().min(1).max(255).optional(),
+        password: z.string().min(8),
+        role: z.enum(["user", "admin", "mandant_admin", "webapp_admin"]).default("user"),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { createUser, findUserByEmailAndMandant } = await import("./db");
+
+      const actorIsWebAppAdmin = isWebAppAdmin(ctx.user);
+      const targetMandantId = actorIsWebAppAdmin
+        ? input.mandantId
+        : ctx.user.mandantId;
+
+      if (!targetMandantId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "mandantId ist erforderlich",
+        });
+      }
+
+      if (!actorIsWebAppAdmin && !canAssignRoleAsMandantAdmin(input.role)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Mandanten-Admins duerfen diese Rolle nicht vergeben",
+        });
+      }
+
+      const existing = await findUserByEmailAndMandant(input.email, targetMandantId);
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Benutzer mit dieser E-Mail existiert bereits im Mandanten",
+        });
+      }
+
+      const passwordHash = await bcrypt.hash(input.password, 10);
+      await createUser({
+        mandantId: targetMandantId,
+        email: input.email,
+        passwordHash,
+        displayName: input.displayName ?? null,
+        role: input.role,
+      });
+
+      const created = await findUserByEmailAndMandant(input.email, targetMandantId);
+      return created
+        ? {
+            id: created.id,
+            mandantId: created.mandantId,
+            email: created.email,
+            displayName: created.displayName,
+            role: created.role,
+            createdAt: created.createdAt,
+          }
+        : { success: true };
+    }),
+    suspend: adminOrMandantAdminProcedure.input((val: unknown) => {
+      return z.object({
+        userId: z.number().int().positive(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { findUserById, suspendUserById } = await import("./db");
+
+      if (ctx.user.id === input.userId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Eigener Benutzer kann nicht gesperrt werden",
+        });
+      }
+
+      const targetUser = await findUserById(input.userId);
+      if (!targetUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden" });
+      }
+
+      if (!isWebAppAdmin(ctx.user)) {
+        if (!ctx.user.mandantId || targetUser.mandantId !== ctx.user.mandantId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Benutzer" });
+        }
+        if (String(targetUser.role) === "webapp_admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin kann nur global verwaltet werden" });
+        }
+      }
+
+      await suspendUserById(input.userId);
+      return { success: true };
+    }),
+    delete: adminOrMandantAdminProcedure.input((val: unknown) => {
+      return z.object({
+        userId: z.number().int().positive(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { deleteUserById, findUserById } = await import("./db");
+
+      if (ctx.user.id === input.userId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Eigener Benutzer kann nicht geloescht werden",
+        });
+      }
+
+      const targetUser = await findUserById(input.userId);
+      if (!targetUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden" });
+      }
+
+      if (!isWebAppAdmin(ctx.user)) {
+        if (!ctx.user.mandantId || targetUser.mandantId !== ctx.user.mandantId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Benutzer" });
+        }
+        if (String(targetUser.role) === "webapp_admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin kann nur global verwaltet werden" });
+        }
+      }
+
+      await deleteUserById(input.userId);
+      return { success: true };
     }),
   }),
 
