@@ -47,7 +47,9 @@ type CostSlice = {
   name: string;
   value: number; // major units for recharts
   color: string;
-  currency: string;
+  chartCurrency: string;
+  originalCurrency?: string;
+  originalAmountCents?: number;
 };
 
 type CostChartState = {
@@ -320,8 +322,10 @@ export default function Dashboard() {
 
   const buildCostChart = (): CostChartState => {
     const periodMonthCount = getPeriodMonthCount(rangeStart, rangeEnd);
-    const fixedByCurrency = new Map<string, number>();
-    const variableByCurrency = new Map<string, number>();
+    const fixedByCurrencyOriginal = new Map<string, number>();
+    const fixedByCurrencyEur = new Map<string, number>();
+    const variableByCurrencyOriginal = new Map<string, number>();
+    const variableByCurrencyEur = new Map<string, number>();
 
     let fixedCostsEur = 0;
     let variableCostsEur = 0;
@@ -330,28 +334,37 @@ export default function Dashboard() {
 
     for (const cost of fixedCostsDetailed) {
       const periodAmount = cost.amount * periodMonthCount;
-      fixedByCurrency.set(
+      fixedByCurrencyOriginal.set(
         cost.sourceCurrency,
-        (fixedByCurrency.get(cost.sourceCurrency) ?? 0) + periodAmount
+        (fixedByCurrencyOriginal.get(cost.sourceCurrency) ?? 0) + periodAmount
       );
       const amountEur = toEur(cost.amount, cost.sourceCurrency);
       if (amountEur === null) {
         missingRates += 1;
       } else {
+        const periodAmountEur = amountEur * periodMonthCount;
+        fixedByCurrencyEur.set(
+          cost.sourceCurrency,
+          (fixedByCurrencyEur.get(cost.sourceCurrency) ?? 0) + periodAmountEur
+        );
         fixedCostsEur += amountEur * periodMonthCount;
       }
     }
 
     for (const expense of expensesDetailed) {
       if (!isWithinDateRange(expense.date, rangeStart, rangeEnd)) continue;
-      variableByCurrency.set(
+      variableByCurrencyOriginal.set(
         expense.sourceCurrency,
-        (variableByCurrency.get(expense.sourceCurrency) ?? 0) + expense.amount
+        (variableByCurrencyOriginal.get(expense.sourceCurrency) ?? 0) + expense.amount
       );
       const amountEur = toEur(expense.amount, expense.sourceCurrency);
       if (amountEur === null) {
         missingRates += 1;
       } else {
+        variableByCurrencyEur.set(
+          expense.sourceCurrency,
+          (variableByCurrencyEur.get(expense.sourceCurrency) ?? 0) + amountEur
+        );
         variableCostsEur += amountEur;
       }
     }
@@ -410,47 +423,53 @@ export default function Dashboard() {
       };
 
       const unifiedData: CostSlice[] = [
-        { name: "Fixkosten", value: convertEurToTarget(fixedCostsEur) / 100, color: "#3b82f6", currency: targetCurrency },
-        { name: "Reisekosten", value: convertEurToTarget(variableCostsEur) / 100, color: "#0ea5e9", currency: targetCurrency },
-        { name: "ZUS", value: convertEurToTarget(taxResult.zus) / 100, color: "#8b5cf6", currency: targetCurrency },
-        { name: "Krankenvers.", value: convertEurToTarget(taxResult.healthInsurance) / 100, color: "#ec4899", currency: targetCurrency },
-        { name: "Steuer", value: convertEurToTarget(taxResult.tax) / 100, color: "#f59e0b", currency: targetCurrency },
+        { name: "Fixkosten", value: convertEurToTarget(fixedCostsEur) / 100, color: "#3b82f6", chartCurrency: targetCurrency },
+        { name: "Reisekosten", value: convertEurToTarget(variableCostsEur) / 100, color: "#0ea5e9", chartCurrency: targetCurrency },
+        { name: "ZUS", value: convertEurToTarget(taxResult.zus) / 100, color: "#8b5cf6", chartCurrency: targetCurrency },
+        { name: "Krankenvers.", value: convertEurToTarget(taxResult.healthInsurance) / 100, color: "#ec4899", chartCurrency: targetCurrency },
+        { name: "Steuer", value: convertEurToTarget(taxResult.tax) / 100, color: "#f59e0b", chartCurrency: targetCurrency },
       ];
 
       return { data: unifiedData, missingRates };
     }
 
     const data: CostSlice[] = [];
-    const sortedFixed = Array.from(fixedByCurrency.entries()).sort((a, b) => b[1] - a[1]);
-    const sortedVariable = Array.from(variableByCurrency.entries()).sort((a, b) => b[1] - a[1]);
+    const sortedFixed = Array.from(fixedByCurrencyOriginal.entries()).sort((a, b) => b[1] - a[1]);
+    const sortedVariable = Array.from(variableByCurrencyOriginal.entries()).sort((a, b) => b[1] - a[1]);
 
-    sortedFixed.forEach(([currency, amount], index) => {
+    sortedFixed.forEach(([currency, originalAmount], index) => {
+      const amountInEur = fixedByCurrencyEur.get(currency) ?? 0;
       data.push({
         name: `Fixkosten (${currency})`,
-        value: amount / 100,
+        value: amountInEur / 100,
         color: index % 2 === 0 ? "#3b82f6" : "#60a5fa",
-        currency,
+        chartCurrency: "EUR",
+        originalCurrency: currency,
+        originalAmountCents: originalAmount,
       });
     });
 
-    sortedVariable.forEach(([currency, amount], index) => {
+    sortedVariable.forEach(([currency, originalAmount], index) => {
+      const amountInEur = variableByCurrencyEur.get(currency) ?? 0;
       data.push({
         name: `Reisekosten (${currency})`,
-        value: amount / 100,
+        value: amountInEur / 100,
         color: index % 2 === 0 ? "#0ea5e9" : "#67e8f9",
-        currency,
+        chartCurrency: "EUR",
+        originalCurrency: currency,
+        originalAmountCents: originalAmount,
       });
     });
 
     data.push(
-      { name: "ZUS (EUR)", value: taxResult.zus / 100, color: "#8b5cf6", currency: "EUR" },
+      { name: "ZUS (EUR)", value: taxResult.zus / 100, color: "#8b5cf6", chartCurrency: "EUR" },
       {
         name: "Krankenvers. (EUR)",
         value: taxResult.healthInsurance / 100,
         color: "#ec4899",
-        currency: "EUR",
+        chartCurrency: "EUR",
       },
-      { name: "Steuer (EUR)", value: taxResult.tax / 100, color: "#f59e0b", currency: "EUR" }
+      { name: "Steuer (EUR)", value: taxResult.tax / 100, color: "#f59e0b", chartCurrency: "EUR" }
     );
 
     return { data, missingRates };
@@ -732,7 +751,9 @@ export default function Dashboard() {
               </div>
               <CardDescription>
                 Kostenaufschluesselung ({selectedPeriodLabel}){" "}
-                {showUnifiedCurrency ? `in ${targetCurrency}` : "in Originalwaehrungen"}
+                {showUnifiedCurrency
+                  ? `in ${targetCurrency}`
+                  : "Anteile nach EUR-Basis, Beschriftung in Originalwaehrungen"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -743,12 +764,24 @@ export default function Dashboard() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry: any) =>
-                      `${entry.name}: ${formatMoney(
-                        Math.round(Number(entry.value ?? 0) * 100),
-                        String(entry.currency || "EUR")
-                      )}`
-                    }
+                    label={(entry: any) => {
+                      const baseCents = Math.round(Number(entry.value ?? 0) * 100);
+                      const chartCurrency = String(entry.chartCurrency || "EUR");
+                      const originalCurrency = String(entry.originalCurrency || chartCurrency);
+                      const originalCents =
+                        typeof entry.originalAmountCents === "number"
+                          ? entry.originalAmountCents
+                          : baseCents;
+
+                      if (!showUnifiedCurrency && originalCurrency !== chartCurrency) {
+                        return `${entry.name}: ${formatMoney(originalCents, originalCurrency)} (~${formatMoney(
+                          baseCents,
+                          chartCurrency
+                        )})`;
+                      }
+
+                      return `${entry.name}: ${formatMoney(originalCents, originalCurrency)}`;
+                    }}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
@@ -760,8 +793,23 @@ export default function Dashboard() {
                   <Tooltip
                     formatter={(value, _name, item) => {
                       const numeric = Number(value ?? 0);
-                      const currency = String((item as any)?.payload?.currency || "EUR");
-                      return formatMoney(Math.round(numeric * 100), currency);
+                      const payload = (item as any)?.payload ?? {};
+                      const baseCents = Math.round(numeric * 100);
+                      const chartCurrency = String(payload.chartCurrency || "EUR");
+                      const originalCurrency = String(payload.originalCurrency || chartCurrency);
+                      const originalCents =
+                        typeof payload.originalAmountCents === "number"
+                          ? payload.originalAmountCents
+                          : baseCents;
+
+                      if (!showUnifiedCurrency && originalCurrency !== chartCurrency) {
+                        return `${formatMoney(originalCents, originalCurrency)} (Basis ${formatMoney(
+                          baseCents,
+                          chartCurrency
+                        )})`;
+                      }
+
+                      return formatMoney(originalCents, originalCurrency);
                     }}
                   />
                 </PieChart>
