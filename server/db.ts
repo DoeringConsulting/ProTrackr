@@ -749,6 +749,31 @@ export async function createUser(data: {
   });
 }
 
+export async function updateUserById(
+  id: number,
+  data: {
+    mandantId?: number;
+    email?: string;
+    displayName?: string | null;
+    role?: "user" | "admin" | "mandant_admin" | "webapp_admin";
+    passwordHash?: string | null;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db
+    .update(users)
+    .set({
+      ...(data.mandantId !== undefined ? { mandantId: data.mandantId } : {}),
+      ...(data.email !== undefined ? { email: data.email } : {}),
+      ...(data.displayName !== undefined ? { displayName: data.displayName } : {}),
+      ...(data.role !== undefined ? { role: data.role as any } : {}),
+      ...(data.passwordHash !== undefined ? { passwordHash: data.passwordHash } : {}),
+    })
+    .where(eq(users.id, id));
+}
+
 export async function listUsersGlobal() {
   const db = await getDb();
   if (!db) return [];

@@ -37,20 +37,27 @@ function canAssignRoleAsMandantAdmin(role: string): boolean {
   return role === "user";
 }
 
-function canAssignRoleAsWebAppAdmin(role: string): boolean {
-  // Enforced setup flow:
-  // 1) Mandant anlegen
-  // 2) Mandanten-Admin anlegen
-  // 3) Mandanten-Admin legt Mandanten-Benutzer an
-  return role === "mandant_admin" || role === "webapp_admin";
+function normalizeManagedRole(role: string): "user" | "admin" | "mandant_admin" | "webapp_admin" {
+  // Legacy compatibility: incoming "admin" is treated as "mandant_admin".
+  if (role === "admin") return "mandant_admin";
+  if (role === "webapp_admin") return "webapp_admin";
+  if (role === "mandant_admin") return "mandant_admin";
+  return "user";
+}
+
+function canAssignRoleAsGlobalSetupAdmin(role: string): boolean {
+  const normalized = normalizeManagedRole(role);
+  return normalized === "user" || normalized === "mandant_admin" || normalized === "webapp_admin";
 }
 
 function isGlobalSetupAdmin(actor: { role?: string | null } | null | undefined): boolean {
   // Personal-union compatibility:
-  // legacy "admin" can execute global setup operations
-  // (mandant creation + initial mandant admin provisioning).
+  // - native global admin role: webapp_admin
+  // - legacy bootstrap admin: role=admin and first user (id=1)
+  //   to avoid granting global scope to every admin.
+  const id = actor && "id" in actor ? Number((actor as any).id) : null;
   const role = actor?.role ?? null;
-  return role === "webapp_admin" || role === "admin";
+  return role === "webapp_admin" || (role === "admin" && id === 1);
 }
 
 async function canAccessCustomerOwnedData(
@@ -1194,16 +1201,17 @@ export const appRouter = router({
       const { findMandantById } = await import("./db-mandanten");
 
       const actorIsGlobalSetupAdmin = isGlobalSetupAdmin(ctx.user);
+      const normalizedRole = normalizeManagedRole(input.role);
 
       if (actorIsGlobalSetupAdmin) {
-        if (!canAssignRoleAsWebAppAdmin(input.role)) {
+        if (!canAssignRoleAsGlobalSetupAdmin(input.role)) {
           throw new TRPCError({
             code: "FORBIDDEN",
             message:
-              "WebApp-Admin darf im Mandanten-Setup nur Mandanten-Admins anlegen",
+              "General-Admin darf nur Benutzer, Mandanten-Admins oder WebApp-Admins anlegen",
           });
         }
-      } else if (!canAssignRoleAsMandantAdmin(input.role)) {
+      } else if (!canAssignRoleAsMandantAdmin(normalizedRole)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Mandanten-Admins duerfen nur Benutzer anlegen",
@@ -1240,7 +1248,7 @@ export const appRouter = router({
         email: input.email,
         passwordHash,
         displayName: input.displayName ?? null,
-        role: input.role,
+        role: normalizedRole,
       });
 
       const created = await findUserByEmailAndMandant(input.email, targetMandantId);
@@ -1254,6 +1262,99 @@ export const appRouter = router({
             createdAt: created.createdAt,
           }
         : { success: true };
+    }),
+    update: adminOrMandantAdminProcedure.input((val: unknown) => {
+      return z
+        .object({
+          userId: z.number().int().positive(),
+          mandantId: z.number().int().positive().optional(),
+          email: z.string().email().optional(),
+          displayName: z.string().max(255).optional(),
+          role: z.enum(["user", "admin", "mandant_admin", "webapp_admin"]).optional(),
+          password: z.string().min(8).optional(),
+        })
+        .refine(
+          (data) =>
+            data.mandantId !== undefined ||
+            data.email !== undefined ||
+            data.displayName !== undefined ||
+            data.role !== undefined ||
+            data.password !== undefined,
+          { message: "Keine Aenderung uebergeben" }
+        )
+        .parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { findUserByEmailAndMandant, findUserById, updateUserById } = await import("./db");
+      const { findMandantById } = await import("./db-mandanten");
+
+      if (ctx.user.id === input.userId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Eigener Benutzer kann hier nicht bearbeitet werden",
+        });
+      }
+
+      const targetUser = await findUserById(input.userId);
+      if (!targetUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden" });
+      }
+
+      const actorIsGlobalSetupAdmin = isGlobalSetupAdmin(ctx.user);
+
+      if (!actorIsGlobalSetupAdmin) {
+        if (!ctx.user.mandantId || targetUser.mandantId !== ctx.user.mandantId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Benutzer" });
+        }
+        if (input.mandantId && input.mandantId !== targetUser.mandantId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Mandantenwechsel nicht erlaubt" });
+        }
+        if (input.role && !canAssignRoleAsMandantAdmin(normalizeManagedRole(input.role))) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Mandanten-Admins duerfen nur Benutzer-Rollen setzen",
+          });
+        }
+      }
+
+      const nextMandantId = actorIsGlobalSetupAdmin
+        ? input.mandantId ?? targetUser.mandantId
+        : targetUser.mandantId;
+
+      const mandant = await findMandantById(nextMandantId);
+      if (!mandant) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Mandant existiert nicht" });
+      }
+
+      if (input.email) {
+        const existing = await findUserByEmailAndMandant(input.email, nextMandantId);
+        if (existing && existing.id !== targetUser.id) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Benutzer mit dieser E-Mail existiert bereits im Mandanten",
+          });
+        }
+      }
+
+      if (input.role && actorIsGlobalSetupAdmin && !canAssignRoleAsGlobalSetupAdmin(input.role)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Unzulaessige Rolle fuer General-Admin",
+        });
+      }
+
+      const normalizedRole = input.role ? normalizeManagedRole(input.role) : undefined;
+      const passwordHash = input.password ? await bcrypt.hash(input.password, 10) : undefined;
+
+      await updateUserById(input.userId, {
+        mandantId: nextMandantId,
+        email: input.email,
+        displayName:
+          input.displayName !== undefined ? input.displayName.trim() || null : undefined,
+        role: normalizedRole,
+        passwordHash,
+      });
+
+      return { success: true };
     }),
     suspend: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({

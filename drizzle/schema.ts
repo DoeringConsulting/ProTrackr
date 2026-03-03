@@ -10,7 +10,7 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }).notNull(), // Removed unique - unique per mandant
   passwordHash: varchar("passwordHash", { length: 255 }),     // bestehender Spaltenname in DB
   displayName: varchar("name", { length: 255 }),              // bestehender Spaltenname "name" in DB
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(), // bestehender enum-Typ
+  role: varchar("role", { length: 50 }).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
