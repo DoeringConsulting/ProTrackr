@@ -159,7 +159,7 @@ export default function TaxesTab() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold tracking-tight">Steuern (PL) – Regime + Jahreswerte</h2>
           <p className="text-muted-foreground">
             Struktur B: tax_profile + tax_config_pl[year] für saubere und zukunftssichere Berechnungen.
@@ -169,7 +169,7 @@ export default function TaxesTab() {
           type="button"
           variant={taxModuleEnabled ? "default" : "outline"}
           onClick={() => setTaxModuleEnabled((prev) => !prev)}
-          className="md:mt-1"
+          className="w-full shrink-0 md:mt-1 md:w-auto"
         >
           {taxModuleEnabled ? "Modul % Steuern: Aktiv" : "Modul % Steuern: Deaktiviert"}
         </Button>

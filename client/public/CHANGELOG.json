@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.21",
+      "date": "2026-03-03",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Steuer-Modul-Toggle im Steuern-Reiter zuverlässig sichtbar",
+          "description": "Layout im Kopfbereich des Steuern-Tabs angepasst (min-w-0 + shrink-0), damit der Aktivieren/Deaktivieren-Button auch bei mittleren Bildschirmbreiten nicht ausgeblendet wird."
+        },
+        {
+          "type": "improvement",
+          "title": "Versionierung auf 1.0.21 fortgeführt",
+          "description": "App-Versionen in package.json, Frontend-Markern und Changelog synchron auf 1.0.21 angehoben."
+        }
+      ]
+    },
+    {
       "version": "1.0.20",
       "date": "2026-03-03",
       "changes": [

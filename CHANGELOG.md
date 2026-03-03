@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.21] - 2026-03-03
+
+### Behoben
+
+**Steuer-Modul-Toggle im Steuern-Reiter sichtbar gemacht** - Das Header-Layout im Steuern-Tab wurde angepasst, damit der Aktivieren/Deaktivieren-Button bei mittleren Bildschirmbreiten nicht aus dem sichtbaren Bereich gedrückt wird.
+
+### Geändert
+
+**Versionierung fortgeführt** - Versionsstand konsistent auf 1.0.21 angehoben und in den relevanten Frontend-/Metadaten-Dateien synchronisiert.
+
+---
+
 ## [1.0.20] - 2026-03-03
 
 ### Hinzugefügt
