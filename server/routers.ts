@@ -1362,7 +1362,75 @@ export const appRouter = router({
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { importDatabase } = await import("./db");
-      const result = await importDatabase(input.backup);
+      let backupToImport = input.backup;
+
+      if (!isWebAppAdmin(ctx.user)) {
+        if (!ctx.user.mandantId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Mandant fehlt im Kontext" });
+        }
+
+        const db = await getDb();
+        if (!db) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+        }
+
+        const { users } = await import("../drizzle/schema");
+        const mandantUsers = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.mandantId, ctx.user.mandantId));
+        const allowedUserIds = new Set(mandantUsers.map((u) => u.id));
+
+        const rawData = input.backup?.data ?? {};
+        const scopedTimeEntries = Array.isArray(rawData.timeEntries)
+          ? rawData.timeEntries.filter((entry: any) => allowedUserIds.has(entry.userId))
+          : [];
+        const scopedTimeEntryIds = new Set(scopedTimeEntries.map((entry: any) => entry.id));
+        const scopedCustomerIds = new Set(scopedTimeEntries.map((entry: any) => entry.customerId));
+
+        const isAllowedExpense = (expense: any) =>
+          allowedUserIds.has(expense?.userId) ||
+          (expense?.timeEntryId != null && scopedTimeEntryIds.has(expense.timeEntryId));
+
+        backupToImport = {
+          ...input.backup,
+          data: {
+            customers: Array.isArray(rawData.customers)
+              ? rawData.customers.filter((customer: any) => scopedCustomerIds.has(customer.id))
+              : [],
+            timeEntries: scopedTimeEntries,
+            expenses: Array.isArray(rawData.expenses)
+              ? rawData.expenses.filter(isAllowedExpense)
+              : [],
+            documents: Array.isArray(rawData.documents)
+              ? rawData.documents.filter((doc: any) => allowedUserIds.has(doc.userId))
+              : [],
+            exchangeRates: Array.isArray(rawData.exchangeRates)
+              ? rawData.exchangeRates.filter(
+                  (rate: any) => Number(rate.userId ?? 0) === 0 || allowedUserIds.has(Number(rate.userId))
+                )
+              : [],
+            fixedCosts: Array.isArray(rawData.fixedCosts)
+              ? rawData.fixedCosts.filter((cost: any) => allowedUserIds.has(cost.userId))
+              : [],
+            taxSettings: Array.isArray(rawData.taxSettings)
+              ? rawData.taxSettings.filter((setting: any) => allowedUserIds.has(setting.userId))
+              : [],
+            taxProfiles: Array.isArray(rawData.taxProfiles)
+              ? rawData.taxProfiles.filter((profile: any) => allowedUserIds.has(profile.userId))
+              : [],
+            taxConfigPl: Array.isArray(rawData.taxConfigPl) ? rawData.taxConfigPl : [],
+            accountSettings: Array.isArray(rawData.accountSettings)
+              ? rawData.accountSettings.filter((setting: any) => allowedUserIds.has(setting.userId))
+              : [],
+            invoiceNumbers: Array.isArray(rawData.invoiceNumbers)
+              ? rawData.invoiceNumbers.filter((invoice: any) => scopedCustomerIds.has(invoice.customerId))
+              : [],
+          },
+        };
+      }
+
+      const result = await importDatabase(backupToImport);
 
       // Blind admin operation for global WebApp admins (DSGVO).
       if (isWebAppAdmin(ctx.user)) {
