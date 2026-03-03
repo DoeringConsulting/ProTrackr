@@ -8,7 +8,6 @@ import {
   publicProcedure,
   protectedProcedure,
   router,
-  webAppAdminProcedure,
 } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -44,6 +43,14 @@ function canAssignRoleAsWebAppAdmin(role: string): boolean {
   // 2) Mandanten-Admin anlegen
   // 3) Mandanten-Admin legt Mandanten-Benutzer an
   return role === "mandant_admin" || role === "webapp_admin";
+}
+
+function isGlobalSetupAdmin(actor: { role?: string | null } | null | undefined): boolean {
+  // Personal-union compatibility:
+  // legacy "admin" can execute global setup operations
+  // (mandant creation + initial mandant admin provisioning).
+  const role = actor?.role ?? null;
+  return role === "webapp_admin" || role === "admin";
 }
 
 async function canAccessCustomerOwnedData(
@@ -1097,11 +1104,17 @@ export const appRouter = router({
 
   // Mandant management (step 1 of setup flow)
   mandantenAdmin: router({
-    list: webAppAdminProcedure.query(async () => {
+    list: protectedProcedure.query(async ({ ctx }) => {
+      if (!isGlobalSetupAdmin(ctx.user)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Nur General-Admins duerfen Mandanten verwalten",
+        });
+      }
       const { getAllMandanten } = await import("./db-mandanten");
       return await getAllMandanten();
     }),
-    create: webAppAdminProcedure.input((val: unknown) => {
+    create: protectedProcedure.input((val: unknown) => {
       return z.object({
         name: z.string().trim().min(2).max(255),
         mandantNr: z
@@ -1111,7 +1124,14 @@ export const appRouter = router({
           .max(50)
           .regex(/^[A-Za-z0-9._-]+$/, "mandantNr darf nur A-Z, 0-9, . _ - enthalten"),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
+      if (!isGlobalSetupAdmin(ctx.user)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Nur General-Admins duerfen Mandanten anlegen",
+        });
+      }
+
       const { createMandant, findMandantByName, findMandantByNr } = await import("./db-mandanten");
 
       const byNr = await findMandantByNr(input.mandantNr);
@@ -1151,7 +1171,7 @@ export const appRouter = router({
     list: adminOrMandantAdminProcedure.query(async ({ ctx }) => {
       const { listUsersByMandantId, listUsersGlobal } = await import("./db");
 
-      if (isWebAppAdmin(ctx.user)) {
+      if (isGlobalSetupAdmin(ctx.user)) {
         return await listUsersGlobal();
       }
 
@@ -1173,9 +1193,9 @@ export const appRouter = router({
       const { createUser, findUserByEmailAndMandant } = await import("./db");
       const { findMandantById } = await import("./db-mandanten");
 
-      const actorIsWebAppAdmin = isWebAppAdmin(ctx.user);
+      const actorIsGlobalSetupAdmin = isGlobalSetupAdmin(ctx.user);
 
-      if (actorIsWebAppAdmin) {
+      if (actorIsGlobalSetupAdmin) {
         if (!canAssignRoleAsWebAppAdmin(input.role)) {
           throw new TRPCError({
             code: "FORBIDDEN",
@@ -1190,7 +1210,7 @@ export const appRouter = router({
         });
       }
 
-      const targetMandantId = actorIsWebAppAdmin ? input.mandantId : ctx.user.mandantId;
+      const targetMandantId = actorIsGlobalSetupAdmin ? input.mandantId : ctx.user.mandantId;
       if (!targetMandantId) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -1254,7 +1274,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden" });
       }
 
-      if (!isWebAppAdmin(ctx.user)) {
+      if (!isGlobalSetupAdmin(ctx.user)) {
         if (!ctx.user.mandantId || targetUser.mandantId !== ctx.user.mandantId) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Benutzer" });
         }
@@ -1285,7 +1305,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden" });
       }
 
-      if (!isWebAppAdmin(ctx.user)) {
+      if (!isGlobalSetupAdmin(ctx.user)) {
         if (!ctx.user.mandantId || targetUser.mandantId !== ctx.user.mandantId) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Benutzer" });
         }

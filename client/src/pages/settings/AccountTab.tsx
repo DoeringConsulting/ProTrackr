@@ -89,22 +89,22 @@ export default function AccountTab() {
     loadMe();
   }, []);
 
-  const isWebAppAdmin = authUser?.role === "webapp_admin";
+  const isGlobalSetupAdmin = ["webapp_admin", "admin"].includes(authUser?.role || "");
   const canManageUsers = ["webapp_admin", "mandant_admin", "admin"].includes(authUser?.role || "");
 
   useEffect(() => {
-    setRole(isWebAppAdmin ? "mandant_admin" : "user");
-  }, [isWebAppAdmin]);
+    setRole(isGlobalSetupAdmin ? "mandant_admin" : "user");
+  }, [isGlobalSetupAdmin]);
 
   const roleOptions = useMemo(
     () =>
-      isWebAppAdmin
+      isGlobalSetupAdmin
         ? [
             { value: "mandant_admin", label: "Mandanten-Admin" },
             { value: "webapp_admin", label: "WebApp-Admin" },
           ]
         : [{ value: "user", label: "Benutzer" }],
-    [isWebAppAdmin]
+    [isGlobalSetupAdmin]
   );
 
   const utils = trpc.useUtils();
@@ -113,7 +113,7 @@ export default function AccountTab() {
   });
   const { data: mandanten = [], isLoading: mandantenLoading } = trpc.mandantenAdmin.list.useQuery(
     undefined,
-    { enabled: isWebAppAdmin }
+    { enabled: isGlobalSetupAdmin }
   );
 
   const createMandantMutation = trpc.mandantenAdmin.create.useMutation({
@@ -140,7 +140,7 @@ export default function AccountTab() {
       setEmail("");
       setDisplayName("");
       setPassword("");
-      setRole(isWebAppAdmin ? "mandant_admin" : "user");
+      setRole(isGlobalSetupAdmin ? "mandant_admin" : "user");
       setMandantId("");
     },
     onError: (error) => {
@@ -182,19 +182,19 @@ export default function AccountTab() {
       return;
     }
 
-    if (isWebAppAdmin && !mandantId) {
+    if (isGlobalSetupAdmin && !mandantId) {
       toast.error("Bitte zuerst einen Mandanten auswaehlen");
       return;
     }
 
-    const targetRole = isWebAppAdmin ? role : "user";
+    const targetRole = isGlobalSetupAdmin ? role : "user";
 
     createMutation.mutate({
       email,
       displayName: displayName || undefined,
       password,
       role: targetRole,
-      mandantId: isWebAppAdmin ? Number(mandantId) : undefined,
+      mandantId: isGlobalSetupAdmin ? Number(mandantId) : undefined,
     });
   };
 
@@ -243,13 +243,13 @@ export default function AccountTab() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Konto-Verwaltung</h2>
           <p className="text-muted-foreground">
-            {isWebAppAdmin
+            {isGlobalSetupAdmin
               ? "Setup-Flow: Mandant anlegen, Mandanten-Admin anlegen, dann Benutzer je Mandant verwalten"
               : "Mandanten-Benutzer verwalten (anlegen, sperren, loeschen)"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isWebAppAdmin && (
+          {isGlobalSetupAdmin && (
             <Button variant="outline" onClick={() => setIsCreateMandantOpen(true)}>
               <Building2 className="mr-2 h-4 w-4" />
               Mandant anlegen
@@ -257,12 +257,12 @@ export default function AccountTab() {
           )}
           <Button onClick={() => setIsCreateOpen(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
-            {isWebAppAdmin ? "Mandanten-Admin anlegen" : "Benutzer anlegen"}
+            {isGlobalSetupAdmin ? "Mandanten-Admin anlegen" : "Benutzer anlegen"}
           </Button>
         </div>
       </div>
 
-      {isWebAppAdmin && (
+      {isGlobalSetupAdmin && (
         <Card>
           <CardHeader>
             <CardTitle>Verbindlicher Setup-Flow</CardTitle>
@@ -278,7 +278,7 @@ export default function AccountTab() {
         </Card>
       )}
 
-      {isWebAppAdmin && (
+      {isGlobalSetupAdmin && (
         <Card>
           <CardHeader>
             <CardTitle>Mandantenliste</CardTitle>
@@ -317,7 +317,7 @@ export default function AccountTab() {
         <CardHeader>
           <CardTitle>Benutzerliste</CardTitle>
           <CardDescription>
-            {isWebAppAdmin
+            {isGlobalSetupAdmin
               ? "Globaler WebApp-Admin-Bereich"
               : `Mandantenbereich (mandantId: ${authUser?.mandantId ?? "-"})`}
           </CardDescription>
@@ -433,9 +433,9 @@ export default function AccountTab() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isWebAppAdmin ? "Mandanten-Admin anlegen" : "Neuen Benutzer anlegen"}</DialogTitle>
+            <DialogTitle>{isGlobalSetupAdmin ? "Mandanten-Admin anlegen" : "Neuen Benutzer anlegen"}</DialogTitle>
             <DialogDescription>
-              {isWebAppAdmin
+              {isGlobalSetupAdmin
                 ? "Schritt 2: Admin-Benutzer fuer den ausgewaehlten Mandanten anlegen."
                 : "Direkte Anlage im eigenen Mandanten ohne Einladungs-E-Mail."}
             </DialogDescription>
@@ -471,7 +471,7 @@ export default function AccountTab() {
                 placeholder="Mindestens 8 Zeichen"
               />
             </div>
-            {isWebAppAdmin && (
+            {isGlobalSetupAdmin && (
               <>
                 <div className="space-y-2">
                   <Label>Rolle *</Label>
@@ -510,17 +510,17 @@ export default function AccountTab() {
                 </div>
               </>
             )}
-            {!isWebAppAdmin && (
+            {!isGlobalSetupAdmin && (
               <div className="rounded-md border p-3 text-sm text-muted-foreground">
                 Rolle fuer neue Benutzer: <span className="font-medium text-foreground">Benutzer</span>
               </div>
             )}
-            {isWebAppAdmin && !mandantenLoading && mandanten.length === 0 && (
+            {isGlobalSetupAdmin && !mandantenLoading && mandanten.length === 0 && (
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
                 Es ist noch kein Mandant vorhanden. Bitte zuerst "Mandant anlegen".
               </div>
             )}
-            {isWebAppAdmin && (
+            {isGlobalSetupAdmin && (
               <div className="rounded-md border p-3 text-sm text-muted-foreground">
                 Nach der Anlage meldet sich der Mandanten-Admin an und legt dann die Mandanten-Benutzer an.
               </div>
@@ -534,12 +534,12 @@ export default function AccountTab() {
               onClick={handleCreateUser}
               disabled={
                 createMutation.isPending ||
-                (isWebAppAdmin && (!mandantId || mandanten.length === 0))
+                (isGlobalSetupAdmin && (!mandantId || mandanten.length === 0))
               }
             >
               {createMutation.isPending
                 ? "Speichere..."
-                : isWebAppAdmin
+                : isGlobalSetupAdmin
                   ? "Mandanten-Admin anlegen"
                   : "Benutzer anlegen"}
             </Button>
