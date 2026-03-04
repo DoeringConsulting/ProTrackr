@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.38",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Popup auch bei Mandant/E-Mail-Mismatch im Reset-Flow",
+          "description": "Wenn kein passender Mandant oder Benutzer gefunden wird, liefert das Backend jetzt einen Fehler statt einer stillen Erfolgsmeldung."
+        },
+        {
+          "type": "improvement",
+          "title": "Reset-Erfolgsmeldung nur bei tatsaechlich versendetem Link",
+          "description": "Die API antwortet nur dann mit Erfolg, wenn SMTP pruefbar erreichbar ist, der Nutzer existiert und der Versand erfolgreich war."
+        }
+      ]
+    },
+    {
       "version": "1.0.37",
       "date": "2026-03-04",
       "changes": [

@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.38] - 2026-03-04
+
+### Behoben
+
+**Popup auch bei Mandant/E-Mail-Mismatch im Passwort-Reset** - Wenn kein passender Mandant oder Benutzer gefunden wird, liefert der Reset-Endpunkt nun einen Fehler statt einer generischen Erfolgsmeldung.
+
+### Geaendert
+
+**Erfolgsmeldung nur bei realem Versand** - Die API meldet Erfolg jetzt nur noch, wenn SMTP erreichbar ist und die Reset-Mail tatsaechlich versendet wurde.
+
+---
+
 ## [1.0.37] - 2026-03-04
 
 ### Hinzugefuegt
