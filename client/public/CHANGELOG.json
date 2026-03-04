@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.25",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Nullmodus wirkt jetzt konsistent in Dashboard und Berichten",
+          "description": "Ein gemeinsamer Status (LocalStorage + Hook) sorgt dafür, dass Steuer-/ZUS-Werte nach dem Umschalten app-weit zuverlässig auf 0 gesetzt werden."
+        },
+        {
+          "type": "fix",
+          "title": "Steuer-Toggle stabilisiert",
+          "description": "Die Umschaltung speichert robust über taxSettings.upsertProfile und bleibt beim Seitenwechsel erhalten."
+        }
+      ]
+    },
+    {
       "version": "1.0.24",
       "date": "2026-03-03",
       "changes": [

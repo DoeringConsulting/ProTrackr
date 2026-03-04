@@ -7,13 +7,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [1.0.24] - 2026-03-03
+## [1.0.25] - 2026-03-04
 
 ### Behoben
 
-**Fallback bei älterem Backend** - Wenn der Endpunkt `taxSettings.setModuleEnabled` serverseitig noch nicht verfügbar ist, verwendet der Steuer-Toggle automatisch `upsertProfile` als kompatiblen Fallback.
+**Nullmodus wirkt app-weit zuverlässig** - Dashboard und Berichte berücksichtigen den Nullmodus jetzt über einen gemeinsamen, sofort synchronisierten Status (LocalStorage + Hook), sodass Steuer-/ZUS-Werte nach dem Umschalten konsistent auf 0 gehen.
 
-**Kein Abbruch mehr beim Toggle-Klick** - Die Meldung *„No procedure found on path 'taxSettings.setModuleEnabled'“* blockiert das Umschalten nicht mehr; der Status wird dennoch gespeichert.
+**Umschaltung robust gespeichert** - Der Button speichert direkt über `taxSettings.upsertProfile`; dadurch bleibt der Status stabil und die Wirkung bleibt beim Seitenwechsel erhalten.
 
 ---
 

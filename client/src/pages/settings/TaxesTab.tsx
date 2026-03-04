@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { readTaxNullMode, writeTaxNullMode } from "@/lib/taxNullMode";
 import { Save } from "lucide-react";
 
 function toPercent(bp: number) {
@@ -30,7 +31,7 @@ export default function TaxesTab() {
   // Profile state
   const [taxForm, setTaxForm] = useState<"liniowy_19">("liniowy_19");
   const [zusRegime, setZusRegime] = useState<"ulga_na_start" | "preferencyjny_zus" | "maly_zus_plus" | "pelny_zus">("pelny_zus");
-  const [taxNullModeActive, setTaxNullModeActive] = useState(false);
+  const [taxNullModeActive, setTaxNullModeActive] = useState(() => readTaxNullMode());
   const [choroboweEnabled, setChoroboweEnabled] = useState(false);
   const [fpFsEnabled, setFpFsEnabled] = useState(true);
   const [wypadkowaRate, setWypadkowaRate] = useState("1.67");
@@ -55,7 +56,9 @@ export default function TaxesTab() {
 
   useEffect(() => {
     if (!profile || isTogglingModule) return;
-    setTaxNullModeActive(!(profile.taxModuleEnabled ?? true));
+    const profileNullMode = !(profile.taxModuleEnabled ?? true);
+    setTaxNullModeActive(profileNullMode);
+    writeTaxNullMode(profileNullMode);
     setTaxForm(profile.taxForm);
     setZusRegime(profile.zusRegime);
     setChoroboweEnabled(profile.choroboweEnabled);
@@ -110,6 +113,7 @@ export default function TaxesTab() {
   const handleToggleTaxModule = async () => {
     const nextNullMode = !taxNullModeActive;
     setTaxNullModeActive(nextNullMode);
+    writeTaxNullMode(nextNullMode);
 
     try {
       await upsertProfileMutation.mutateAsync(buildProfilePayload(nextNullMode));
@@ -121,6 +125,7 @@ export default function TaxesTab() {
       );
     } catch (error: any) {
       setTaxNullModeActive(!nextNullMode);
+      writeTaxNullMode(!nextNullMode);
       toast.error(`Fehler beim Speichern des Moduls: ${error.message}`);
     }
   };
@@ -174,6 +179,7 @@ export default function TaxesTab() {
         utils.taxSettings.getProfile.invalidate(),
         utils.taxSettings.getConfig.invalidate({ year: selectedYear }),
       ]);
+      writeTaxNullMode(taxNullModeActive);
 
       toast.success("Steuerprofil und Jahreswerte gespeichert.");
     } catch (error: any) {
