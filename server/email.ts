@@ -9,6 +9,13 @@ type MailTransportConfig = {
   from: string;
 };
 
+export type EmailDeliveryResult = {
+  success: boolean;
+  code: string;
+  message: string;
+  technicalReason?: string;
+};
+
 let cachedTransporter: nodemailer.Transporter | null = null;
 
 function getMailConfig(): MailTransportConfig | null {
@@ -45,17 +52,85 @@ function getTransporter(): nodemailer.Transporter | null {
   return cachedTransporter;
 }
 
-export async function testEmailConnection(): Promise<boolean> {
+function mapEmailError(error: unknown): EmailDeliveryResult {
+  const rawCode =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code ?? "SMTP_SEND_FAILED")
+      : "SMTP_SEND_FAILED";
+  const code = rawCode.toUpperCase();
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "Unbekannter SMTP-Fehler";
+
+  const technicalReason = `${code}: ${rawMessage}`;
+
+  switch (code) {
+    case "EAUTH":
+      return {
+        success: false,
+        code,
+        message: "SMTP-Anmeldung fehlgeschlagen. Benutzername/Passwort pruefen.",
+        technicalReason,
+      };
+    case "ECONNECTION":
+    case "ESOCKET":
+    case "ETIMEDOUT":
+      return {
+        success: false,
+        code,
+        message: "Verbindung zum SMTP-Server fehlgeschlagen.",
+        technicalReason,
+      };
+    case "ETLS":
+      return {
+        success: false,
+        code,
+        message: "SMTP-TLS/SSL-Konfiguration ist ungueltig.",
+        technicalReason,
+      };
+    default:
+      return {
+        success: false,
+        code,
+        message: "E-Mail-Versand fehlgeschlagen.",
+        technicalReason,
+      };
+  }
+}
+
+function smtpNotConfiguredResult(): EmailDeliveryResult {
+  return {
+    success: false,
+    code: "SMTP_NOT_CONFIGURED",
+    message: "SMTP ist nicht vollstaendig konfiguriert.",
+    technicalReason:
+      "Erforderlich: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM",
+  };
+}
+
+export async function testEmailConnectionDetailed(): Promise<EmailDeliveryResult> {
   const transporter = getTransporter();
-  if (!transporter) return false;
+  if (!transporter) return smtpNotConfiguredResult();
 
   try {
     await transporter.verify();
-    return true;
+    return {
+      success: true,
+      code: "OK",
+      message: "SMTP-Verbindung erfolgreich.",
+    };
   } catch (error) {
     console.warn("[Email] SMTP verify failed:", error);
-    return false;
+    return mapEmailError(error);
   }
+}
+
+export async function testEmailConnection(): Promise<boolean> {
+  const result = await testEmailConnectionDetailed();
+  return result.success;
 }
 
 export async function sendPasswordResetEmail(params: {
@@ -63,13 +138,13 @@ export async function sendPasswordResetEmail(params: {
   resetLink: string;
   recipientName?: string | null;
   expiresMinutes?: number;
-}): Promise<boolean> {
+}): Promise<EmailDeliveryResult> {
   const transporter = getTransporter();
   const config = getMailConfig();
 
   if (!transporter || !config) {
     console.warn("[Email] SMTP not configured, password reset email not sent");
-    return false;
+    return smtpNotConfiguredResult();
   }
 
   const recipient = params.recipientName?.trim() || "Nutzer";
@@ -118,10 +193,14 @@ export async function sendPasswordResetEmail(params: {
       text,
       html,
     });
-    return true;
+    return {
+      success: true,
+      code: "OK",
+      message: "Passwort-Reset-E-Mail versendet.",
+    };
   } catch (error) {
     console.warn("[Email] Failed to send password reset email:", error);
-    return false;
+    return mapEmailError(error);
   }
 }
 

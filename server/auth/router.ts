@@ -11,7 +11,7 @@ import {
   updateUserPasswordHash,
 } from "../db";
 import { findMandantByName, findMandantByNr } from "../db-mandanten";
-import { sendPasswordResetEmail } from "../email";
+import { sendPasswordResetEmail, testEmailConnectionDetailed } from "../email";
 
 export const authRouter = Router();
 const RESET_TOKEN_BYTES = 32;
@@ -81,6 +81,16 @@ authRouter.post("/forgot-password", async (req: Request, res: Response) => {
         "Wenn ein passendes Konto existiert, wurde ein Link zum Zuruecksetzen versendet.",
     };
 
+    const smtpReady = await testEmailConnectionDetailed();
+    if (!smtpReady.success) {
+      return res.status(503).json({
+        error: "Passwort-Reset-Mail konnte nicht versendet werden",
+        reason: smtpReady.message,
+        code: smtpReady.code,
+        detail: smtpReady.technicalReason,
+      });
+    }
+
     let resolvedMandant = await findMandantByNr(mandant);
     if (!resolvedMandant) {
       resolvedMandant = await findMandantByName(mandant);
@@ -107,12 +117,21 @@ authRouter.post("/forgot-password", async (req: Request, res: Response) => {
     const baseUrl = buildAppBaseUrl(req);
     const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
-    await sendPasswordResetEmail({
+    const sendResult = await sendPasswordResetEmail({
       toEmail: user.email,
       recipientName: user.displayName ?? null,
       resetLink,
       expiresMinutes: RESET_TOKEN_EXP_MINUTES,
     });
+
+    if (!sendResult.success) {
+      return res.status(502).json({
+        error: "Passwort-Reset-Mail konnte nicht versendet werden",
+        reason: sendResult.message,
+        code: sendResult.code,
+        detail: sendResult.technicalReason,
+      });
+    }
 
     return res.json(genericResponse);
   } catch (err) {

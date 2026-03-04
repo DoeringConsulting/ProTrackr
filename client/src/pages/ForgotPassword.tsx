@@ -23,7 +23,17 @@ export default function ForgotPassword() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Anfrage fehlgeschlagen");
+        const messageParts: string[] = [data.error ?? "Anfrage fehlgeschlagen"];
+        if (typeof data.reason === "string" && data.reason.trim().length > 0) {
+          messageParts.push(data.reason);
+        }
+        if (typeof data.code === "string" && data.code.trim().length > 0) {
+          messageParts.push(`Code: ${data.code}`);
+        }
+        if (typeof data.detail === "string" && data.detail.trim().length > 0) {
+          messageParts.push(data.detail);
+        }
+        toast.error(messageParts.join(" | "));
         return;
       }
       toast.success(
