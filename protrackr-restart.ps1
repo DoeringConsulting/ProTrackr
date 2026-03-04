@@ -47,8 +47,16 @@ function Start-ProTrackr {
 
   Ensure-BuildExists
 
-  $cmdArgs = "/c cd /d `"$RepoPath`" && set NODE_ENV=production && node dist/index.js 1>> `"$OutLog`" 2>> `"$ErrLog`""
-  Start-Process -FilePath "cmd.exe" -ArgumentList $cmdArgs -WindowStyle Hidden | Out-Null
+  # Start node directly to enforce working directory and inherited environment.
+  $env:NODE_ENV = "production"
+  $nodePath = (Get-Command node -ErrorAction Stop).Source
+  Start-Process `
+    -FilePath $nodePath `
+    -ArgumentList "dist/index.js" `
+    -WorkingDirectory $RepoPath `
+    -RedirectStandardOutput $OutLog `
+    -RedirectStandardError $ErrLog `
+    -WindowStyle Hidden | Out-Null
 
   Start-Sleep -Seconds 2
   $runningNow = Get-ProTrackrNodeProcesses
