@@ -75,6 +75,17 @@ const initialFormData: CustomerFormData = {
   vatId: "",
 };
 
+function parseMandatenNumberSequence(mandatenNr: string | null | undefined): number | null {
+  if (!mandatenNr) return null;
+  const normalized = mandatenNr.trim();
+  if (normalized.length === 0) return null;
+  const trailingDigits = normalized.match(/(\d+)\s*$/);
+  if (!trailingDigits) return null;
+  const parsed = Number.parseInt(trailingDigits[1], 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return null;
+  return parsed;
+}
+
 export default function Customers() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<number | null>(null);
@@ -160,6 +171,14 @@ export default function Customers() {
     },
   });
 
+  const getNextMandatenNrCandidate = (): string => {
+    const maxSequence = (customers ?? []).reduce((acc, customer) => {
+      const sequence = parseMandatenNumberSequence(customer.mandatenNr);
+      return sequence && sequence > acc ? sequence : acc;
+    }, 0);
+    return String(maxSequence + 1).padStart(3, "0");
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -190,7 +209,11 @@ export default function Customers() {
         mandatenNr: formData.mandatenNr,
       });
     } else {
-      createMutation.mutate(baseData);
+      createMutation.mutate({
+        ...baseData,
+        // Backward compatibility: older servers still require mandatenNr in the input schema.
+        mandatenNr: getNextMandatenNrCandidate(),
+      });
     }
   };
 
