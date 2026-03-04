@@ -485,8 +485,26 @@ export default function Dashboard() {
   const revenueChart = buildRevenueChart();
   const projectChart = buildProjectChart();
   const costChart = buildCostChart();
+  const costChartVisibleData = costChart.data.filter((entry) => Number(entry.value ?? 0) > 0);
   const totalMissingRates =
     revenueChart.missingRates + projectChart.missingRates + costChart.missingRates;
+
+  const formatCostSliceLabel = (entry: CostSlice) => {
+    const baseCents = Math.round(Number(entry.value ?? 0) * 100);
+    const chartCurrency = String(entry.chartCurrency || "EUR");
+    const originalCurrency = String(entry.originalCurrency || chartCurrency);
+    const originalCents =
+      typeof entry.originalAmountCents === "number" ? entry.originalAmountCents : baseCents;
+
+    if (!showUnifiedCurrency && originalCurrency !== chartCurrency) {
+      return `${entry.name}: ${formatMoney(originalCents, originalCurrency)} (~${formatMoney(
+        baseCents,
+        chartCurrency
+      )})`;
+    }
+
+    return `${entry.name}: ${formatMoney(originalCents, originalCurrency)}`;
+  };
 
   const expenseByCurrency = aggregateByCurrency(
     expensesDetailed.map((expense) => ({
@@ -754,40 +772,24 @@ export default function Dashboard() {
                 Kostenaufschluesselung ({selectedPeriodLabel}){" "}
                 {showUnifiedCurrency
                   ? `in ${targetCurrency}`
-                  : "Anteile nach EUR-Basis, Beschriftung in Originalwaehrungen"}
+                  : "Anteile nach EUR-Basis, Beschriftung in Originalwaehrungen"}{" "}
+                (0-Werte ausgeblendet)
               </CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={costChart.data}
+                    data={costChartVisibleData}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry: any) => {
-                      const baseCents = Math.round(Number(entry.value ?? 0) * 100);
-                      const chartCurrency = String(entry.chartCurrency || "EUR");
-                      const originalCurrency = String(entry.originalCurrency || chartCurrency);
-                      const originalCents =
-                        typeof entry.originalAmountCents === "number"
-                          ? entry.originalAmountCents
-                          : baseCents;
-
-                      if (!showUnifiedCurrency && originalCurrency !== chartCurrency) {
-                        return `${entry.name}: ${formatMoney(originalCents, originalCurrency)} (~${formatMoney(
-                          baseCents,
-                          chartCurrency
-                        )})`;
-                      }
-
-                      return `${entry.name}: ${formatMoney(originalCents, originalCurrency)}`;
-                    }}
+                    label={false}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
                   >
-                    {costChart.data.map((entry, index) => (
+                    {costChartVisibleData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -815,6 +817,23 @@ export default function Dashboard() {
                   />
                 </PieChart>
               </ResponsiveContainer>
+              {costChartVisibleData.length > 0 ? (
+                <div className="mt-3 grid gap-1 text-sm">
+                  {costChartVisibleData.map((entry, index) => (
+                    <div key={`${entry.name}-${index}`} className="flex items-start gap-2">
+                      <span
+                        className="mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: entry.color }}
+                      />
+                      <span className="text-muted-foreground">{formatCostSliceLabel(entry)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Keine Kostenpositionen &gt; 0 im gewaehlten Zeitraum.
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

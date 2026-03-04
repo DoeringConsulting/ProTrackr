@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.31] - 2026-03-04
+
+### Behoben
+
+**Keine überlappenden Labels mehr in der Kostenverteilung** - Die Beschriftungen im Dashboard-Piechart werden jetzt als lesbare Liste unter dem Diagramm dargestellt statt direkt im Chart überzulagern.
+
+**Nullwerte ausgeblendet** - Kostenpositionen mit `0,00` werden im Piechart und in der dazugehörigen Liste nicht mehr angezeigt.
+
+---
+
 ## [1.0.30] - 2026-03-04
 
 ### Behoben

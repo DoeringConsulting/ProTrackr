@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.31",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Dashboard-Kostenlabels ohne Überlappung",
+          "description": "Kreislabels im Kosten-Pie wurden entfernt und durch eine gut lesbare Legendenliste unter dem Diagramm ersetzt."
+        },
+        {
+          "type": "fix",
+          "title": "0,00-Kostenpositionen werden ausgeblendet",
+          "description": "Slices und Bezeichnungen mit Wert 0 werden in der Kostenverteilung nicht mehr angezeigt."
+        }
+      ]
+    },
+    {
       "version": "1.0.30",
       "date": "2026-03-04",
       "changes": [
