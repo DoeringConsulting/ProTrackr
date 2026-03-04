@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.34] - 2026-03-04
+
+### Behoben
+
+**Kompatibilitätsfix für `mandatenNr`-Validierung** - Die Kunden-Neuanlage sendet wieder eine automatisch berechnete Mandanten-Nr im Create-Payload, damit auch ältere Serverstände ohne optionales Feld keinen Zod-Fehler mehr auslösen.
+
+### Geändert
+
+**Robustere Client-Berechnung der nächsten Nummer** - Der nächste 3-stellige Wert wird aus vorhandenen Kundennummern inklusive numerischem Suffix ermittelt.
+
+---
+
 ## [1.0.33] - 2026-03-04
 
 ### Behoben
