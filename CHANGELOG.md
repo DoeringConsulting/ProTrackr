@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.30] - 2026-03-04
+
+### Behoben
+
+**SQL-Parserfehler in Migration 0012 behoben** - Die Kompatibilitätsmigration für `taxCalculationMode` wurde mit `statement-breakpoint`-Trennern versehen, damit MySQL die einzelnen Statements korrekt ausführen kann.
+
+**`db:push` wieder stabil** - Der Fehler `ER_PARSE_ERROR` bei der Ausführung von `0012_tax_calculation_mode_compat.sql` tritt nicht mehr auf.
+
+---
+
 ## [1.0.29] - 2026-03-04
 
 ### Behoben
