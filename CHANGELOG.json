@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.36",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Windows-Start setzt NODE_ENV und Working Directory robust",
+          "description": "Der Desktop-Start startet node.exe jetzt mit explizitem Arbeitsverzeichnis und NODE_ENV=production, damit kein falscher Pfad wie C:\\Projects\\client\\index.html mehr verwendet wird."
+        },
+        {
+          "type": "fix",
+          "title": "Start-Wrapper ohne cmd-Quoting-Falle",
+          "description": "Der Startpfad nutzt jetzt direkt Start-Process auf node.exe statt einer fehleranfaelligen cmd /c Kette."
+        }
+      ]
+    },
+    {
       "version": "1.0.35",
       "date": "2026-03-04",
       "changes": [

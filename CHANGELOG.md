@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.36] - 2026-03-04
+
+### Behoben
+
+**Windows-Start robust mit `NODE_ENV=production` und festem Arbeitsverzeichnis** - Der Desktop-Start startet `node.exe` jetzt mit explizitem Working Directory, sodass kein falscher Pfad wie `C:\Projects\client\index.html` mehr auftritt.
+
+**Start ohne cmd-Quoting-Falle** - Der Wrapper verwendet nun direkt `Start-Process` fuer `node.exe` statt einer anfaelligen `cmd /c`-Kette.
+
+---
+
 ## [1.0.35] - 2026-03-04
 
 ### Hinzugefuegt
