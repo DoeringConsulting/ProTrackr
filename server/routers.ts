@@ -1031,33 +1031,6 @@ export const appRouter = router({
         fpFsEnabled: profile.fpFsEnabled === 1,
       };
     }),
-    setModuleEnabled: adminOrMandantAdminProcedure.input((val: unknown) => {
-      return z.object({
-        enabled: z.boolean(),
-      }).parse(val);
-    }).mutation(async ({ ctx, input }) => {
-      const { getTaxProfile, upsertTaxProfile } = await import("./db");
-      const existing = await getTaxProfile(ctx.user.id);
-      const profile = await upsertTaxProfile(ctx.user.id, {
-        taxModuleEnabled: input.enabled ? 1 : 0,
-        taxForm: existing?.taxForm ?? "liniowy_19",
-        zusRegime: existing?.zusRegime ?? "pelny_zus",
-        choroboweEnabled: existing?.choroboweEnabled ?? 0,
-        fpFsEnabled: existing?.fpFsEnabled ?? 1,
-        wypadkowaRateBp: existing?.wypadkowaRateBp ?? 167,
-        zdrowotnaRateLiniowyBp: existing?.zdrowotnaRateLiniowyBp ?? 490,
-        pitRateBp: existing?.pitRateBp ?? 1900,
-      });
-
-      if (!profile) return null;
-
-      return {
-        ...profile,
-        taxModuleEnabled: profile.taxModuleEnabled === 1,
-        choroboweEnabled: profile.choroboweEnabled === 1,
-        fpFsEnabled: profile.fpFsEnabled === 1,
-      };
-    }),
     getConfig: protectedProcedure.input((val: unknown) => {
       return z.object({
         year: z.number().int().min(2000).max(2100).optional(),

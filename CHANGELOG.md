@@ -17,6 +17,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.24] - 2026-03-03
+
+### Behoben
+
+**Steuer-Button auf Nullmodus umgestellt** - Der Button deaktiviert das Modul nicht mehr technisch, sondern schaltet einen Nullmodus: Bei Aktivierung werden Steuer-/ZUS-Werte rechnerisch auf 0 gesetzt; bei Deaktivierung werden die regulären Werte wieder genutzt.
+
+**Toggle-Persistenz vereinfacht** - Die Umschaltung speichert direkt über `taxSettings.upsertProfile`. Die separate `setModuleEnabled`-Sonderroute wurde entfernt, wodurch die Fehlermeldung beim Button-Klick entfällt.
+
+---
+
 ## [1.0.23] - 2026-03-03
 
 ### Behoben

@@ -30,7 +30,7 @@ export default function TaxesTab() {
   // Profile state
   const [taxForm, setTaxForm] = useState<"liniowy_19">("liniowy_19");
   const [zusRegime, setZusRegime] = useState<"ulga_na_start" | "preferencyjny_zus" | "maly_zus_plus" | "pelny_zus">("pelny_zus");
-  const [taxModuleEnabled, setTaxModuleEnabled] = useState(true);
+  const [taxNullModeActive, setTaxNullModeActive] = useState(false);
   const [choroboweEnabled, setChoroboweEnabled] = useState(false);
   const [fpFsEnabled, setFpFsEnabled] = useState(true);
   const [wypadkowaRate, setWypadkowaRate] = useState("1.67");
@@ -51,13 +51,11 @@ export default function TaxesTab() {
   const { data: config, isLoading: configLoading } = trpc.taxSettings.getConfig.useQuery({ year: selectedYear });
   const upsertProfileMutation = trpc.taxSettings.upsertProfile.useMutation();
   const upsertConfigMutation = trpc.taxSettings.upsertConfig.useMutation();
-  const setModuleEnabledMutation = trpc.taxSettings.setModuleEnabled.useMutation();
-
-  const isTogglingModule = setModuleEnabledMutation.isPending;
+  const isTogglingModule = upsertProfileMutation.isPending;
 
   useEffect(() => {
     if (!profile || isTogglingModule) return;
-    setTaxModuleEnabled(profile.taxModuleEnabled ?? true);
+    setTaxNullModeActive(!(profile.taxModuleEnabled ?? true));
     setTaxForm(profile.taxForm);
     setZusRegime(profile.zusRegime);
     setChoroboweEnabled(profile.choroboweEnabled);
@@ -80,11 +78,10 @@ export default function TaxesTab() {
 
   const isSaving =
     upsertProfileMutation.isPending ||
-    upsertConfigMutation.isPending ||
-    setModuleEnabledMutation.isPending;
+    upsertConfigMutation.isPending;
   const isLoading = profileLoading || configLoading;
 
-  const buildProfilePayload = (enabled: boolean) => {
+  const buildProfilePayload = (nullModeActive: boolean) => {
     const wypadkowaRateNumber = parseFloatSafe(wypadkowaRate);
     const zdrowotnaRateNumber = parseFloatSafe(zdrowotnaRateLiniowy);
     const pitRateNumber = parseFloatSafe(pitRate);
@@ -98,7 +95,8 @@ export default function TaxesTab() {
     }
 
     return {
-      taxModuleEnabled: enabled,
+      // null mode on => tax module off for calculations
+      taxModuleEnabled: !nullModeActive,
       taxForm,
       zusRegime,
       choroboweEnabled,
@@ -110,41 +108,19 @@ export default function TaxesTab() {
   };
 
   const handleToggleTaxModule = async () => {
-    const nextEnabled = !taxModuleEnabled;
-    setTaxModuleEnabled(nextEnabled);
+    const nextNullMode = !taxNullModeActive;
+    setTaxNullModeActive(nextNullMode);
 
     try {
-      await setModuleEnabledMutation.mutateAsync({ enabled: nextEnabled });
+      await upsertProfileMutation.mutateAsync(buildProfilePayload(nextNullMode));
       await utils.taxSettings.getProfile.invalidate();
       toast.success(
-        nextEnabled
-          ? "Modul „% Steuern“ wurde aktiviert."
-          : "Modul „% Steuern“ wurde deaktiviert."
+        nextNullMode
+          ? "Nullmodus aktiviert: Steuern/ZUS werden auf 0 gesetzt."
+          : "Nullmodus deaktiviert: Steuerwerte werden normal berechnet."
       );
     } catch (error: any) {
-      const message = String(error?.message ?? "");
-      const missingProcedure =
-        message.includes("No procedure found on path") || message.includes("NOT_FOUND");
-
-      if (missingProcedure) {
-        try {
-          const fallbackPayload = buildProfilePayload(nextEnabled);
-          await upsertProfileMutation.mutateAsync(fallbackPayload);
-          await utils.taxSettings.getProfile.invalidate();
-          toast.success(
-            nextEnabled
-              ? "Modul „% Steuern“ wurde aktiviert."
-              : "Modul „% Steuern“ wurde deaktiviert."
-          );
-          return;
-        } catch (fallbackError: any) {
-          setTaxModuleEnabled(!nextEnabled);
-          toast.error(`Fehler beim Speichern des Moduls: ${fallbackError.message}`);
-          return;
-        }
-      }
-
-      setTaxModuleEnabled(!nextEnabled);
+      setTaxNullModeActive(!nextNullMode);
       toast.error(`Fehler beim Speichern des Moduls: ${error.message}`);
     }
   };
@@ -181,7 +157,7 @@ export default function TaxesTab() {
     }
 
     try {
-      await upsertProfileMutation.mutateAsync(buildProfilePayload(taxModuleEnabled));
+      await upsertProfileMutation.mutateAsync(buildProfilePayload(taxNullModeActive));
 
       await upsertConfigMutation.mutateAsync({
         year: selectedYear,
@@ -227,23 +203,23 @@ export default function TaxesTab() {
           </p>
         </div>
         <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-          <span className="text-sm font-medium">Modul „% Steuern“</span>
+          <span className="text-sm font-medium">Nullmodus „% Steuern“</span>
           <Button
             type="button"
             size="sm"
-            variant={taxModuleEnabled ? "default" : "outline"}
+            variant={taxNullModeActive ? "destructive" : "outline"}
             onClick={handleToggleTaxModule}
-            disabled={setModuleEnabledMutation.isPending}
+            disabled={upsertProfileMutation.isPending}
             className="shrink-0"
           >
-            {taxModuleEnabled ? "Aktiv" : "Deaktiviert"}
+            {taxNullModeActive ? "Aktiv (0-Werte)" : "Deaktiviert"}
           </Button>
         </div>
       </div>
 
-      {!taxModuleEnabled && (
+      {taxNullModeActive && (
         <p className="text-sm text-amber-600">
-          Das Modul „% Steuern“ ist deaktiviert. Alle Berechnungen werden ohne ZUS/Krankenversicherung/Steuer durchgeführt.
+          Nullmodus ist aktiv: Steuer-/ZUS-Werte werden temporär mit 0 berechnet. Beim Deaktivieren kommen die normalen Werte zurück.
         </p>
       )}
 
