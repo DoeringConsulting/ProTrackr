@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.32] - 2026-03-04
+
+### Hinzugefügt
+
+**Automatische 3-stellige Mandanten-Nr bei Kundenanlage** - Neue Kunden erhalten die Mandanten-Nr jetzt automatisch fortlaufend im Format `001`, `002`, `003` usw.
+
+### Geändert
+
+**Kundenformular für Neuanlage vereinfacht** - Bei der Neuanlage wird die Mandanten-Nr als automatisch vergeben angezeigt; bei der Bearbeitung bestehender Kunden bleibt das Feld weiterhin editierbar.
+
+---
+
 ## [1.0.31] - 2026-03-04
 
 ### Behoben
