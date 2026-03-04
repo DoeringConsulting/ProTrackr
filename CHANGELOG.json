@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.37",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Popup mit Versandfehler-Grund bei Passwort-Reset",
+          "description": "Die Passwort-vergessen-Seite zeigt jetzt im Toast die konkrete Ursache, wenn die Reset-E-Mail nicht versendet werden konnte."
+        },
+        {
+          "type": "improvement",
+          "title": "SMTP-Fehlercodes und technische Details werden Rueckgabefeld",
+          "description": "Das Backend liefert bei SMTP-Problemen strukturierte Fehler (code, reason, detail), damit die UI nutzerfreundliche und zugleich technische Hinweise anzeigen kann."
+        }
+      ]
+    },
+    {
       "version": "1.0.36",
       "date": "2026-03-04",
       "changes": [

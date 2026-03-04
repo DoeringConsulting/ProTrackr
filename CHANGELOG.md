@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.37] - 2026-03-04
+
+### Hinzugefuegt
+
+**Popup mit Versandfehler-Grund bei Passwort-Reset** - Wenn der Versand der Reset-E-Mail fehlschlaegt, zeigt die UI jetzt eine klare Fehlermeldung mit Ursache.
+
+### Geaendert
+
+**Strukturierte SMTP-Fehlerantworten** - Das Backend liefert bei Mail-Problemen jetzt `code`, `reason` und `detail`, damit Fehler im Betrieb schneller diagnostiziert werden koennen.
+
+---
+
 ## [1.0.36] - 2026-03-04
 
 ### Behoben
