@@ -72,8 +72,10 @@ async function canAccessCustomerOwnedData(
 function parseMandatenNumberSequence(mandatenNr: string | null | undefined): number | null {
   if (!mandatenNr) return null;
   const normalized = mandatenNr.trim();
-  if (!/^\d+$/.test(normalized)) return null;
-  const parsed = Number.parseInt(normalized, 10);
+  if (normalized.length === 0) return null;
+  const trailingDigits = normalized.match(/(\d+)\s*$/);
+  if (!trailingDigits) return null;
+  const parsed = Number.parseInt(trailingDigits[1], 10);
   if (!Number.isFinite(parsed) || parsed < 1) return null;
   return parsed;
 }
@@ -170,35 +172,41 @@ export const appRouter = router({
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { createCustomer, getAllCustomersIncludingArchived, getCustomersByMandatenNr } = await import("./db");
+      const allCustomers = await getAllCustomersIncludingArchived();
+      let maxSequence = 0;
 
-      let assignedMandatenNr = input.mandatenNr?.trim() || "";
+      for (const existing of allCustomers) {
+        if (!(await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null }))) {
+          continue;
+        }
+        const sequence = parseMandatenNumberSequence(existing.mandatenNr);
+        if (sequence && sequence > maxSequence) {
+          maxSequence = sequence;
+        }
+      }
+      let nextSequence = maxSequence + 1;
+      let assignedMandatenNr = formatMandatenNumber(nextSequence);
 
-      if (!assignedMandatenNr) {
-        const allCustomers = await getAllCustomersIncludingArchived();
-        let maxSequence = 0;
+      // Reserve the next free number in scope; protects against pre-existing gaps/conflicts.
+      while (true) {
+        const existingWithSameNumber = await getCustomersByMandatenNr(assignedMandatenNr);
+        let conflictInScope = false;
 
-        for (const existing of allCustomers) {
-          if (!(await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null }))) {
-            continue;
-          }
-          const sequence = parseMandatenNumberSequence(existing.mandatenNr);
-          if (sequence && sequence > maxSequence) {
-            maxSequence = sequence;
+        for (const existing of existingWithSameNumber) {
+          if (await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null })) {
+            conflictInScope = true;
+            break;
           }
         }
 
-        assignedMandatenNr = formatMandatenNumber(maxSequence + 1);
+        if (!conflictInScope) {
+          break;
+        }
+
+        nextSequence += 1;
+        assignedMandatenNr = formatMandatenNumber(nextSequence);
       }
 
-      const existingWithSameNumber = await getCustomersByMandatenNr(assignedMandatenNr);
-      for (const existing of existingWithSameNumber) {
-        if (await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null })) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Mandanten-Nr ist im aktuellen Mandantenbereich bereits vergeben",
-          });
-        }
-      }
       return await createCustomer({
         ...input,
         mandatenNr: assignedMandatenNr,
