@@ -139,6 +139,7 @@ export default function Reports() {
       endDate,
       taxProfile: taxProfile
         ? {
+            taxCalculationMode: taxProfile.taxCalculationMode,
             taxForm: taxProfile.taxForm,
             zusRegime: taxProfile.zusRegime,
             choroboweEnabled: taxProfile.choroboweEnabled,

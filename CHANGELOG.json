@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.27",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Option A: Serverpersistierter Steuerberechnungsmodus",
+          "description": "Neues Feld taxCalculationMode (normal|zero) im Steuerprofil als einzige Wahrheitsquelle für die Berechnung."
+        },
+        {
+          "type": "fix",
+          "title": "Nullmodus wirkt konsistent in Dashboard und Berichten",
+          "description": "Bei Modus ZERO werden ZUS, Krankenversicherung und Steuer überall deterministisch mit 0 berechnet; bei NORMAL greifen sofort wieder die hinterlegten Werte."
+        }
+      ]
+    },
+    {
       "version": "1.0.26",
       "date": "2026-03-04",
       "changes": [

@@ -252,6 +252,7 @@ export type InsertTaxSetting = typeof taxSettings.$inferInsert;
 export const taxProfiles = mysqlTable("taxProfiles", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull().unique(),
+  taxCalculationMode: mysqlEnum("taxCalculationMode", ["normal", "zero"]).notNull().default("normal"),
   taxForm: mysqlEnum("taxForm", ["liniowy_19"]).notNull().default("liniowy_19"),
   zusRegime: mysqlEnum("zusRegime", [
     "ulga_na_start",

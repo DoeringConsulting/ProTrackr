@@ -984,6 +984,7 @@ export const appRouter = router({
 
       if (!profile) {
         return {
+          taxCalculationMode: "normal" as const,
           taxForm: "liniowy_19" as const,
           zusRegime: "pelny_zus" as const,
           choroboweEnabled: false,
@@ -996,12 +997,14 @@ export const appRouter = router({
 
       return {
         ...profile,
+        taxCalculationMode: (profile.taxCalculationMode ?? "normal") as "normal" | "zero",
         choroboweEnabled: profile.choroboweEnabled === 1,
         fpFsEnabled: profile.fpFsEnabled === 1,
       };
     }),
     upsertProfile: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
+        taxCalculationMode: z.enum(["normal", "zero"]).default("normal"),
         taxForm: z.enum(["liniowy_19"]).default("liniowy_19"),
         zusRegime: z.enum(["ulga_na_start", "preferencyjny_zus", "maly_zus_plus", "pelny_zus"]),
         choroboweEnabled: z.boolean(),
@@ -1022,6 +1025,7 @@ export const appRouter = router({
 
       return {
         ...profile,
+        taxCalculationMode: (profile.taxCalculationMode ?? "normal") as "normal" | "zero",
         choroboweEnabled: profile.choroboweEnabled === 1,
         fpFsEnabled: profile.fpFsEnabled === 1,
       };

@@ -28,6 +28,7 @@ export default function TaxesTab() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
 
   // Profile state
+  const [taxCalculationMode, setTaxCalculationMode] = useState<"normal" | "zero">("normal");
   const [taxForm, setTaxForm] = useState<"liniowy_19">("liniowy_19");
   const [zusRegime, setZusRegime] = useState<"ulga_na_start" | "preferencyjny_zus" | "maly_zus_plus" | "pelny_zus">("pelny_zus");
   const [choroboweEnabled, setChoroboweEnabled] = useState(false);
@@ -51,6 +52,7 @@ export default function TaxesTab() {
 
   useEffect(() => {
     if (!profile) return;
+    setTaxCalculationMode(profile.taxCalculationMode ?? "normal");
     setTaxForm(profile.taxForm);
     setZusRegime(profile.zusRegime);
     setChoroboweEnabled(profile.choroboweEnabled);
@@ -77,10 +79,86 @@ export default function TaxesTab() {
   const isSaving = upsertProfileMutation.isPending || upsertConfigMutation.isPending;
   const isLoading = profileLoading || configLoading;
 
-  const handleSave = async () => {
+  const parseProfileNumbers = () => {
     const wypadkowaRateNumber = parseFloatSafe(wypadkowaRate);
     const zdrowotnaRateNumber = parseFloatSafe(zdrowotnaRateLiniowy);
     const pitRateNumber = parseFloatSafe(pitRate);
+
+    if (
+      Number.isNaN(wypadkowaRateNumber) ||
+      Number.isNaN(zdrowotnaRateNumber) ||
+      Number.isNaN(pitRateNumber)
+    ) {
+      throw new Error("Bitte alle Profilfelder mit gültigen Zahlen ausfüllen.");
+    }
+
+    return {
+      wypadkowaRateBp: Math.round(wypadkowaRateNumber * 100),
+      zdrowotnaRateLiniowyBp: Math.round(zdrowotnaRateNumber * 100),
+      pitRateBp: Math.round(pitRateNumber * 100),
+    };
+  };
+
+  const buildProfilePayloadFromForm = (mode: "normal" | "zero") => {
+    const parsedProfile = parseProfileNumbers();
+    return {
+      taxCalculationMode: mode,
+      taxForm,
+      zusRegime,
+      choroboweEnabled,
+      fpFsEnabled,
+      ...parsedProfile,
+    };
+  };
+
+  const buildProfilePayloadForToggle = (mode: "normal" | "zero") => {
+    if (profile) {
+      return {
+        taxCalculationMode: mode,
+        taxForm: profile.taxForm,
+        zusRegime: profile.zusRegime,
+        choroboweEnabled: profile.choroboweEnabled,
+        fpFsEnabled: profile.fpFsEnabled,
+        wypadkowaRateBp: profile.wypadkowaRateBp,
+        zdrowotnaRateLiniowyBp: profile.zdrowotnaRateLiniowyBp,
+        pitRateBp: profile.pitRateBp,
+      };
+    }
+
+    return buildProfilePayloadFromForm(mode);
+  };
+
+  const handleToggleTaxCalculationMode = async () => {
+    const nextMode = taxCalculationMode === "normal" ? "zero" : "normal";
+    const previousMode = taxCalculationMode;
+    setTaxCalculationMode(nextMode);
+
+    try {
+      await upsertProfileMutation.mutateAsync(buildProfilePayloadForToggle(nextMode));
+      await utils.taxSettings.getProfile.invalidate();
+      toast.success(
+        nextMode === "zero"
+          ? "Nullmodus aktiv: Steuer-/ZUS-Werte werden mit 0 berechnet."
+          : "Normalmodus aktiv: Steuerberechnung läuft regulär."
+      );
+    } catch (error: any) {
+      setTaxCalculationMode(previousMode);
+      toast.error(`Fehler beim Umschalten: ${error.message}`);
+    }
+  };
+
+  const handleSave = async () => {
+    let profileNumbers: {
+      wypadkowaRateBp: number;
+      zdrowotnaRateLiniowyBp: number;
+      pitRateBp: number;
+    };
+    try {
+      profileNumbers = parseProfileNumbers();
+    } catch (error: any) {
+      toast.error(error.message);
+      return;
+    }
 
     const socialMinBaseNumber = parseFloatSafe(socialMinBase);
     const zdrowotnaMinBaseNumber = parseFloatSafe(zdrowotnaMinBase);
@@ -91,9 +169,9 @@ export default function TaxesTab() {
     const fpFsRateNumber = parseFloatSafe(fpFsRate);
 
     const allNumbers = [
-      wypadkowaRateNumber,
-      zdrowotnaRateNumber,
-      pitRateNumber,
+      profileNumbers.wypadkowaRateBp,
+      profileNumbers.zdrowotnaRateLiniowyBp,
+      profileNumbers.pitRateBp,
       socialMinBaseNumber,
       zdrowotnaMinBaseNumber,
       zdrowotnaMinAmountNumber,
@@ -110,13 +188,12 @@ export default function TaxesTab() {
 
     try {
       await upsertProfileMutation.mutateAsync({
+        taxCalculationMode,
         taxForm,
         zusRegime,
         choroboweEnabled,
         fpFsEnabled,
-        wypadkowaRateBp: Math.round(wypadkowaRateNumber * 100),
-        zdrowotnaRateLiniowyBp: Math.round(zdrowotnaRateNumber * 100),
-        pitRateBp: Math.round(pitRateNumber * 100),
+        ...profileNumbers,
       });
 
       await upsertConfigMutation.mutateAsync({
@@ -155,11 +232,24 @@ export default function TaxesTab() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="space-y-3">
         <h2 className="text-2xl font-bold tracking-tight">Steuern (PL) – Regime + Jahreswerte</h2>
         <p className="text-muted-foreground">
           Struktur B: tax_profile + tax_config_pl[year] für saubere und zukunftssichere Berechnungen.
         </p>
+        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-medium">Steuerberechnungsmodus</span>
+          <Button
+            type="button"
+            size="sm"
+            variant={taxCalculationMode === "zero" ? "destructive" : "outline"}
+            onClick={handleToggleTaxCalculationMode}
+            disabled={upsertProfileMutation.isPending}
+            className="shrink-0"
+          >
+            {taxCalculationMode === "zero" ? "Nullmodus aktiv" : "Normalmodus aktiv"}
+          </Button>
+        </div>
       </div>
 
       <Card>

@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.27] - 2026-03-04
+
+### Hinzugefügt
+
+**Option A: Steuerberechnungsmodus (NORMAL/ZERO)** - Das Steuerprofil besitzt jetzt einen serverpersistierten Modus (`taxCalculationMode`), der zentral für alle Steuerberechnungen verwendet wird.
+
+### Behoben
+
+**Konsistente Wirkung in allen Auswertungen** - Bei `ZERO` werden ZUS, Krankenversicherung und Steuer in Dashboard und Berichten deterministisch mit 0 berechnet; bei `NORMAL` werden sofort wieder die regulären Werte genutzt.
+
+---
+
 ## [1.0.26] - 2026-03-04
 
 ### Behoben
