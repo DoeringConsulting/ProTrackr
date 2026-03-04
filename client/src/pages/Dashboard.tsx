@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { useTaxNullMode } from "@/lib/taxNullMode";
 import {
   AlertTriangle,
   Calendar,
@@ -110,37 +109,8 @@ export default function Dashboard() {
   const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
   const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
   const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
-  const taxNullModeActive = useTaxNullMode();
   const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: now.getFullYear() });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
-
-  const effectiveTaxProfile = useMemo(() => {
-    if (taxNullModeActive) {
-      return {
-        taxModuleEnabled: false,
-        taxForm: taxProfile?.taxForm ?? ("liniowy_19" as const),
-        zusRegime: taxProfile?.zusRegime ?? ("pelny_zus" as const),
-        choroboweEnabled: taxProfile?.choroboweEnabled ?? false,
-        fpFsEnabled: taxProfile?.fpFsEnabled ?? true,
-        wypadkowaRateBp: taxProfile?.wypadkowaRateBp ?? 167,
-        zdrowotnaRateLiniowyBp: taxProfile?.zdrowotnaRateLiniowyBp ?? 490,
-        pitRateBp: taxProfile?.pitRateBp ?? 1900,
-      };
-    }
-
-    if (!taxProfile) return null;
-
-    return {
-      taxModuleEnabled: taxProfile.taxModuleEnabled,
-      taxForm: taxProfile.taxForm,
-      zusRegime: taxProfile.zusRegime,
-      choroboweEnabled: taxProfile.choroboweEnabled,
-      fpFsEnabled: taxProfile.fpFsEnabled,
-      wypadkowaRateBp: taxProfile.wypadkowaRateBp,
-      zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
-      pitRateBp: taxProfile.pitRateBp,
-    };
-  }, [taxNullModeActive, taxProfile]);
 
   const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
   const customersById = useMemo(
@@ -415,7 +385,17 @@ export default function Dashboard() {
       variableCostsCents: variableCostsEur,
       startDate: rangeStart,
       endDate: rangeEnd,
-      profile: effectiveTaxProfile,
+      profile: taxProfile
+        ? {
+            taxForm: taxProfile.taxForm,
+            zusRegime: taxProfile.zusRegime,
+            choroboweEnabled: taxProfile.choroboweEnabled,
+            fpFsEnabled: taxProfile.fpFsEnabled,
+            wypadkowaRateBp: taxProfile.wypadkowaRateBp,
+            zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
+            pitRateBp: taxProfile.pitRateBp,
+          }
+        : null,
       config: taxConfig
         ? {
             year: taxConfig.year,

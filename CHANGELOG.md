@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.26] - 2026-03-04
+
+### Behoben
+
+**Steuer-Button vollständig zurückgebaut** - Alle Änderungen rund um Nullmodus/Modul-Toggle wurden entfernt. Der Steuern-Reiter entspricht wieder dem ursprünglichen Zustand ohne Button.
+
+### Geändert
+
+**Steuerberechnung zurück auf Baseline** - Dashboard, Berichte und Steuer-Engine nutzen wieder die ursprüngliche Berechnungslogik ohne Button-gesteuerte Eingriffe.
+
+---
+
 ## [1.0.25] - 2026-03-04
 
 ### Behoben

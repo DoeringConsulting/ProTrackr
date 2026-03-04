@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { readTaxNullMode, writeTaxNullMode } from "@/lib/taxNullMode";
 import { Save } from "lucide-react";
 
 function toPercent(bp: number) {
@@ -31,7 +30,6 @@ export default function TaxesTab() {
   // Profile state
   const [taxForm, setTaxForm] = useState<"liniowy_19">("liniowy_19");
   const [zusRegime, setZusRegime] = useState<"ulga_na_start" | "preferencyjny_zus" | "maly_zus_plus" | "pelny_zus">("pelny_zus");
-  const [taxNullModeActive, setTaxNullModeActive] = useState(() => readTaxNullMode());
   const [choroboweEnabled, setChoroboweEnabled] = useState(false);
   const [fpFsEnabled, setFpFsEnabled] = useState(true);
   const [wypadkowaRate, setWypadkowaRate] = useState("1.67");
@@ -50,15 +48,9 @@ export default function TaxesTab() {
   const utils = trpc.useUtils();
   const { data: profile, isLoading: profileLoading } = trpc.taxSettings.getProfile.useQuery();
   const { data: config, isLoading: configLoading } = trpc.taxSettings.getConfig.useQuery({ year: selectedYear });
-  const upsertProfileMutation = trpc.taxSettings.upsertProfile.useMutation();
-  const upsertConfigMutation = trpc.taxSettings.upsertConfig.useMutation();
-  const isTogglingModule = upsertProfileMutation.isPending;
 
   useEffect(() => {
-    if (!profile || isTogglingModule) return;
-    const profileNullMode = !(profile.taxModuleEnabled ?? true);
-    setTaxNullModeActive(profileNullMode);
-    writeTaxNullMode(profileNullMode);
+    if (!profile) return;
     setTaxForm(profile.taxForm);
     setZusRegime(profile.zusRegime);
     setChoroboweEnabled(profile.choroboweEnabled);
@@ -66,7 +58,7 @@ export default function TaxesTab() {
     setWypadkowaRate(toPercent(profile.wypadkowaRateBp));
     setZdrowotnaRateLiniowy(toPercent(profile.zdrowotnaRateLiniowyBp));
     setPitRate(toPercent(profile.pitRateBp));
-  }, [profile, isTogglingModule]);
+  }, [profile]);
 
   useEffect(() => {
     if (!config) return;
@@ -79,56 +71,11 @@ export default function TaxesTab() {
     setFpFsRate(toPercent(config.fpFsRateBp));
   }, [config]);
 
-  const isSaving =
-    upsertProfileMutation.isPending ||
-    upsertConfigMutation.isPending;
+  const upsertProfileMutation = trpc.taxSettings.upsertProfile.useMutation();
+  const upsertConfigMutation = trpc.taxSettings.upsertConfig.useMutation();
+
+  const isSaving = upsertProfileMutation.isPending || upsertConfigMutation.isPending;
   const isLoading = profileLoading || configLoading;
-
-  const buildProfilePayload = (nullModeActive: boolean) => {
-    const wypadkowaRateNumber = parseFloatSafe(wypadkowaRate);
-    const zdrowotnaRateNumber = parseFloatSafe(zdrowotnaRateLiniowy);
-    const pitRateNumber = parseFloatSafe(pitRate);
-
-    if (
-      Number.isNaN(wypadkowaRateNumber) ||
-      Number.isNaN(zdrowotnaRateNumber) ||
-      Number.isNaN(pitRateNumber)
-    ) {
-      throw new Error("Ungültige Werte im Steuerprofil");
-    }
-
-    return {
-      // null mode on => tax module off for calculations
-      taxModuleEnabled: !nullModeActive,
-      taxForm,
-      zusRegime,
-      choroboweEnabled,
-      fpFsEnabled,
-      wypadkowaRateBp: Math.round(wypadkowaRateNumber * 100),
-      zdrowotnaRateLiniowyBp: Math.round(zdrowotnaRateNumber * 100),
-      pitRateBp: Math.round(pitRateNumber * 100),
-    };
-  };
-
-  const handleToggleTaxModule = async () => {
-    const nextNullMode = !taxNullModeActive;
-    setTaxNullModeActive(nextNullMode);
-    writeTaxNullMode(nextNullMode);
-
-    try {
-      await upsertProfileMutation.mutateAsync(buildProfilePayload(nextNullMode));
-      await utils.taxSettings.getProfile.invalidate();
-      toast.success(
-        nextNullMode
-          ? "Nullmodus aktiviert: Steuern/ZUS werden auf 0 gesetzt."
-          : "Nullmodus deaktiviert: Steuerwerte werden normal berechnet."
-      );
-    } catch (error: any) {
-      setTaxNullModeActive(!nextNullMode);
-      writeTaxNullMode(!nextNullMode);
-      toast.error(`Fehler beim Speichern des Moduls: ${error.message}`);
-    }
-  };
 
   const handleSave = async () => {
     const wypadkowaRateNumber = parseFloatSafe(wypadkowaRate);
@@ -162,7 +109,15 @@ export default function TaxesTab() {
     }
 
     try {
-      await upsertProfileMutation.mutateAsync(buildProfilePayload(taxNullModeActive));
+      await upsertProfileMutation.mutateAsync({
+        taxForm,
+        zusRegime,
+        choroboweEnabled,
+        fpFsEnabled,
+        wypadkowaRateBp: Math.round(wypadkowaRateNumber * 100),
+        zdrowotnaRateLiniowyBp: Math.round(zdrowotnaRateNumber * 100),
+        pitRateBp: Math.round(pitRateNumber * 100),
+      });
 
       await upsertConfigMutation.mutateAsync({
         year: selectedYear,
@@ -179,7 +134,6 @@ export default function TaxesTab() {
         utils.taxSettings.getProfile.invalidate(),
         utils.taxSettings.getConfig.invalidate({ year: selectedYear }),
       ]);
-      writeTaxNullMode(taxNullModeActive);
 
       toast.success("Steuerprofil und Jahreswerte gespeichert.");
     } catch (error: any) {
@@ -201,33 +155,12 @@ export default function TaxesTab() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <div className="min-w-0">
-          <h2 className="text-2xl font-bold tracking-tight">Steuern (PL) – Regime + Jahreswerte</h2>
-          <p className="text-muted-foreground">
-            Struktur B: tax_profile + tax_config_pl[year] für saubere und zukunftssichere Berechnungen.
-          </p>
-        </div>
-        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-          <span className="text-sm font-medium">Nullmodus „% Steuern“</span>
-          <Button
-            type="button"
-            size="sm"
-            variant={taxNullModeActive ? "destructive" : "outline"}
-            onClick={handleToggleTaxModule}
-            disabled={upsertProfileMutation.isPending}
-            className="shrink-0"
-          >
-            {taxNullModeActive ? "Aktiv (0-Werte)" : "Deaktiviert"}
-          </Button>
-        </div>
-      </div>
-
-      {taxNullModeActive && (
-        <p className="text-sm text-amber-600">
-          Nullmodus ist aktiv: Steuer-/ZUS-Werte werden temporär mit 0 berechnet. Beim Deaktivieren kommen die normalen Werte zurück.
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Steuern (PL) – Regime + Jahreswerte</h2>
+        <p className="text-muted-foreground">
+          Struktur B: tax_profile + tax_config_pl[year] für saubere und zukunftssichere Berechnungen.
         </p>
-      )}
+      </div>
 
       <Card>
         <CardHeader>

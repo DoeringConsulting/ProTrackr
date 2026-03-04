@@ -122,29 +122,6 @@ describe("taxEnginePl", () => {
     expect(result.netProfit).toBe(490000);
   });
 
-  it("deaktiviert das Modul '% Steuern' vollständig", () => {
-    const result = calculatePolishTaxResult({
-      revenueCents: 1_000_000,
-      fixedCostsCents: 200_000,
-      variableCostsCents: 50_000,
-      startDate: "2026-01-01",
-      endDate: "2026-01-31",
-      profile: {
-        ...baseProfile,
-        taxModuleEnabled: false,
-      },
-      config: baseConfig,
-    });
-
-    expect(result.source).toBe("regime_config");
-    expect(result.zus).toBe(0);
-    expect(result.healthInsurance).toBe(0);
-    expect(result.deductibleHealth).toBe(0);
-    expect(result.taxBase).toBe(750000);
-    expect(result.tax).toBe(0);
-    expect(result.netProfit).toBe(750000);
-  });
-
   it("clamped Monatslogik: invertierter Zeitraum wird als 1 Monat behandelt", () => {
     const result = calculatePolishTaxResult({
       revenueCents: 1_000_000,

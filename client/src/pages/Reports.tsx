@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { useTaxNullMode } from "@/lib/taxNullMode";
 import { FileText, Download, Calculator } from "lucide-react";
 import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
 import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
@@ -43,38 +42,9 @@ export default function Reports() {
   const { data: fixedCosts = [] } = trpc.fixedCosts.list.useQuery();
   const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
   const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
-  const taxNullModeActive = useTaxNullMode();
   const reportYear = new Date(`${startDate}T00:00:00`).getFullYear();
   const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: reportYear });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
-
-  const effectiveTaxProfile = useMemo(() => {
-    if (taxNullModeActive) {
-      return {
-        taxModuleEnabled: false,
-        taxForm: taxProfile?.taxForm ?? ("liniowy_19" as const),
-        zusRegime: taxProfile?.zusRegime ?? ("pelny_zus" as const),
-        choroboweEnabled: taxProfile?.choroboweEnabled ?? false,
-        fpFsEnabled: taxProfile?.fpFsEnabled ?? true,
-        wypadkowaRateBp: taxProfile?.wypadkowaRateBp ?? 167,
-        zdrowotnaRateLiniowyBp: taxProfile?.zdrowotnaRateLiniowyBp ?? 490,
-        pitRateBp: taxProfile?.pitRateBp ?? 1900,
-      };
-    }
-
-    if (!taxProfile) return null;
-
-    return {
-      taxModuleEnabled: taxProfile.taxModuleEnabled,
-      taxForm: taxProfile.taxForm,
-      zusRegime: taxProfile.zusRegime,
-      choroboweEnabled: taxProfile.choroboweEnabled,
-      fpFsEnabled: taxProfile.fpFsEnabled,
-      wypadkowaRateBp: taxProfile.wypadkowaRateBp,
-      zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
-      pitRateBp: taxProfile.pitRateBp,
-    };
-  }, [taxNullModeActive, taxProfile]);
 
   const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
 
@@ -167,7 +137,17 @@ export default function Reports() {
       })),
       startDate,
       endDate,
-      taxProfile: effectiveTaxProfile,
+      taxProfile: taxProfile
+        ? {
+            taxForm: taxProfile.taxForm,
+            zusRegime: taxProfile.zusRegime,
+            choroboweEnabled: taxProfile.choroboweEnabled,
+            fpFsEnabled: taxProfile.fpFsEnabled,
+            wypadkowaRateBp: taxProfile.wypadkowaRateBp,
+            zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
+            pitRateBp: taxProfile.pitRateBp,
+          }
+        : null,
       taxConfig: taxConfig
         ? {
             year: taxConfig.year,

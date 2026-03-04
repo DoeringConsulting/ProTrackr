@@ -78,13 +78,6 @@
       "when": 1772691600000,
       "tag": "0010_customers_unique_per_owner",
       "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "5",
-      "when": 1772881200000,
-      "tag": "0011_tax_profile_module_toggle",
-      "breakpoints": true
     }
   ]
 }
