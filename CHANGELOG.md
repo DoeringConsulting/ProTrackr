@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.24] - 2026-03-03
+
+### Behoben
+
+**Fallback bei älterem Backend** - Wenn der Endpunkt `taxSettings.setModuleEnabled` serverseitig noch nicht verfügbar ist, verwendet der Steuer-Toggle automatisch `upsertProfile` als kompatiblen Fallback.
+
+**Kein Abbruch mehr beim Toggle-Klick** - Die Meldung *„No procedure found on path 'taxSettings.setModuleEnabled'“* blockiert das Umschalten nicht mehr; der Status wird dennoch gespeichert.
+
+---
+
 ## [1.0.23] - 2026-03-03
 
 ### Behoben

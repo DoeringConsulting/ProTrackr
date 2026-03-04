@@ -84,6 +84,31 @@ export default function TaxesTab() {
     setModuleEnabledMutation.isPending;
   const isLoading = profileLoading || configLoading;
 
+  const buildProfilePayload = (enabled: boolean) => {
+    const wypadkowaRateNumber = parseFloatSafe(wypadkowaRate);
+    const zdrowotnaRateNumber = parseFloatSafe(zdrowotnaRateLiniowy);
+    const pitRateNumber = parseFloatSafe(pitRate);
+
+    if (
+      Number.isNaN(wypadkowaRateNumber) ||
+      Number.isNaN(zdrowotnaRateNumber) ||
+      Number.isNaN(pitRateNumber)
+    ) {
+      throw new Error("Ungültige Werte im Steuerprofil");
+    }
+
+    return {
+      taxModuleEnabled: enabled,
+      taxForm,
+      zusRegime,
+      choroboweEnabled,
+      fpFsEnabled,
+      wypadkowaRateBp: Math.round(wypadkowaRateNumber * 100),
+      zdrowotnaRateLiniowyBp: Math.round(zdrowotnaRateNumber * 100),
+      pitRateBp: Math.round(pitRateNumber * 100),
+    };
+  };
+
   const handleToggleTaxModule = async () => {
     const nextEnabled = !taxModuleEnabled;
     setTaxModuleEnabled(nextEnabled);
@@ -97,6 +122,28 @@ export default function TaxesTab() {
           : "Modul „% Steuern“ wurde deaktiviert."
       );
     } catch (error: any) {
+      const message = String(error?.message ?? "");
+      const missingProcedure =
+        message.includes("No procedure found on path") || message.includes("NOT_FOUND");
+
+      if (missingProcedure) {
+        try {
+          const fallbackPayload = buildProfilePayload(nextEnabled);
+          await upsertProfileMutation.mutateAsync(fallbackPayload);
+          await utils.taxSettings.getProfile.invalidate();
+          toast.success(
+            nextEnabled
+              ? "Modul „% Steuern“ wurde aktiviert."
+              : "Modul „% Steuern“ wurde deaktiviert."
+          );
+          return;
+        } catch (fallbackError: any) {
+          setTaxModuleEnabled(!nextEnabled);
+          toast.error(`Fehler beim Speichern des Moduls: ${fallbackError.message}`);
+          return;
+        }
+      }
+
       setTaxModuleEnabled(!nextEnabled);
       toast.error(`Fehler beim Speichern des Moduls: ${error.message}`);
     }
@@ -134,16 +181,7 @@ export default function TaxesTab() {
     }
 
     try {
-      await upsertProfileMutation.mutateAsync({
-        taxModuleEnabled,
-        taxForm,
-        zusRegime,
-        choroboweEnabled,
-        fpFsEnabled,
-        wypadkowaRateBp: Math.round(wypadkowaRateNumber * 100),
-        zdrowotnaRateLiniowyBp: Math.round(zdrowotnaRateNumber * 100),
-        pitRateBp: Math.round(pitRateNumber * 100),
-      });
+      await upsertProfileMutation.mutateAsync(buildProfilePayload(taxModuleEnabled));
 
       await upsertConfigMutation.mutateAsync({
         year: selectedYear,

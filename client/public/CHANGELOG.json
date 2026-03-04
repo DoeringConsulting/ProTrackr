@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.24",
+      "date": "2026-03-03",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Fallback für ältere Server ohne setModuleEnabled-Route",
+          "description": "Wenn der Backend-Endpunkt taxSettings.setModuleEnabled noch nicht vorhanden ist, speichert der Steuer-Toggle automatisch über upsertProfile weiter und bricht nicht mit „No procedure found on path“ ab."
+        },
+        {
+          "type": "fix",
+          "title": "Modul-Umschaltung robust gegen gemischte Deploy-Stände",
+          "description": "Frontend erkennt den fehlenden Procedure-Path und nutzt einen kompatiblen Fallback, damit Aktiv/Deaktiv weiterhin sofort persistiert."
+        }
+      ]
+    },
+    {
       "version": "1.0.23",
       "date": "2026-03-03",
       "changes": [
