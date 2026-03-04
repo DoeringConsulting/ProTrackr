@@ -69,6 +69,19 @@ async function canAccessCustomerOwnedData(
   return await canAccessUserOwnedData(actor, customer.userId);
 }
 
+function parseMandatenNumberSequence(mandatenNr: string | null | undefined): number | null {
+  if (!mandatenNr) return null;
+  const normalized = mandatenNr.trim();
+  if (!/^\d+$/.test(normalized)) return null;
+  const parsed = Number.parseInt(normalized, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return null;
+  return parsed;
+}
+
+function formatMandatenNumber(sequence: number): string {
+  return String(sequence).padStart(3, "0");
+}
+
 export const appRouter = router({
   invoiceNumbers: router({
     generate: protectedProcedure
@@ -137,7 +150,7 @@ export const appRouter = router({
     create: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
         provider: z.string(),
-        mandatenNr: z.string(),
+        mandatenNr: z.string().optional(),
         projectName: z.string(),
         location: z.string(),
         onsiteRate: z.number(),
@@ -156,8 +169,28 @@ export const appRouter = router({
         vatId: z.string().optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { createCustomer, getCustomersByMandatenNr } = await import("./db");
-      const existingWithSameNumber = await getCustomersByMandatenNr(input.mandatenNr);
+      const { createCustomer, getAllCustomersIncludingArchived, getCustomersByMandatenNr } = await import("./db");
+
+      let assignedMandatenNr = input.mandatenNr?.trim() || "";
+
+      if (!assignedMandatenNr) {
+        const allCustomers = await getAllCustomersIncludingArchived();
+        let maxSequence = 0;
+
+        for (const existing of allCustomers) {
+          if (!(await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null }))) {
+            continue;
+          }
+          const sequence = parseMandatenNumberSequence(existing.mandatenNr);
+          if (sequence && sequence > maxSequence) {
+            maxSequence = sequence;
+          }
+        }
+
+        assignedMandatenNr = formatMandatenNumber(maxSequence + 1);
+      }
+
+      const existingWithSameNumber = await getCustomersByMandatenNr(assignedMandatenNr);
       for (const existing of existingWithSameNumber) {
         if (await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null })) {
           throw new TRPCError({
@@ -168,6 +201,7 @@ export const appRouter = router({
       }
       return await createCustomer({
         ...input,
+        mandatenNr: assignedMandatenNr,
         userId: ctx.user.id,
       });
     }),

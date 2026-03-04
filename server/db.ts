@@ -69,6 +69,13 @@ export async function getCustomers() {
   return await db.select().from(customers).where(eq(customers.isArchived, 0));
 }
 
+export async function getAllCustomersIncludingArchived() {
+  const db = await getDb();
+  if (!db) return [];
+  const { customers } = await import("../drizzle/schema");
+  return await db.select().from(customers);
+}
+
 export async function getCustomerById(id: number) {
   const db = await getDb();
   if (!db) return null;

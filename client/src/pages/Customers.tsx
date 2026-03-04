@@ -86,11 +86,11 @@ export default function Customers() {
   const { data: customers, isLoading } = trpc.customers.list.useQuery();
 
   const createMutation = trpc.customers.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (createdCustomer) => {
       utils.customers.list.invalidate();
       setIsDialogOpen(false);
       setFormData(initialFormData);
-      toast.success("Kunde erfolgreich erstellt");
+      toast.success(`Kunde erfolgreich erstellt (Mandanten-Nr: ${createdCustomer.mandatenNr})`);
     },
     onError: (error) => {
       toast.error("Fehler beim Erstellen: " + error.message);
@@ -163,9 +163,8 @@ export default function Customers() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const data = {
+    const baseData = {
       provider: formData.provider,
-      mandatenNr: formData.mandatenNr,
       projectName: formData.projectName,
       location: formData.location,
       onsiteRate: Math.round(parseFloat(formData.onsiteRate) * 100),
@@ -185,9 +184,13 @@ export default function Customers() {
     };
 
     if (editingCustomer) {
-      updateMutation.mutate({ id: editingCustomer, ...data });
+      updateMutation.mutate({
+        id: editingCustomer,
+        ...baseData,
+        mandatenNr: formData.mandatenNr,
+      });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(baseData);
     }
   };
 
@@ -290,13 +293,27 @@ export default function Customers() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="mandatenNr">Mandanten-Nr *</Label>
-                      <Input
-                        id="mandatenNr"
-                        value={formData.mandatenNr}
-                        onChange={(e) => setFormData({ ...formData, mandatenNr: e.target.value })}
-                        required
-                      />
+                      {editingCustomer ? (
+                        <>
+                          <Label htmlFor="mandatenNr">Mandanten-Nr *</Label>
+                          <Input
+                            id="mandatenNr"
+                            value={formData.mandatenNr}
+                            onChange={(e) => setFormData({ ...formData, mandatenNr: e.target.value })}
+                            required
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <Label htmlFor="mandatenNrAuto">Mandanten-Nr</Label>
+                          <Input
+                            id="mandatenNrAuto"
+                            value="Automatisch (001, 002, 003 ...)"
+                            disabled
+                            readOnly
+                          />
+                        </>
+                      )}
                     </div>
                   </div>
 
