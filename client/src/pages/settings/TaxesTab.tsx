@@ -47,7 +47,11 @@ export default function TaxesTab() {
   const [fpFsRate, setFpFsRate] = useState("2.45");
 
   const utils = trpc.useUtils();
-  const { data: profile, isLoading: profileLoading } = trpc.taxSettings.getProfile.useQuery();
+  const {
+    data: profile,
+    isLoading: profileLoading,
+    refetch: refetchProfile,
+  } = trpc.taxSettings.getProfile.useQuery();
   const { data: config, isLoading: configLoading } = trpc.taxSettings.getConfig.useQuery({ year: selectedYear });
 
   useEffect(() => {
@@ -136,6 +140,15 @@ export default function TaxesTab() {
     try {
       await upsertProfileMutation.mutateAsync(buildProfilePayloadForToggle(nextMode));
       await utils.taxSettings.getProfile.invalidate();
+      const refreshedProfile = await refetchProfile();
+      const persistedMode = refreshedProfile.data?.taxCalculationMode ?? "normal";
+
+      if (persistedMode !== nextMode) {
+        throw new Error(
+          "Server-Bestätigung fehlt. Bitte App neu starten und erneut versuchen."
+        );
+      }
+
       toast.success(
         nextMode === "zero"
           ? "Nullmodus aktiv: Steuer-/ZUS-Werte werden mit 0 berechnet."

@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.28",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Serverbestätigung für Modus-Umschaltung ergänzt",
+          "description": "Nach dem Umschalten auf ZERO/NORMAL wird der Modus serverseitig aktiv gegengeprüft. Bei fehlender Persistenz wird keine falsche Erfolgsmeldung mehr angezeigt."
+        },
+        {
+          "type": "improvement",
+          "title": "Fehlermeldung bei nicht bestätigtem Modus präzisiert",
+          "description": "Die UI fordert bei fehlender Serverbestätigung klar zum App-Neustart auf statt einen aktivierten Nullmodus vorzutäuschen."
+        }
+      ]
+    },
+    {
       "version": "1.0.27",
       "date": "2026-03-04",
       "changes": [

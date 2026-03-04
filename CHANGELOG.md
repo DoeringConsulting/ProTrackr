@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.28] - 2026-03-04
+
+### Behoben
+
+**Serverbestätigung für Modus-Umschaltung** - Nach dem Umschalten auf `ZERO`/`NORMAL` wird der gespeicherte Modus sofort serverseitig gegengeprüft. Eine falsche Erfolgsmeldung bei nicht persistiertem Modus wird verhindert.
+
+### Geändert
+
+**Klarere Fehlerrückmeldung** - Wenn der Modus serverseitig nicht bestätigt werden kann, zeigt die UI eine eindeutige Meldung mit Hinweis auf App-Neustart.
+
+---
+
 ## [1.0.27] - 2026-03-04
 
 ### Hinzugefügt
