@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.35] - 2026-03-04
+
+### Hinzugefuegt
+
+**Versionierte Windows-Steuerskripte fuer ProTrackr** - Start, Stop, Status, Neustart und Notfallstart liegen jetzt als getrackte `.cmd/.ps1` Dateien im Repository und gehen dadurch nicht mehr durch `git stash -u` verloren.
+
+**Desktop-Link-Reparaturskript** - Mit `create-desktop-shortcuts.ps1` koennen alle 5 ProTrackr-Verknuepfungen auf dem Desktop automatisch neu erstellt werden, inklusive der geloeschten Stoppen-Verknuepfung.
+
+---
+
 ## [1.0.34] - 2026-03-04
 
 ### Behoben

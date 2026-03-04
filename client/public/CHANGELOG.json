@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.35",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Versionierte Windows-Steuerskripte fuer App-Start und -Status",
+          "description": "Neue .cmd/.ps1 Dateien fuer Start, Stop, Status, Neustart und Notfallstart sind jetzt im Repository enthalten und gehen nicht mehr bei git stash -u verloren."
+        },
+        {
+          "type": "feature",
+          "title": "Automatische Reparatur der Desktop-Verknuepfungen",
+          "description": "Neues Skript create-desktop-shortcuts.ps1 erstellt alle 5 ProTrackr-Desktoplinks neu, inklusive der geloeschten Stoppen-Verknuepfung."
+        }
+      ]
+    },
+    {
       "version": "1.0.34",
       "date": "2026-03-04",
       "changes": [
