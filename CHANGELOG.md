@@ -7,6 +7,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.29] - 2026-03-04
+
+### Behoben
+
+**Migrations-Hotfix für `taxCalculationMode`** - Eine zusätzliche Kompatibilitätsmigration (`0012`) stellt sicher, dass die Spalte `taxCalculationMode` auch in Datenbanken existiert, bei denen frühere Migrationshistorien den neuen Stand übersprungen haben.
+
+**Umschaltfehler beseitigt** - Der Fehler beim Aktivieren des Modus aufgrund fehlender Spalte in `taxProfiles` wird durch die neue Migrationsprüfung verhindert.
+
+---
+
 ## [1.0.28] - 2026-03-04
 
 ### Behoben

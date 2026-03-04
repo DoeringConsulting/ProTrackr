@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.29",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Migrations-Hotfix für taxCalculationMode",
+          "description": "Neue Kompatibilitätsmigration 0012 ergänzt, die taxCalculationMode auch in Datenbanken anlegt, bei denen eine frühere 0011-Historie den neuen Stand übersprungen hat."
+        },
+        {
+          "type": "fix",
+          "title": "Umschaltfehler durch fehlende DB-Spalte beseitigt",
+          "description": "Fehler beim Moduswechsel aufgrund unbekannter Spalte in taxProfiles wird durch die zusätzliche Migrationsprüfung zuverlässig verhindert."
+        }
+      ]
+    },
+    {
       "version": "1.0.28",
       "date": "2026-03-04",
       "changes": [
