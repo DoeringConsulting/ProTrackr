@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.33] - 2026-03-04
+
+### Behoben
+
+**Mandanten-Nr serverseitig strikt automatisch** - Bei der Kundenanlage wird die Nummer jetzt in jedem Fall am Server fortlaufend erzeugt, auch wenn ein älterer Client noch einen manuellen Wert mitschickt.
+
+### Geändert
+
+**Robustere Ermittlung der nächsten Nummer** - Vorhandene Kundennummern mit Präfixen und numerischem Suffix werden bei der Sequenzberechnung berücksichtigt.
+
+---
+
 ## [1.0.32] - 2026-03-04
 
 ### Hinzugefügt

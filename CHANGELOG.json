@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.33",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Mandanten-Nr bei Kundenanlage serverseitig strikt automatisch",
+          "description": "Die Nummer wird bei create immer auf dem Server fortlaufend vergeben, auch wenn ein Client noch eine manuelle Nummer mitsendet."
+        },
+        {
+          "type": "improvement",
+          "title": "Bestehende Nummern robuster erkannt",
+          "description": "Für die nächste laufende Nummer werden jetzt auch vorhandene Einträge mit Präfixen und numerischem Suffix ausgewertet."
+        }
+      ]
+    },
+    {
       "version": "1.0.32",
       "date": "2026-03-04",
       "changes": [
