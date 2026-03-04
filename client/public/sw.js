@@ -1,5 +1,5 @@
 // Service Worker for Offline Caching with Auto-Update
-const APP_VERSION = 'cc3f6efe'; // Updated with each deployment
+const APP_VERSION = '0c521fdb'; // Updated with each deployment
 const CACHE_NAME = `doring-consulting-${APP_VERSION}`;
 const urlsToCache = [
   '/',
