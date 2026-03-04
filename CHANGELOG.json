@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.39",
+      "date": "2026-03-04",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Start-Verknuepfung mit automatischem Notfall-Fallback",
+          "description": "Wenn der normale Start fehlschlaegt, wird automatisch ein Notfallstart ausgelost, statt still zu scheitern."
+        },
+        {
+          "type": "feature",
+          "title": "Watchdog-Task Installer fuer dauerhafte Verfuegbarkeit",
+          "description": "Neues Script installiert geplante Aufgaben (OnLogon + Intervall), die ProTrackr selbstheilend ueberwachen und bei Bedarf neu starten."
+        },
+        {
+          "type": "improvement",
+          "title": "Robustere Node/NPM-Aufloesung im Windows-Startskript",
+          "description": "Startskript findet node.exe und npm.cmd jetzt auch ohne Explorer-PATH sicher ueber bekannte Standardpfade."
+        }
+      ]
+    },
+    {
       "version": "1.0.38",
       "date": "2026-03-04",
       "changes": [

@@ -7,6 +7,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.39] - 2026-03-04
+
+### Behoben
+
+**Start-Verknuepfung mit automatischem Notfall-Fallback** - Falls der normale Start scheitert, wird automatisch ein Notfallstart versucht.
+
+### Hinzugefuegt
+
+**Watchdog-Task-Installer fuer dauerhafte Verfuegbarkeit** - Neues Script zur Anlage geplanter Tasks (OnLogon + Intervall), damit ProTrackr selbstheilend ueberwacht und bei Bedarf neu gestartet wird.
+
+### Geaendert
+
+**Robustere Aufloesung von node/npm unter Windows** - Startskript erkennt `node.exe` und `npm.cmd` auch ohne stabile PATH-Vererbung im Explorer-Kontext.
+
+---
+
 ## [1.0.38] - 2026-03-04
 
 ### Behoben
