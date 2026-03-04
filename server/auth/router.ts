@@ -74,13 +74,6 @@ authRouter.post("/forgot-password", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Mandant und E-Mail sind erforderlich" });
     }
 
-    // Always respond generically to prevent account enumeration.
-    const genericResponse = {
-      success: true,
-      message:
-        "Wenn ein passendes Konto existiert, wurde ein Link zum Zuruecksetzen versendet.",
-    };
-
     const smtpReady = await testEmailConnectionDetailed();
     if (!smtpReady.success) {
       return res.status(503).json({
@@ -96,12 +89,22 @@ authRouter.post("/forgot-password", async (req: Request, res: Response) => {
       resolvedMandant = await findMandantByName(mandant);
     }
     if (!resolvedMandant) {
-      return res.json(genericResponse);
+      return res.status(404).json({
+        error: "Passwort-Reset-Mail konnte nicht versendet werden",
+        reason: "Mandant nicht gefunden.",
+        code: "MANDANT_NOT_FOUND",
+        detail: "Pruefen Sie Mandanten-Nr oder Mandantenname.",
+      });
     }
 
     const user = await findUserByEmailAndMandant(email, resolvedMandant.id);
     if (!user) {
-      return res.json(genericResponse);
+      return res.status(404).json({
+        error: "Passwort-Reset-Mail konnte nicht versendet werden",
+        reason: "Kein Benutzer mit dieser E-Mail im angegebenen Mandanten gefunden.",
+        code: "USER_NOT_FOUND",
+        detail: "Pruefen Sie E-Mail-Adresse und Mandant.",
+      });
     }
 
     const token = crypto.randomBytes(RESET_TOKEN_BYTES).toString("hex");
@@ -133,7 +136,10 @@ authRouter.post("/forgot-password", async (req: Request, res: Response) => {
       });
     }
 
-    return res.json(genericResponse);
+    return res.json({
+      success: true,
+      message: "Reset-Link wurde erfolgreich versendet.",
+    });
   } catch (err) {
     console.error("[Auth] Forgot-password error:", err);
     return res.status(500).json({ error: "Anfrage konnte nicht verarbeitet werden" });
