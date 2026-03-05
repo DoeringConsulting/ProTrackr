@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.44",
+      "date": "2026-03-05",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "UI-Buttons fuer geschuetzten letzten Mandanten-Admin gesperrt",
+          "description": "Sperren/Loeschen sind in der Benutzerliste jetzt direkt deaktiviert, wenn ein Mandant sonst keinen aktiven bzw. verbleibenden Mandanten-Admin mehr haette."
+        },
+        {
+          "type": "fix",
+          "title": "Backend-Guard fuer letzten aktiven Mandanten-Admin verstaerkt",
+          "description": "Delete- und Update-Operationen pruefen jetzt zusaetzlich, dass pro Mandant immer mindestens ein aktiver Mandanten-Admin erhalten bleibt."
+        }
+      ]
+    },
+    {
       "version": "1.0.43",
       "date": "2026-03-05",
       "changes": [

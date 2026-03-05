@@ -1374,6 +1374,7 @@ export const appRouter = router({
     }).mutation(async ({ ctx, input }) => {
       const {
         countActiveGlobalSetupAdmins,
+        countActiveMandantAdmins,
         countNonDeletedMandantAdmins,
         findUserByEmailAndMandant,
         findUserById,
@@ -1473,6 +1474,18 @@ export const appRouter = router({
               message: "Der letzte verbleibende Mandanten-Admin kann nicht entfernt oder umgehaengt werden",
             });
           }
+          if (currentStatus === "active") {
+            const remainingActiveMandantAdmins = await countActiveMandantAdmins(
+              Number(targetUser.mandantId),
+              targetUserId
+            );
+            if (remainingActiveMandantAdmins < 1) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Mindestens ein aktiver Mandanten-Admin pro Mandant muss erhalten bleiben",
+              });
+            }
+          }
         }
       }
 
@@ -1561,6 +1574,7 @@ export const appRouter = router({
     }).mutation(async ({ ctx, input }) => {
       const {
         countActiveGlobalSetupAdmins,
+        countActiveMandantAdmins,
         countNonDeletedMandantAdmins,
         deleteUserById,
         findUserById,
@@ -1609,6 +1623,18 @@ export const appRouter = router({
             code: "BAD_REQUEST",
             message: "Der letzte verbleibende Mandanten-Admin kann nicht geloescht werden",
           });
+        }
+        if (targetStatus === "active") {
+          const remainingActiveMandantAdmins = await countActiveMandantAdmins(
+            Number(targetUser.mandantId),
+            targetUserId
+          );
+          if (remainingActiveMandantAdmins < 1) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Mindestens ein aktiver Mandanten-Admin pro Mandant muss erhalten bleiben",
+            });
+          }
         }
       }
 

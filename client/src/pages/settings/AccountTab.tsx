@@ -62,6 +62,10 @@ function getAccountStatusLabel(status: "active" | "suspended" | "deleted") {
   return "Aktiv";
 }
 
+function isMandantAdminRole(role: string) {
+  return role === "mandant_admin" || role === "admin";
+}
+
 function getRoleLabel(role: string) {
   switch (role) {
     case "webapp_admin":
@@ -454,6 +458,20 @@ export default function AccountTab() {
                   const isSelf = user.id === authUser?.id;
                   const status = getAccountStatus(user as ManagedUser);
                   const isActive = status === "active";
+                  const isMandantAdmin = isMandantAdminRole(String(user.role));
+                  const sameMandantAdmins = (users as ManagedUser[]).filter(
+                    (u) => u.mandantId === user.mandantId && isMandantAdminRole(String(u.role))
+                  );
+                  const sameMandantNonDeletedAdmins = sameMandantAdmins.filter(
+                    (u) => getAccountStatus(u) !== "deleted"
+                  );
+                  const sameMandantActiveAdmins = sameMandantAdmins.filter(
+                    (u) => getAccountStatus(u) === "active"
+                  );
+                  const isLastRemainingMandantAdmin =
+                    isMandantAdmin && status !== "deleted" && sameMandantNonDeletedAdmins.length <= 1;
+                  const isLastActiveMandantAdmin =
+                    isMandantAdmin && status === "active" && sameMandantActiveAdmins.length <= 1;
                   return (
                     <TableRow key={user.id}>
                       <TableCell>{user.displayName || "-"}</TableCell>
@@ -484,6 +502,7 @@ export default function AccountTab() {
                             disabled={
                               isSelf ||
                               !isActive ||
+                              isLastActiveMandantAdmin ||
                               suspendMutation.isPending ||
                               restoreMutation.isPending
                             }
@@ -501,6 +520,8 @@ export default function AccountTab() {
                             disabled={
                               isSelf ||
                               status === "deleted" ||
+                              isLastRemainingMandantAdmin ||
+                              isLastActiveMandantAdmin ||
                               deleteMutation.isPending ||
                               restoreMutation.isPending
                             }
