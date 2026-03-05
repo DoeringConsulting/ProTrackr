@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.41",
+      "date": "2026-03-05",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Corporate-Design-Farben appweit vervollstaendigt",
+          "description": "ExchangeRates, TimeTracking, Expenses, ProjectDetail, Import, SystemTab, NotFound sowie Status-/Dialog-Komponenten wurden auf Teal/Gold-Design angepasst."
+        },
+        {
+          "type": "improvement",
+          "title": "Alte Blue/Green/Indigo-Farbreste bereinigt",
+          "description": "Legacy-Farbklassen und alte Chart-Hexwerte in den betroffenen UI-Seiten wurden durch Corporate-Design-Farben ersetzt."
+        }
+      ]
+    },
+    {
       "version": "1.0.40",
       "date": "2026-03-05",
       "changes": [

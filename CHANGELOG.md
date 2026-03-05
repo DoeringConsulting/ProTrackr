@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.41] - 2026-03-05
+
+### Hinzugefuegt
+
+**Corporate-Design-Rollout auf restliche Seiten abgeschlossen** - ExchangeRates, TimeTracking, Expenses, ProjectDetail, Import, SystemTab, NotFound sowie Update-/Offline-/Changelog-/Directory-Komponenten wurden farblich auf Teal/Gold angepasst.
+
+### Geaendert
+
+**Legacy-Farbreste entfernt** - Alte Blue/Green/Indigo-Klassen und bisherige Chart-Hexwerte wurden in den betroffenen Seiten auf die Corporate-Farbpalette migriert.
+
+---
+
 ## [1.0.40] - 2026-03-05
 
 ### Hinzugefuegt
