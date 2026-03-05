@@ -112,6 +112,38 @@ function getDateKey(value: string | Date): string {
   return formatLocalDate(value);
 }
 
+function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+function addDays(dateKey: string, days: number): string {
+  const base = parseDateKey(dateKey);
+  base.setDate(base.getDate() + days);
+  return formatLocalDate(base);
+}
+
+function dayDiff(startDateKey: string, endDateKey: string): number {
+  const start = parseDateKey(startDateKey).getTime();
+  const end = parseDateKey(endDateKey).getTime();
+  return Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+}
+
+type ExpenseCalendarItem = {
+  id: number;
+  category: string;
+  amount: number;
+  currency?: string | null;
+  comment?: string | null;
+  date: string | Date;
+  checkInDate?: string | Date | null;
+  checkOutDate?: string | Date | null;
+  departureTime?: string | null;
+  arrivalTime?: string | null;
+  _showAmount?: boolean;
+  _subLabel?: string;
+};
+
 export default function TimeTracking() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -127,9 +159,12 @@ export default function TimeTracking() {
   const [tempExpenseCategory, setTempExpenseCategory] = useState('car');
   const [tempExpenseCurrency, setTempExpenseCurrency] = useState('EUR');
   const [tempExpenseComment, setTempExpenseComment] = useState('');
-  const [tempTravelStart, setTempTravelStart] = useState('');
-  const [tempTravelEnd, setTempTravelEnd] = useState('');
-  const [tempFullDay, setTempFullDay] = useState(false);
+  const [tempExpenseDate, setTempExpenseDate] = useState('');
+  const [tempFlightReturnDate, setTempFlightReturnDate] = useState('');
+  const [tempFlightTravelStart, setTempFlightTravelStart] = useState('');
+  const [tempFlightTravelEnd, setTempFlightTravelEnd] = useState('');
+  const [tempHotelCheckInDate, setTempHotelCheckInDate] = useState('');
+  const [tempHotelNights, setTempHotelNights] = useState('1');
   const [editingExpense, setEditingExpense] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -218,6 +253,21 @@ export default function TimeTracking() {
     },
   });
 
+  const resetExpenseFormState = (date?: Date) => {
+    const defaultDate = date ? formatLocalDate(date) : "";
+    setEditingExpense(null);
+    setTempExpenseAmount("");
+    setTempExpenseCategory("car");
+    setTempExpenseCurrency("EUR");
+    setTempExpenseComment("");
+    setTempExpenseDate(defaultDate);
+    setTempFlightReturnDate("");
+    setTempFlightTravelStart("");
+    setTempFlightTravelEnd("");
+    setTempHotelCheckInDate(defaultDate);
+    setTempHotelNights("1");
+  };
+
   // Bulk copy functionality temporarily disabled
 
   const handlePreviousMonth = () => {
@@ -280,14 +330,7 @@ export default function TimeTracking() {
 
   const handleAddExpenses = (date: Date) => {
     setSelectedExpenseDate(date);
-    setEditingExpense(null);
-    setTempExpenseAmount('');
-    setTempExpenseCategory('car');
-    setTempExpenseCurrency('EUR');
-    setTempExpenseComment('');
-    setTempTravelStart('');
-    setTempTravelEnd('');
-    setTempFullDay(false);
+    resetExpenseFormState(date);
     setIsExpensesDialogOpen(true);
   };
 
@@ -392,16 +435,49 @@ export default function TimeTracking() {
   const getExpensesForDate = (date: Date) => {
     if (!expenses) return [];
     const dateStr = formatLocalDate(date);
-    
-    return expenses.filter(expense => {
-      const expenseDate = getDateKey(expense.date as string | Date);
-      return expenseDate === dateStr;
-    });
-  };
 
-  const isOnsiteDate = (date: Date) => {
-    const dayEntries = getEntriesForDate(date);
-    return dayEntries.some(entry => entry.entryType === "onsite");
+    return expenses.flatMap((expense: any) => {
+      const primaryDate = getDateKey(expense.date as string | Date);
+      const checkInDate = expense.checkInDate
+        ? getDateKey(expense.checkInDate as string | Date)
+        : primaryDate;
+      const checkOutDate = expense.checkOutDate
+        ? getDateKey(expense.checkOutDate as string | Date)
+        : checkInDate;
+      const baseItem: ExpenseCalendarItem = { ...expense, _showAmount: true };
+
+      if (expense.category === "flight") {
+        const items: ExpenseCalendarItem[] = [];
+        if (primaryDate === dateStr) {
+          items.push({ ...baseItem, _showAmount: true, _subLabel: "Hinflug" });
+        }
+        if (expense.checkOutDate) {
+          const returnDate = getDateKey(expense.checkOutDate as string | Date);
+          if (returnDate === dateStr && returnDate !== primaryDate) {
+            items.push({ ...baseItem, _showAmount: false, _subLabel: "Rueckflug" });
+          }
+        }
+        return items;
+      }
+
+      if (expense.category === "hotel") {
+        if (dateStr < checkInDate || dateStr > checkOutDate) {
+          return [];
+        }
+        return [
+          {
+            ...baseItem,
+            _showAmount: dateStr === checkInDate,
+            _subLabel: dateStr === checkInDate ? "Check-in" : "Hotelnacht",
+          },
+        ];
+      }
+
+      if (primaryDate === dateStr) {
+        return [{ ...baseItem, _showAmount: true }];
+      }
+      return [];
+    });
   };
 
   const calculateDayTotal = (entries: any[]) => {
@@ -434,7 +510,10 @@ export default function TimeTracking() {
 
   const days = getDaysInMonth();
   const monthTotal = calculateMonthTotal();
-  const isOnsiteExpenseDay = selectedExpenseDate ? isOnsiteDate(selectedExpenseDate) : false;
+  const computedHotelCheckOutDate =
+    tempHotelCheckInDate && Number(tempHotelNights) >= 0
+      ? addDays(tempHotelCheckInDate, Number(tempHotelNights))
+      : "";
 
   return (
     <DashboardLayout>
@@ -667,19 +746,36 @@ export default function TimeTracking() {
                                   setTempExpenseCategory(expense.category);
                                   setTempExpenseCurrency(expense.currency || 'EUR');
                                   setTempExpenseComment(expense.comment || '');
-                                  setTempTravelStart(expense.travelStart || '');
-                                  setTempTravelEnd(expense.travelEnd || '');
-                                  setTempFullDay(Boolean(expense.fullDay));
-                                  setSelectedExpenseDate(expense.date ? new Date(expense.date) : day);
+                                  const expenseDateKey = getDateKey(expense.date ? expense.date : day);
+                                  setTempExpenseDate(expenseDateKey);
+                                  setTempFlightReturnDate(
+                                    expense.checkOutDate ? getDateKey(expense.checkOutDate as string | Date) : ""
+                                  );
+                                  setTempFlightTravelStart(expense.departureTime || "");
+                                  setTempFlightTravelEnd(expense.arrivalTime || "");
+                                  const hotelCheckIn = expense.checkInDate
+                                    ? getDateKey(expense.checkInDate as string | Date)
+                                    : expenseDateKey;
+                                  const hotelCheckOut = expense.checkOutDate
+                                    ? getDateKey(expense.checkOutDate as string | Date)
+                                    : hotelCheckIn;
+                                  setTempHotelCheckInDate(hotelCheckIn);
+                                  setTempHotelNights(String(dayDiff(hotelCheckIn, hotelCheckOut)));
+                                  setSelectedExpenseDate(parseDateKey(expenseDateKey));
                                   setIsExpensesDialogOpen(true);
                                 }}
                               >
                                 <div className="font-medium truncate">
                                   {EXPENSE_CATEGORY_LABELS[expense.category] || expense.category}
                                 </div>
-                                <div className="text-[10px]">
-                                  {(expense.amount / 100).toFixed(2)} {expense.currency || 'EUR'}
-                                </div>
+                                {expense._subLabel && (
+                                  <div className="text-[10px] opacity-80">{expense._subLabel}</div>
+                                )}
+                                {expense._showAmount !== false && (
+                                  <div className="text-[10px]">
+                                    {(expense.amount / 100).toFixed(2)} {expense.currency || 'EUR'}
+                                  </div>
+                                )}
                               </div>
                             );
                           }
@@ -881,62 +977,49 @@ export default function TimeTracking() {
                 className="space-y-4"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  console.log('[TimeTracking] Form submitted');
-                  console.log('[TimeTracking] tempExpenseAmount:', tempExpenseAmount);
-                  console.log('[TimeTracking] tempExpenseCategory:', tempExpenseCategory);
-                  
+
                   if (!tempExpenseAmount) {
                     toast.error('Bitte Betrag eingeben');
                     return;
                   }
 
-                  if (isOnsiteExpenseDay && !tempFullDay && (!tempTravelStart || !tempTravelEnd)) {
-                    toast.error('Für Onsite-Tage bitte Reise-start und Reise-Ende ausfüllen oder "Ganzer Tag" aktivieren');
-                    return;
+                  const normalizedPrimaryDate = tempExpenseDate || formatLocalDate(selectedExpenseDate!);
+                  const hotelCheckIn = tempHotelCheckInDate || normalizedPrimaryDate;
+                  const hotelNights = Math.max(0, Number(tempHotelNights || "0"));
+                  const hotelCheckOut = addDays(hotelCheckIn, hotelNights);
+
+                  const payloadBase: any = {
+                    category: tempExpenseCategory as any,
+                    amount: Math.round(parseFloat(tempExpenseAmount) * 100),
+                    currency: tempExpenseCurrency,
+                    comment: tempExpenseComment || undefined,
+                  };
+
+                  if (tempExpenseCategory === "flight") {
+                    payloadBase.date = normalizedPrimaryDate;
+                    payloadBase.departureTime = tempFlightTravelStart || undefined;
+                    payloadBase.arrivalTime = tempFlightTravelEnd || undefined;
+                    payloadBase.checkOutDate = tempFlightReturnDate || undefined;
+                  } else if (tempExpenseCategory === "hotel") {
+                    payloadBase.date = hotelCheckIn;
+                    payloadBase.checkInDate = hotelCheckIn;
+                    payloadBase.checkOutDate = hotelCheckOut;
+                  } else {
+                    payloadBase.date = normalizedPrimaryDate;
                   }
-                  
+
                   try {
                     if (editingExpense) {
-                      // Update existing expense
                       await updateExpenseMutation.mutateAsync({
                         id: editingExpense,
-                        category: tempExpenseCategory as any,
-                        amount: Math.round(parseFloat(tempExpenseAmount) * 100),
-                        currency: tempExpenseCurrency,
-                        comment: tempExpenseComment || undefined,
-                        travelStart: isOnsiteExpenseDay && !tempFullDay ? tempTravelStart : undefined,
-                        travelEnd: isOnsiteExpenseDay && !tempFullDay ? tempTravelEnd : undefined,
-                        fullDay: isOnsiteExpenseDay ? tempFullDay : false,
+                        ...payloadBase,
                       });
                     } else {
-                      // Create new expense
-                      // Format date as YYYY-MM-DD without timezone conversion
-                      const year = selectedExpenseDate!.getFullYear();
-                      const month = String(selectedExpenseDate!.getMonth() + 1).padStart(2, '0');
-                      const day = String(selectedExpenseDate!.getDate()).padStart(2, '0');
-                      const dateStr = `${year}-${month}-${day}`;
-                      
-                      await createExpenseMutation.mutateAsync({
-                        category: tempExpenseCategory as any,
-                        amount: Math.round(parseFloat(tempExpenseAmount) * 100),
-                        currency: tempExpenseCurrency,
-                        comment: tempExpenseComment || undefined,
-                        date: dateStr,
-                        travelStart: isOnsiteExpenseDay && !tempFullDay ? tempTravelStart : undefined,
-                        travelEnd: isOnsiteExpenseDay && !tempFullDay ? tempTravelEnd : undefined,
-                        fullDay: isOnsiteExpenseDay ? tempFullDay : false,
-                      });
+                      await createExpenseMutation.mutateAsync(payloadBase);
                       toast.success('Reisekosten erfolgreich gespeichert');
                     }
                     setIsExpensesDialogOpen(false);
-                    setEditingExpense(null);
-                    setTempExpenseAmount('');
-                    setTempExpenseCategory('car');
-                    setTempExpenseCurrency('EUR');
-                    setTempExpenseComment('');
-                    setTempTravelStart('');
-                    setTempTravelEnd('');
-                    setTempFullDay(false);
+                    resetExpenseFormState();
                   } catch (error: any) {
                     console.error('[TimeTracking] Error:', error);
                     toast.error(`Fehler beim Speichern: ${error.message}`);
@@ -972,7 +1055,17 @@ export default function TimeTracking() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="expense-category">Kategorie</Label>
-                    <Select value={tempExpenseCategory} onValueChange={setTempExpenseCategory}>
+                    <Select
+                      value={tempExpenseCategory}
+                      onValueChange={(value) => {
+                        setTempExpenseCategory(value);
+                        if (!tempExpenseDate && selectedExpenseDate) {
+                          const baseDate = formatLocalDate(selectedExpenseDate);
+                          setTempExpenseDate(baseDate);
+                          setTempHotelCheckInDate(baseDate);
+                        }
+                      }}
+                    >
                       <SelectTrigger id="expense-category">
                         <SelectValue />
                       </SelectTrigger>
@@ -991,6 +1084,90 @@ export default function TimeTracking() {
                     </Select>
                   </div>
                 </div>
+                {tempExpenseCategory === "flight" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="flight-outbound-date">Hinflug-Datum</Label>
+                        <Input
+                          id="flight-outbound-date"
+                          type="date"
+                          value={tempExpenseDate}
+                          onChange={(e) => setTempExpenseDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="flight-return-date">Rueckflug-Datum (optional)</Label>
+                        <Input
+                          id="flight-return-date"
+                          type="date"
+                          value={tempFlightReturnDate}
+                          onChange={(e) => setTempFlightReturnDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="flight-travel-start">Reise-Start (Abflugzeit, optional)</Label>
+                        <Input
+                          id="flight-travel-start"
+                          type="time"
+                          value={tempFlightTravelStart}
+                          onChange={(e) => setTempFlightTravelStart(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="flight-travel-end">Reise-Ende (Landezeit, optional)</Label>
+                        <Input
+                          id="flight-travel-end"
+                          type="time"
+                          value={tempFlightTravelEnd}
+                          onChange={(e) => setTempFlightTravelEnd(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+                {tempExpenseCategory === "hotel" && (
+                  <>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="hotel-checkin-date">Check-in-Datum</Label>
+                        <Input
+                          id="hotel-checkin-date"
+                          type="date"
+                          value={tempHotelCheckInDate}
+                          onChange={(e) => setTempHotelCheckInDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="hotel-nights">Anzahl Naechte</Label>
+                        <Input
+                          id="hotel-nights"
+                          type="number"
+                          min="0"
+                          value={tempHotelNights}
+                          onChange={(e) => setTempHotelNights(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="hotel-checkout-date">Check-out (automatisch)</Label>
+                        <Input id="hotel-checkout-date" type="date" value={computedHotelCheckOutDate} readOnly />
+                      </div>
+                    </div>
+                  </>
+                )}
+                {tempExpenseCategory !== "flight" && tempExpenseCategory !== "hotel" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="expense-date">Datum</Label>
+                    <Input
+                      id="expense-date"
+                      type="date"
+                      value={tempExpenseDate}
+                      onChange={(e) => setTempExpenseDate(e.target.value)}
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="expense-comment">Kommentar (optional)</Label>
                   <Textarea
@@ -1001,64 +1178,10 @@ export default function TimeTracking() {
                     rows={2}
                   />
                 </div>
-                {isOnsiteExpenseDay && (
-                  <div className="space-y-3 rounded-md border p-3">
-                    <p className="text-sm font-medium">
-                      Onsite-Reisespesen (Pflichtangaben)
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <input
-                        id="expense-full-day"
-                        type="checkbox"
-                        checked={tempFullDay}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setTempFullDay(checked);
-                          if (checked) {
-                            setTempTravelStart('');
-                            setTempTravelEnd('');
-                          }
-                        }}
-                      />
-                      <Label htmlFor="expense-full-day">Ganzer Tag</Label>
-                    </div>
-                    {!tempFullDay && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="expense-travel-start">Reise-start</Label>
-                          <Input
-                            id="expense-travel-start"
-                            type="time"
-                            value={tempTravelStart}
-                            onChange={(e) => setTempTravelStart(e.target.value)}
-                            required={isOnsiteExpenseDay && !tempFullDay}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="expense-travel-end">Reise-Ende</Label>
-                          <Input
-                            id="expense-travel-end"
-                            type="time"
-                            value={tempTravelEnd}
-                            onChange={(e) => setTempTravelEnd(e.target.value)}
-                            required={isOnsiteExpenseDay && !tempFullDay}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={() => {
                     setIsExpensesDialogOpen(false);
-                    setEditingExpense(null);
-                    setTempExpenseAmount('');
-                    setTempExpenseCategory('car');
-                    setTempExpenseCurrency('EUR');
-                    setTempExpenseComment('');
-                    setTempTravelStart('');
-                    setTempTravelEnd('');
-                    setTempFullDay(false);
+                    resetExpenseFormState();
                   }} className="flex-1">
                     Abbrechen
                   </Button>

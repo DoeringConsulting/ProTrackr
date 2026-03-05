@@ -630,6 +630,8 @@ export const appRouter = router({
 
       const normalizedData = {
         ...data,
+        ...(data.checkInDate ? { checkInDate: new Date(data.checkInDate) } : {}),
+        ...(data.checkOutDate ? { checkOutDate: new Date(data.checkOutDate) } : {}),
         ...(data.fullDay !== undefined ? { fullDay: data.fullDay ? 1 : 0 } : {}),
       };
       await updateExpense(id, normalizedData);

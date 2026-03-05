@@ -471,10 +471,14 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
   const timeEntryConditions = [eq(timeEntries.userId, userId)];
   
   if (startDate) {
-    timeEntryConditions.push(sql`DATE(${timeEntries.date}) >= ${startDate}`);
+    timeEntryConditions.push(
+      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${timeEntries.date})) >= ${startDate}`
+    );
   }
   if (endDate) {
-    timeEntryConditions.push(sql`DATE(${timeEntries.date}) <= ${endDate}`);
+    timeEntryConditions.push(
+      sql`DATE(COALESCE(${expenses.checkInDate}, ${timeEntries.date})) <= ${endDate}`
+    );
   }
   
   // Get expenses linked to time entries
@@ -489,6 +493,12 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
       travelStart: expenses.travelStart,
       travelEnd: expenses.travelEnd,
       fullDay: expenses.fullDay,
+      ticketNumber: expenses.ticketNumber,
+      flightNumber: expenses.flightNumber,
+      departureTime: expenses.departureTime,
+      arrivalTime: expenses.arrivalTime,
+      checkInDate: expenses.checkInDate,
+      checkOutDate: expenses.checkOutDate,
       date: timeEntries.date,
       createdAt: expenses.createdAt,
     })
@@ -503,10 +513,14 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
   ];
   
   if (startDate) {
-    standaloneConditions.push(sql`DATE(${expenses.date}) >= ${startDate}`);
+    standaloneConditions.push(
+      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) >= ${startDate}`
+    );
   }
   if (endDate) {
-    standaloneConditions.push(sql`DATE(${expenses.date}) <= ${endDate}`);
+    standaloneConditions.push(
+      sql`DATE(COALESCE(${expenses.checkInDate}, ${expenses.date})) <= ${endDate}`
+    );
   }
   
   // Get standalone expenses (not linked to time entries)
@@ -521,6 +535,12 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
       travelStart: expenses.travelStart,
       travelEnd: expenses.travelEnd,
       fullDay: expenses.fullDay,
+      ticketNumber: expenses.ticketNumber,
+      flightNumber: expenses.flightNumber,
+      departureTime: expenses.departureTime,
+      arrivalTime: expenses.arrivalTime,
+      checkInDate: expenses.checkInDate,
+      checkOutDate: expenses.checkOutDate,
       date: expenses.date,
       createdAt: expenses.createdAt,
     })
