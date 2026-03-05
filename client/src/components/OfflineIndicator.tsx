@@ -45,9 +45,9 @@ export function OfflineIndicator() {
           </AlertDescription>
         </Alert>
       ) : pendingSync > 0 ? (
-        <Alert className="shadow-lg bg-blue-50 border-blue-200">
-          <Cloud className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="flex items-center justify-between text-blue-900">
+        <Alert className="shadow-lg bg-[var(--badge-inclusive-bg)] border-[var(--badge-inclusive-text)]/30">
+          <Cloud className="h-4 w-4 text-[var(--badge-inclusive-text)]" />
+          <AlertDescription className="flex items-center justify-between text-[var(--badge-inclusive-text)]">
             <span>Synchronisiere...</span>
             <span className="text-xs">{pendingSync} ausstehende Änderungen</span>
           </AlertDescription>

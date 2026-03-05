@@ -23,7 +23,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: "Sonstiges",
 };
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", "#82CA9D", "#FFC658", "#FF6B9D"];
+const COLORS = ["#048998", "#06a5b6", "#036d79", "#025a64", "#dbbe76", "#b98847", "#7a8f94", "#dc2626"];
 
 export default function ProjectDetail() {
   const params = useParams();
@@ -137,7 +137,7 @@ export default function ProjectDetail() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            <h1 className="text-3xl font-bold tracking-tight text-[#025a64]">
               {customer?.projectName || "Projekt"}
             </h1>
             <p className="text-muted-foreground mt-2">
@@ -247,7 +247,7 @@ export default function ProjectDetail() {
                       <YAxis />
                       <Tooltip formatter={(value: number) => `€${value.toFixed(2)}`} />
                       <Legend />
-                      <Bar dataKey="amount" fill="#8884d8" name="Betrag (€)" />
+                      <Bar dataKey="amount" fill="#048998" name="Betrag (€)" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

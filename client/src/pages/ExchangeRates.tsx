@@ -87,7 +87,7 @@ export default function ExchangeRates() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-      <h1 className="text-3xl font-bold mb-6">Wechselkurse</h1>
+      <h1 className="text-3xl font-bold mb-6 text-[#025a64]">Wechselkurse</h1>
 
       {!isOnline && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 flex items-center gap-3">
@@ -132,8 +132,8 @@ export default function ExchangeRates() {
                   Aktueller Kurs: <span className="font-semibold text-foreground">{(currentRate.rate / 10000).toFixed(4)} PLN</span>
                   <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
                     currentRate.source === "manual" 
-                      ? "bg-yellow-100 text-yellow-800" 
-                      : "bg-green-100 text-green-800"
+                      ? "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)]" 
+                      : "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)]"
                   }`}>
                     {currentRate.source === "manual" ? "Manuell" : "NBP"}
                   </span>
@@ -192,8 +192,8 @@ export default function ExchangeRates() {
                   Aktueller Kurs: <span className="font-semibold text-foreground">{(currentRate.rate / 10000).toFixed(4)} PLN</span>
                   <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
                     currentRate.source === "manual" 
-                      ? "bg-yellow-100 text-yellow-800" 
-                      : "bg-green-100 text-green-800"
+                      ? "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)]" 
+                      : "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)]"
                   }`}>
                     {currentRate.source === "manual" ? "Manuell" : "NBP"}
                   </span>
@@ -262,8 +262,8 @@ export default function ExchangeRates() {
                     <TableCell>
                       <span className={`text-xs px-2 py-1 rounded ${
                         rate.source === "manual" 
-                          ? "bg-yellow-100 text-yellow-800" 
-                          : "bg-green-100 text-green-800"
+                          ? "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)]" 
+                          : "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)]"
                       }`}>
                         {rate.source === "manual" ? "Manuell" : "NBP"}
                       </span>

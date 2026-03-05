@@ -24,11 +24,11 @@ export function ChangelogDialog({ open, onOpenChange, version }: ChangelogDialog
   const getIcon = (type: Change['type']) => {
     switch (type) {
       case 'feature':
-        return <Sparkles className="h-5 w-5 text-blue-500" />;
+        return <Sparkles className="h-5 w-5 text-primary" />;
       case 'improvement':
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+        return <CheckCircle2 className="h-5 w-5 text-primary" />;
       case 'fix':
-        return <Bug className="h-5 w-5 text-orange-500" />;
+        return <Bug className="h-5 w-5 text-[var(--badge-exclusive-text)]" />;
     }
   };
 
@@ -59,7 +59,7 @@ export function ChangelogDialog({ open, onOpenChange, version }: ChangelogDialog
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-blue-500" />
+            <Sparkles className="h-6 w-6 text-primary" />
             Was ist neu in Version {version.version}?
           </DialogTitle>
           <DialogDescription>
@@ -90,8 +90,8 @@ export function ChangelogDialog({ open, onOpenChange, version }: ChangelogDialog
           ))}
         </div>
 
-        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-          <p className="text-sm text-blue-900 dark:text-blue-100">
+        <div className="mt-6 p-4 bg-[var(--badge-inclusive-bg)] rounded-lg border border-[var(--badge-inclusive-text)]/30">
+          <p className="text-sm text-[var(--badge-inclusive-text)]">
             💡 <strong>Tipp:</strong> Die App aktualisiert sich automatisch. Sie müssen nichts weiter tun!
           </p>
         </div>

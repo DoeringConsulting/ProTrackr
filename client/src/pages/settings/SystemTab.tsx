@@ -58,7 +58,7 @@ export default function SystemTab() {
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground">Status</p>
-              <p className="text-sm font-medium text-green-600">Aktuell</p>
+              <p className="text-sm font-medium text-primary">Aktuell</p>
             </div>
           </div>
 
@@ -97,7 +97,7 @@ export default function SystemTab() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[var(--badge-inclusive-bg)] flex items-center justify-center text-[var(--badge-inclusive-text)] font-bold">
               1
             </div>
             <div>
@@ -109,7 +109,7 @@ export default function SystemTab() {
           </div>
 
           <div className="flex gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[var(--badge-inclusive-bg)] flex items-center justify-center text-[var(--badge-inclusive-text)] font-bold">
               2
             </div>
             <div>
@@ -121,7 +121,7 @@ export default function SystemTab() {
           </div>
 
           <div className="flex gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[var(--badge-inclusive-bg)] flex items-center justify-center text-[var(--badge-inclusive-text)] font-bold">
               3
             </div>
             <div>

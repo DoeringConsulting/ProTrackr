@@ -274,15 +274,15 @@ export default function ExchangeRatesTab() {
                         <TableCell>
                           <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
                             rate.source === 'NBP' 
-                              ? 'bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20' 
-                              : 'bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20'
+                              ? 'bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] ring-1 ring-inset ring-[var(--badge-inclusive-text)]/20' 
+                              : 'bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] ring-1 ring-inset ring-[var(--badge-exclusive-text)]/20'
                           }`}>
                             {rate.source}
                           </span>
                         </TableCell>
                         <TableCell>
                           {rate.isManual ? (
-                            <span className="text-green-600">✓</span>
+                            <span className="text-primary">✓</span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}

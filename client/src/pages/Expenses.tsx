@@ -20,7 +20,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: "Sonstiges",
 };
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", "#82CA9D", "#FFC658", "#FF6B9D"];
+const COLORS = ["#048998", "#06a5b6", "#036d79", "#025a64", "#dbbe76", "#b98847", "#7a8f94", "#dc2626"];
 
 export default function Expenses() {
   const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>("month");
@@ -104,7 +104,7 @@ export default function Expenses() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reisekosten-Analyse</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-[#025a64]">Reisekosten-Analyse</h1>
           <p className="text-muted-foreground">
             Übersicht und Analyse Ihrer Reisekosten nach Kostenart
           </p>
@@ -229,7 +229,7 @@ export default function Expenses() {
                   <YAxis />
                   <Tooltip formatter={(value: number) => `${value.toFixed(2)} €`} />
                   <Legend />
-                  <Bar dataKey="amount" fill="#8884d8" name="Betrag (€)" />
+                  <Bar dataKey="amount" fill="#048998" name="Betrag (€)" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -250,7 +250,7 @@ export default function Expenses() {
                     labelLine={false}
                     label={({ category, percent }) => `${category}: ${(percent * 100).toFixed(0)}%`}
                     outerRadius={80}
-                    fill="#8884d8"
+                    fill="#048998"
                     dataKey="amount"
                   >
                     {categoryData.map((entry, index) => (

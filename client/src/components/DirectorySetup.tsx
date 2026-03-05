@@ -9,7 +9,7 @@ interface DirectorySetupProps {
 
 export function DirectorySetup({ onComplete }: DirectorySetupProps) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-[var(--badge-inclusive-bg)] to-[#f4f7f8]">
       <Card className="max-w-2xl w-full shadow-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
@@ -54,9 +54,9 @@ Beispiele:
               </p>
             </div>
 
-            <Alert className="bg-blue-50 border-blue-200">
-              <Info className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-900">
+            <Alert className="bg-[var(--badge-inclusive-bg)] border-[var(--badge-inclusive-text)]/30">
+              <Info className="h-4 w-4 text-[var(--badge-inclusive-text)]" />
+              <AlertDescription className="text-[var(--badge-inclusive-text)]">
                 <strong>Tipp:</strong> Organisieren Sie Ihre Downloads automatisch, indem Sie 
                 den Browser-Download-Ordner auf einen Cloud-Ordner Ihrer Wahl setzen.
               </AlertDescription>

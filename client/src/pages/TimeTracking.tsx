@@ -66,10 +66,10 @@ const WORK_TYPE_LABELS = {
 };
 
 const WORK_TYPE_COLORS = {
-  onsite: "bg-blue-100 text-blue-800 border-blue-200",
-  remote: "bg-green-100 text-green-800 border-green-200",
+  onsite: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
+  remote: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
   off_duty: "bg-gray-100 text-gray-800 border-gray-200",
-  business_trip: "bg-purple-100 text-purple-800 border-purple-200",
+  business_trip: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
 };
 
 const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
@@ -86,16 +86,16 @@ const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
 };
 
 const EXPENSE_CATEGORY_COLORS = {
-  car: "bg-orange-100 text-orange-800 border-orange-200",
-  train: "bg-cyan-100 text-cyan-800 border-cyan-200",
-  flight: "bg-indigo-100 text-indigo-800 border-indigo-200",
-  taxi: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  transport: "bg-teal-100 text-teal-800 border-teal-200",
-  meal: "bg-pink-100 text-pink-800 border-pink-200",
-  hotel: "bg-violet-100 text-violet-800 border-violet-200",
-  food: "bg-rose-100 text-rose-800 border-rose-200",
-  fuel: "bg-amber-100 text-amber-800 border-amber-200",
-  other: "bg-slate-100 text-slate-800 border-slate-200",
+  car: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
+  train: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
+  flight: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
+  taxi: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
+  transport: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
+  meal: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
+  hotel: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
+  food: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
+  fuel: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
+  other: "bg-gray-100 text-gray-800 border-gray-200",
 };
 
 function formatLocalDate(date: Date): string {
@@ -542,12 +542,12 @@ export default function TimeTracking() {
                           )}
                           {/* Desktop: Badges */}
                           {!isMobile && entries.length > 0 && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-medium">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] font-medium">
                               {entries.length}
                             </span>
                           )}
                           {!isMobile && dayExpenses.length > 0 && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-pink-100 text-pink-800 font-medium">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] font-medium">
                               {dayExpenses.length}
                             </span>
                           )}
@@ -560,10 +560,10 @@ export default function TimeTracking() {
                               <div 
                                 className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
                                 style={{ 
-                                  backgroundColor: '#3b82f6',
+                                  backgroundColor: '#048998',
                                   color: '#ffffff',
                                   opacity: 1,
-                                  border: '2px solid #3b82f6'
+                                  border: '2px solid #048998'
                                 } as React.CSSProperties}
                                   title={`${entries.length} Zeiteinträge`}
                                 >
@@ -574,10 +574,10 @@ export default function TimeTracking() {
                               <div 
                                 className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
                                 style={{ 
-                                  backgroundColor: '#ec4899',
+                                  backgroundColor: '#b98847',
                                   color: '#ffffff',
                                   opacity: 1,
-                                  border: '2px solid #ec4899'
+                                  border: '2px solid #b98847'
                                 } as React.CSSProperties}
                                   title={`${dayExpenses.length} Reisekosten`}
                                 >

@@ -123,7 +123,7 @@ export default function Import() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Datenimport</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-[#025a64]">Datenimport</h1>
           <p className="text-muted-foreground">
             Importieren Sie bestehende Daten aus Excel-Dateien
           </p>
@@ -191,21 +191,21 @@ export default function Import() {
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
                   <div>
                     <p className="text-sm font-medium">Kunden</p>
                     <p className="text-2xl font-bold">{results.customers}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
                   <div>
                     <p className="text-sm font-medium">Zeiteinträge</p>
                     <p className="text-2xl font-bold">{results.timeEntries}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
                   <div>
                     <p className="text-sm font-medium">Reisekosten</p>
                     <p className="text-2xl font-bold">{results.expenses}</p>
