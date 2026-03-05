@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.0.40] - 2026-03-05
+
+### Hinzugefuegt
+
+**Corporate-Design-Farbschema V1 umgesetzt** - Globale Theme-Variablen wurden auf Teal/Gold/Light-Content laut Doring-Vorgaben umgestellt, inklusive Sidebar-, Border-, Text- und Chart-Farbwerten.
+
+**Sidebar-Branding fuer Original-Logo vorbereitet** - Dashboard-Navigation nutzt nun dedizierte Logo/Icon-Pfade unter `/assets/doering-consulting-logo.png` und `/assets/doering-consulting-icon.png`.
+
+### Geaendert
+
+**Dashboard-Visuals und Badges angepasst** - KPI-Icons, Chart-Serienfarben, Modell-Badges (Inclusive/Exclusive), Nettogewinn-Farbe im Report sowie Footer-Styling wurden auf Corporate Design umgestellt.
+
+---
+
 ## [1.0.39] - 2026-03-04
 
 ### Behoben

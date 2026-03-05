@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.40",
+      "date": "2026-03-05",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Corporate-Design-Farbschema V1 implementiert",
+          "description": "Globale Theme-Variablen wurden auf das Doring-Design umgestellt (Teal Sidebar, heller Content, Gold-Akzente, neue Chart-Farbpalette)."
+        },
+        {
+          "type": "feature",
+          "title": "Sidebar-Branding auf Original-Logo-Pfade vorbereitet",
+          "description": "Navigation verwendet nun Logo/Icon aus /public/assets, inklusive kompakter Darstellung im eingeklappten Zustand."
+        },
+        {
+          "type": "improvement",
+          "title": "Dashboard- und Badge-Farben auf Corporate Design angepasst",
+          "description": "KPI-Icons, Charts, Modell-Badges (Inclusive/Exclusive), Nettogewinn-Farbe und Footer wurden an die Corporate-Vorgaben angepasst."
+        }
+      ]
+    },
+    {
       "version": "1.0.39",
       "date": "2026-03-04",
       "changes": [
