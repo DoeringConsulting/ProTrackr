@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.45",
+      "date": "2026-03-05",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Reise-Tracking fuer Fluege mit Hin-/Rueckflug-Kacheln",
+          "description": "Fluege unterstuetzen jetzt getrennte Felder fuer Hinflugdatum, optionales Rueckflugdatum sowie optionale Zeiten fuer Reise-Start und Reise-Ende; der Gesamtpreis bleibt nur am Hinflugtag sichtbar."
+        },
+        {
+          "type": "feature",
+          "title": "Hotel-Logik mit Check-in + Naechten und automatischem Check-out",
+          "description": "Hotels berechnen das Check-out-Datum automatisch aus Check-in und Naechten, verteilen den Eintrag auf alle betroffenen Kalendertage und zeigen den Gesamtbetrag nur am Check-in-Tag."
+        },
+        {
+          "type": "fix",
+          "title": "Keine Pflichtfelder fuer unvollstaendige Reisefaelle",
+          "description": "Die vorherige harte Onsite-Validierung fuer Reisezeiten wurde entfernt, sodass z. B. One-Way-Fluege ohne Rueckflug oder ohne Zeitangaben gespeichert werden koennen."
+        }
+      ]
+    },
+    {
       "version": "1.0.44",
       "date": "2026-03-05",
       "changes": [
