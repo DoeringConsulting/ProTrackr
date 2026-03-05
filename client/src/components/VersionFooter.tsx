@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 // Version is managed by scripts/increment-version.mjs
-const APP_VERSION = '1.0.42';
+const APP_VERSION = '1.0.43';
 
 function compareSemver(a: string, b: string): number {
   const parse = (value: string) => value.split('.').map((part) => Number.parseInt(part, 10));

@@ -1374,7 +1374,7 @@ export const appRouter = router({
     }).mutation(async ({ ctx, input }) => {
       const {
         countActiveGlobalSetupAdmins,
-        countActiveMandantAdmins,
+        countNonDeletedMandantAdmins,
         findUserByEmailAndMandant,
         findUserById,
         updateUserById,
@@ -1459,18 +1459,18 @@ export const appRouter = router({
         }
       }
 
-      if (currentIsActive && currentIsMandantAdminRole && targetUser.mandantId) {
+      if (currentStatus !== "deleted" && currentIsMandantAdminRole && targetUser.mandantId) {
         const leavesMandantAdminPool =
           !nextIsMandantAdminRole || Number(nextMandantId) !== Number(targetUser.mandantId);
         if (leavesMandantAdminPool) {
-          const remainingMandantAdmins = await countActiveMandantAdmins(
+          const remainingMandantAdmins = await countNonDeletedMandantAdmins(
             Number(targetUser.mandantId),
             targetUserId
           );
           if (remainingMandantAdmins < 1) {
             throw new TRPCError({
               code: "BAD_REQUEST",
-              message: "Mindestens ein aktiver Mandanten-Admin pro Mandant muss erhalten bleiben",
+              message: "Der letzte verbleibende Mandanten-Admin kann nicht entfernt oder umgehaengt werden",
             });
           }
         }
@@ -1561,7 +1561,7 @@ export const appRouter = router({
     }).mutation(async ({ ctx, input }) => {
       const {
         countActiveGlobalSetupAdmins,
-        countActiveMandantAdmins,
+        countNonDeletedMandantAdmins,
         deleteUserById,
         findUserById,
       } = await import("./db");
@@ -1599,15 +1599,15 @@ export const appRouter = router({
         }
       }
 
-      if (targetStatus === "active" && isMandantAdminRoleValue(String(targetUser.role)) && targetUser.mandantId) {
-        const remainingMandantAdmins = await countActiveMandantAdmins(
+      if (targetStatus !== "deleted" && isMandantAdminRoleValue(String(targetUser.role)) && targetUser.mandantId) {
+        const remainingMandantAdmins = await countNonDeletedMandantAdmins(
           Number(targetUser.mandantId),
           targetUserId
         );
         if (remainingMandantAdmins < 1) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Mindestens ein aktiver Mandanten-Admin pro Mandant muss erhalten bleiben",
+            message: "Der letzte verbleibende Mandanten-Admin kann nicht geloescht werden",
           });
         }
       }

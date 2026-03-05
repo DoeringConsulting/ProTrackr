@@ -876,6 +876,25 @@ export async function countActiveMandantAdmins(mandantId: number, excludeUserId?
   return Number(rows[0]?.count ?? 0);
 }
 
+export async function countNonDeletedMandantAdmins(mandantId: number, excludeUserId?: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const { users } = await import("../drizzle/schema");
+  const conditions: any[] = [
+    eq(users.mandantId, mandantId),
+    or(eq(users.role, "mandant_admin"), eq(users.role, "admin")),
+    sql`${users.accountStatus} <> 'deleted'`,
+  ];
+  if (excludeUserId !== undefined) {
+    conditions.push(sql`${users.id} <> ${excludeUserId}`);
+  }
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(and(...conditions));
+  return Number(rows[0]?.count ?? 0);
+}
+
 export async function countActiveGlobalSetupAdmins(excludeUserId?: number) {
   const db = await getDb();
   if (!db) return 0;

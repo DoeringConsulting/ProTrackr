@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.43",
+      "date": "2026-03-05",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Harter Schutz fuer letzten Mandanten-Admin",
+          "description": "Der letzte verbleibende Mandanten-Admin eines Mandanten kann nun weder geloescht noch per Rollen-/Mandantenwechsel aus dem Admin-Pool entfernt werden."
+        },
+        {
+          "type": "fix",
+          "title": "Wiederherstellungsfaehigkeit nach Admin-Schutzverletzung verbessert",
+          "description": "Delete- und Update-Guards wurden auf nicht-geloeschte Mandanten-Admins erweitert, damit ein Mandant nie ohne wiederherstellbaren Admin endet."
+        }
+      ]
+    },
+    {
       "version": "1.0.42",
       "date": "2026-03-05",
       "changes": [
