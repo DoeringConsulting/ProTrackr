@@ -530,7 +530,7 @@ export default function Reports() {
                     )}
                     <TableRow className="border-t-4 bg-muted/50">
                       <TableCell className="font-bold text-lg">Nettogewinn</TableCell>
-                      <TableCell className="text-right font-bold text-lg text-green-600">
+                      <TableCell className="text-right font-bold text-lg text-primary">
                         {formatCalculatedCurrency(accountingData.netProfit)}
                       </TableCell>
                     </TableRow>

@@ -7,10 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { trpc } from "@/lib/trpc";
 import {
   AlertTriangle,
-  Calendar,
-  Euro,
-  FileText,
+  BarChart3,
+  CalendarDays,
+  FileBarChart,
   PieChart as PieChartIcon,
+  Receipt,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -57,13 +58,13 @@ type CostChartState = {
   missingRates: number;
 };
 
-const SERIES_COLORS = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ec4899", "#14b8a6", "#f97316"];
+const SERIES_COLORS = ["#048998", "#06a5b6", "#036d79", "#025a64", "#dbbe76", "#b98847", "#7a8f94"];
 const CURRENCY_COLOR_MAP: Record<string, string> = {
-  EUR: "#3b82f6",
-  PLN: "#10b981",
-  USD: "#f59e0b",
-  GBP: "#8b5cf6",
-  CHF: "#14b8a6",
+  EUR: "#048998",
+  PLN: "#06a5b6",
+  USD: "#036d79",
+  GBP: "#b98847",
+  CHF: "#dbbe76",
 };
 
 function getSeriesColor(key: string, index: number): string {
@@ -424,11 +425,11 @@ export default function Dashboard() {
       };
 
       const unifiedData: CostSlice[] = [
-        { name: "Fixkosten", value: convertEurToTarget(fixedCostsEur) / 100, color: "#3b82f6", chartCurrency: targetCurrency },
-        { name: "Reisekosten", value: convertEurToTarget(variableCostsEur) / 100, color: "#0ea5e9", chartCurrency: targetCurrency },
-        { name: "ZUS", value: convertEurToTarget(taxResult.zus) / 100, color: "#8b5cf6", chartCurrency: targetCurrency },
-        { name: "Krankenvers.", value: convertEurToTarget(taxResult.healthInsurance) / 100, color: "#ec4899", chartCurrency: targetCurrency },
-        { name: "Steuer", value: convertEurToTarget(taxResult.tax) / 100, color: "#f59e0b", chartCurrency: targetCurrency },
+        { name: "Fixkosten", value: convertEurToTarget(fixedCostsEur) / 100, color: "#048998", chartCurrency: targetCurrency },
+        { name: "Reisekosten", value: convertEurToTarget(variableCostsEur) / 100, color: "#06a5b6", chartCurrency: targetCurrency },
+        { name: "ZUS", value: convertEurToTarget(taxResult.zus) / 100, color: "#036d79", chartCurrency: targetCurrency },
+        { name: "Krankenvers.", value: convertEurToTarget(taxResult.healthInsurance) / 100, color: "#dbbe76", chartCurrency: targetCurrency },
+        { name: "Steuer", value: convertEurToTarget(taxResult.tax) / 100, color: "#b98847", chartCurrency: targetCurrency },
       ];
 
       return { data: unifiedData, missingRates };
@@ -443,7 +444,7 @@ export default function Dashboard() {
       data.push({
         name: `Fixkosten (${currency})`,
         value: amountInEur / 100,
-        color: index % 2 === 0 ? "#3b82f6" : "#60a5fa",
+        color: index % 2 === 0 ? "#048998" : "#06a5b6",
         chartCurrency: "EUR",
         originalCurrency: currency,
         originalAmountCents: originalAmount,
@@ -455,7 +456,7 @@ export default function Dashboard() {
       data.push({
         name: `Reisekosten (${currency})`,
         value: amountInEur / 100,
-        color: index % 2 === 0 ? "#0ea5e9" : "#67e8f9",
+        color: index % 2 === 0 ? "#036d79" : "#7a8f94",
         chartCurrency: "EUR",
         originalCurrency: currency,
         originalAmountCents: originalAmount,
@@ -463,14 +464,14 @@ export default function Dashboard() {
     });
 
     data.push(
-      { name: "ZUS (EUR)", value: taxResult.zus / 100, color: "#8b5cf6", chartCurrency: "EUR" },
+      { name: "ZUS (EUR)", value: taxResult.zus / 100, color: "#036d79", chartCurrency: "EUR" },
       {
         name: "Krankenvers. (EUR)",
         value: taxResult.healthInsurance / 100,
-        color: "#ec4899",
+        color: "#dbbe76",
         chartCurrency: "EUR",
       },
-      { name: "Steuer (EUR)", value: taxResult.tax / 100, color: "#f59e0b", chartCurrency: "EUR" }
+      { name: "Steuer (EUR)", value: taxResult.tax / 100, color: "#b98847", chartCurrency: "EUR" }
     );
 
     return { data, missingRates };
@@ -543,30 +544,30 @@ export default function Dashboard() {
       value: customers?.length ?? 0,
       icon: Users,
       description: "Aktive Kunden",
-      color: "text-indigo-600",
+      color: "text-primary",
     },
     {
       title: "Zeiteinträge",
       value: thisMonthEntries.length,
-      icon: Calendar,
+      icon: CalendarDays,
       description: "Diesen Monat",
-      color: "text-emerald-600",
+      color: "text-primary",
     },
     {
       title: "Reisekosten",
       value: expenseStatValue,
-      icon: Euro,
+      icon: Receipt,
       description: showUnifiedCurrency
         ? `Im Zeitraum (${selectedPeriodLabel}) in ${targetCurrency}`
         : `Im Zeitraum (${selectedPeriodLabel})`,
-      color: "text-purple-600",
+      color: "text-primary",
     },
     {
       title: "Berichte",
       value: "0",
-      icon: FileText,
+      icon: FileBarChart,
       description: "Ausstehend",
-      color: "text-rose-600",
+      color: "text-primary",
     },
   ];
 
@@ -574,7 +575,7 @@ export default function Dashboard() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-[#025a64]">Dashboard</h1>
           <p className="text-muted-foreground mt-2">
             Willkommen bei Döring Consulting - Projekt & Abrechnungsmanagement
           </p>
@@ -615,7 +616,13 @@ export default function Dashboard() {
                         <p className="font-medium">{customer.projectName}</p>
                         <p className="text-sm text-muted-foreground">{customer.provider}</p>
                       </div>
-                      <span className="text-sm font-medium">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${
+                          customer.costModel === "exclusive"
+                            ? "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)]"
+                            : "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)]"
+                        }`}
+                      >
                         {customer.costModel === "exclusive" ? "Exclusive" : "Inclusive"}
                       </span>
                     </div>
@@ -715,7 +722,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-emerald-600" />
+                <TrendingUp className="h-5 w-5 text-primary" />
                 <CardTitle>Umsatzentwicklung</CardTitle>
               </div>
               <CardDescription>
@@ -741,7 +748,7 @@ export default function Dashboard() {
                     <Line
                       type="monotone"
                       dataKey="umsatz"
-                      stroke="#10b981"
+                      stroke="#048998"
                       strokeWidth={2}
                       name={targetCurrency}
                     />
@@ -765,7 +772,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
-                <PieChartIcon className="h-5 w-5 text-indigo-600" />
+                <PieChartIcon className="h-5 w-5 text-primary" />
                 <CardTitle>Kostenverteilung</CardTitle>
               </div>
               <CardDescription>
@@ -786,7 +793,7 @@ export default function Dashboard() {
                     labelLine={false}
                     label={false}
                     outerRadius={80}
-                    fill="#8884d8"
+                    fill="#048998"
                     dataKey="value"
                   >
                     {costChartVisibleData.map((entry, index) => (
@@ -840,7 +847,10 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Projekt-Vergleich</CardTitle>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              <CardTitle>Projekt-Vergleich</CardTitle>
+            </div>
             <CardDescription>
               Top 5 Projekte nach Umsatz ({selectedPeriodLabel}){" "}
               {showUnifiedCurrency ? `in ${targetCurrency}` : "in Originalwaehrungen"}
@@ -861,7 +871,7 @@ export default function Dashboard() {
                 />
                 <Legend />
                 {showUnifiedCurrency ? (
-                  <Bar dataKey="umsatz" fill="#3b82f6" name={targetCurrency} />
+                  <Bar dataKey="umsatz" fill="#048998" name={targetCurrency} />
                 ) : (
                   projectChart.seriesKeys.map((currency, index) => (
                     <Bar

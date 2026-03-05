@@ -43,7 +43,7 @@ export function VersionFooter() {
   }, []);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-muted/50 backdrop-blur-sm border-t border-border px-4 py-2 text-xs text-muted-foreground z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border px-4 py-2 text-[10px] text-muted-foreground z-50">
       <div className="container mx-auto flex items-center justify-between">
         <div className="flex items-center gap-4">
           <span className="font-mono">

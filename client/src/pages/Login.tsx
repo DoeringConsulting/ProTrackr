@@ -41,6 +41,13 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
+          <div className="mx-auto mb-2">
+            <img
+              src="/assets/doering-consulting-logo.png"
+              alt="Döring Consulting"
+              className="h-12 w-auto object-contain mx-auto"
+            />
+          </div>
           <CardTitle className="text-2xl">Döring Consulting</CardTitle>
           <CardDescription>Projekt & Abrechnungsmanagement</CardDescription>
         </CardHeader>

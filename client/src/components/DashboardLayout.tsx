@@ -39,6 +39,8 @@ const menuItems = [
   { icon: FileText, label: "Berichte", path: "/reports" },
   { icon: Settings, label: "Einstellungen", path: "/settings" },
 ];
+const BRAND_LOGO_PATH = "/assets/doering-consulting-logo.png";
+const BRAND_ICON_PATH = "/assets/doering-consulting-icon.png";
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -128,6 +130,8 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
+  const [logoAvailable, setLogoAvailable] = useState(true);
+  const [iconAvailable, setIconAvailable] = useState(true);
 
   useKeyboardShortcut({
     key: "k",
@@ -185,22 +189,40 @@ function DashboardLayoutContent({
           className="border-r-0"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
+          <SidebarHeader className="justify-center px-2 py-3">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                className="h-8 w-8 flex items-center justify-center hover:bg-sidebar-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring shrink-0 text-white/80 hover:text-white"
                 aria-label="Toggle navigation"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                <PanelLeft className="h-4 w-4" />
               </button>
               {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    Navigation
-                  </span>
+                <div className="flex items-center min-w-0">
+                  {logoAvailable ? (
+                    <img
+                      src={BRAND_LOGO_PATH}
+                      alt="Döring Consulting"
+                      className="h-11 w-auto object-contain"
+                      onError={() => setLogoAvailable(false)}
+                    />
+                  ) : (
+                    <span className="font-semibold tracking-tight truncate text-white">
+                      DÖRING Consulting
+                    </span>
+                  )}
                 </div>
-              ) : null}
+              ) : (
+                iconAvailable && (
+                  <img
+                    src={BRAND_ICON_PATH}
+                    alt="Döring Icon"
+                    className="h-7 w-7 object-contain"
+                    onError={() => setIconAvailable(false)}
+                  />
+                )
+              )}
             </div>
           </SidebarHeader>
 
@@ -214,11 +236,9 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className="h-10 transition-all font-normal text-sidebar-foreground hover:text-sidebar-accent-foreground data-[active=true]:text-white"
                     >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
-                      />
+                      <item.icon className="h-4 w-4" strokeWidth={isActive ? 2.2 : 1.8} />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -227,20 +247,20 @@ function DashboardLayoutContent({
             </SidebarMenu>
           </SidebarContent>
 
-          <SidebarFooter className="p-3">
+          <SidebarFooter className="p-3 border-t border-sidebar-border">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0">
+                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-sidebar-accent transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
+                  <Avatar className="h-9 w-9 border border-white/20 shrink-0">
                     <AvatarFallback className="text-xs font-medium">
                       {user?.name?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none">
+                    <p className="text-sm font-medium truncate leading-none text-white">
                       {user?.name || "-"}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate mt-1.5">
+                    <p className="text-xs text-white/55 truncate mt-1.5">
                       {user?.email || "-"}
                     </p>
                   </div>
@@ -262,6 +282,11 @@ function DashboardLayoutContent({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            {!isCollapsed && (
+              <p className="mt-2 text-[10px] text-white/40 leading-none px-1">
+                DÖRING Consulting
+              </p>
+            )}
           </SidebarFooter>
         </Sidebar>
         <div

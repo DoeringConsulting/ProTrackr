@@ -664,8 +664,8 @@ export default function Customers() {
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
                               customer.costModel === "exclusive"
-                                ? "bg-blue-50 text-blue-700"
-                                : "bg-green-50 text-green-700"
+                                ? "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)]"
+                                : "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)]"
                             }`}
                           >
                             {customer.costModel === "exclusive" ? "Exclusive" : "Inclusive"}
