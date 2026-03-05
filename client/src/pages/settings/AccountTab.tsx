@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Building2, Pencil, Shield, Trash2, UserPlus, UserX } from "lucide-react";
+import { Building2, Pencil, RotateCcw, Shield, Trash2, UserPlus, UserX } from "lucide-react";
 
 type AuthUser = {
   id: number;
@@ -41,8 +41,26 @@ type ManagedUser = {
   email: string;
   displayName?: string | null;
   role: string;
+  accountStatus?: "active" | "suspended" | "deleted";
   isActive?: number;
 };
+
+function getAccountStatus(user: ManagedUser): "active" | "suspended" | "deleted" {
+  if (
+    user.accountStatus === "active" ||
+    user.accountStatus === "suspended" ||
+    user.accountStatus === "deleted"
+  ) {
+    return user.accountStatus;
+  }
+  return Number(user.isActive ?? 1) === 1 ? "active" : "suspended";
+}
+
+function getAccountStatusLabel(status: "active" | "suspended" | "deleted") {
+  if (status === "deleted") return "Geloescht";
+  if (status === "suspended") return "Gesperrt";
+  return "Aktiv";
+}
 
 function getRoleLabel(role: string) {
   switch (role) {
@@ -64,6 +82,7 @@ export default function AccountTab() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSuspendOpen, setIsSuspendOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isRestoreOpen, setIsRestoreOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
 
   const [mandantName, setMandantName] = useState("");
@@ -121,7 +140,10 @@ export default function AccountTab() {
             { value: "mandant_admin", label: "Mandanten-Admin" },
             { value: "webapp_admin", label: "WebApp-Admin" },
           ]
-        : [{ value: "user", label: "Benutzer" }],
+        : [
+            { value: "user", label: "Benutzer" },
+            { value: "mandant_admin", label: "Mandanten-Admin" },
+          ],
     [isGlobalSetupAdmin]
   );
 
@@ -207,6 +229,18 @@ export default function AccountTab() {
     },
   });
 
+  const restoreMutation = trpc.usersAdmin.restore.useMutation({
+    onSuccess: () => {
+      utils.usersAdmin.list.invalidate();
+      toast.success("Benutzer wurde wiederhergestellt");
+      setIsRestoreOpen(false);
+      setSelectedUser(null);
+    },
+    onError: (error) => {
+      toast.error(`Fehler beim Wiederherstellen: ${error.message}`);
+    },
+  });
+
   const handleCreateUser = () => {
     if (!email || !password) {
       toast.error("E-Mail und Passwort sind Pflichtfelder");
@@ -222,7 +256,7 @@ export default function AccountTab() {
       return;
     }
 
-    const targetRole = isGlobalSetupAdmin ? role : "user";
+    const targetRole = role;
 
     createMutation.mutate({
       email,
@@ -283,7 +317,7 @@ export default function AccountTab() {
       userId: selectedUser.id,
       email: editEmail.trim(),
       displayName: editDisplayName.trim(),
-      role: isGlobalSetupAdmin ? editRole : "user",
+      role: editRole,
       mandantId: isGlobalSetupAdmin ? Number(editMandantId) : undefined,
       password: editPassword || undefined,
     });
@@ -321,7 +355,7 @@ export default function AccountTab() {
           <p className="text-muted-foreground">
             {isGlobalSetupAdmin
               ? "Setup-Flow: Mandant anlegen, Mandanten-Admin anlegen, dann Benutzer je Mandant verwalten"
-              : "Mandanten-Benutzer verwalten (anlegen, sperren, loeschen)"}
+              : "Mandanten-Benutzer verwalten (anlegen, sperren, loeschen, wiederherstellen)"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -418,7 +452,8 @@ export default function AccountTab() {
               <TableBody>
                 {users.map((user) => {
                   const isSelf = user.id === authUser?.id;
-                  const isActive = Number(user.isActive ?? 1) === 1;
+                  const status = getAccountStatus(user as ManagedUser);
+                  const isActive = status === "active";
                   return (
                     <TableRow key={user.id}>
                       <TableCell>{user.displayName || "-"}</TableCell>
@@ -426,8 +461,10 @@ export default function AccountTab() {
                       <TableCell>{getRoleLabel(String(user.role))}</TableCell>
                       <TableCell>{user.mandantId}</TableCell>
                       <TableCell>
-                        <Badge variant={isActive ? "default" : "destructive"}>
-                          {isActive ? "Aktiv" : "Gesperrt"}
+                        <Badge
+                          variant={isActive ? "default" : status === "deleted" ? "secondary" : "destructive"}
+                        >
+                          {getAccountStatusLabel(status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -444,7 +481,12 @@ export default function AccountTab() {
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={isSelf || !isActive || suspendMutation.isPending}
+                            disabled={
+                              isSelf ||
+                              !isActive ||
+                              suspendMutation.isPending ||
+                              restoreMutation.isPending
+                            }
                             onClick={() => {
                               setSelectedUser(user);
                               setIsSuspendOpen(true);
@@ -456,7 +498,12 @@ export default function AccountTab() {
                           <Button
                             size="sm"
                             variant="destructive"
-                            disabled={isSelf || deleteMutation.isPending}
+                            disabled={
+                              isSelf ||
+                              status === "deleted" ||
+                              deleteMutation.isPending ||
+                              restoreMutation.isPending
+                            }
                             onClick={() => {
                               setSelectedUser(user);
                               setIsDeleteOpen(true);
@@ -464,6 +511,24 @@ export default function AccountTab() {
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Loeschen
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              isSelf ||
+                              status === "active" ||
+                              restoreMutation.isPending ||
+                              suspendMutation.isPending ||
+                              deleteMutation.isPending
+                            }
+                            onClick={() => {
+                              setSelectedUser(user as ManagedUser);
+                              setIsRestoreOpen(true);
+                            }}
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Wiederherstellen
                           </Button>
                         </div>
                       </TableCell>
@@ -556,48 +621,45 @@ export default function AccountTab() {
                 placeholder="Mindestens 8 Zeichen"
               />
             </div>
+            <div className="space-y-2">
+              <Label>Rolle *</Label>
+              <Select
+                value={role}
+                onValueChange={(value) => setRole(value as "user" | "mandant_admin" | "webapp_admin")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {isGlobalSetupAdmin && (
-              <>
-                <div className="space-y-2">
-                  <Label>Rolle *</Label>
-                  <Select
-                    value={role}
-                    onValueChange={(value) =>
-                      setRole(value as "user" | "mandant_admin" | "webapp_admin")
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {roleOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Mandant *</Label>
-                  <Select value={mandantId} onValueChange={setMandantId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Mandant auswaehlen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(mandanten as MandantItem[]).map((mandant) => (
-                        <SelectItem key={mandant.id} value={String(mandant.id)}>
-                          {mandant.name} ({mandant.mandantNr})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
+              <div className="space-y-2">
+                <Label>Mandant *</Label>
+                <Select value={mandantId} onValueChange={setMandantId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Mandant auswaehlen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(mandanten as MandantItem[]).map((mandant) => (
+                      <SelectItem key={mandant.id} value={String(mandant.id)}>
+                        {mandant.name} ({mandant.mandantNr})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
             {!isGlobalSetupAdmin && (
               <div className="rounded-md border p-3 text-sm text-muted-foreground">
-                Rolle fuer neue Benutzer: <span className="font-medium text-foreground">Benutzer</span>
+                Rolle fuer neue Benutzer:{" "}
+                <span className="font-medium text-foreground">Benutzer oder Mandanten-Admin</span>
               </div>
             )}
             {isGlobalSetupAdmin && !mandantenLoading && mandanten.length === 0 && (
@@ -708,8 +770,25 @@ export default function AccountTab() {
                 </div>
               </>
             ) : (
-              <div className="rounded-md border p-3 text-sm text-muted-foreground">
-                Rolle bleibt im Mandantenbereich auf <span className="font-medium text-foreground">Benutzer</span>.
+              <div className="space-y-2">
+                <Label>Rolle</Label>
+                <Select
+                  value={editRole}
+                  onValueChange={(value) =>
+                    setEditRole(value as "user" | "mandant_admin" | "webapp_admin")
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roleOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>
@@ -751,8 +830,8 @@ export default function AccountTab() {
             <AlertDialogTitle>Benutzer loeschen?</AlertDialogTitle>
             <AlertDialogDescription>
               {selectedUser
-                ? `Der Benutzer ${selectedUser.email} wird dauerhaft entfernt.`
-                : "Der Benutzer wird dauerhaft entfernt."}
+                ? `Der Benutzer ${selectedUser.email} wird als geloescht markiert und kann wiederhergestellt werden.`
+                : "Der Benutzer wird als geloescht markiert und kann wiederhergestellt werden."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -761,6 +840,27 @@ export default function AccountTab() {
               onClick={() => selectedUser && deleteMutation.mutate({ userId: selectedUser.id })}
             >
               Loeschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isRestoreOpen} onOpenChange={setIsRestoreOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Benutzer wiederherstellen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedUser
+                ? `Der Benutzer ${selectedUser.email} wird wieder auf aktiv gesetzt.`
+                : "Der Benutzer wird wieder auf aktiv gesetzt."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedUser && restoreMutation.mutate({ userId: selectedUser.id })}
+            >
+              Wiederherstellen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

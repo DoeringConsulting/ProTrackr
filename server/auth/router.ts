@@ -7,6 +7,7 @@ import {
   createPasswordResetToken,
   findUserByEmail,
   findUserByEmailAndMandant,
+  findUserById,
   getValidPasswordResetToken,
   updateUserPasswordHash,
 } from "../db";
@@ -16,6 +17,16 @@ import { sendPasswordResetEmail, testEmailConnectionDetailed } from "../email";
 export const authRouter = Router();
 const RESET_TOKEN_BYTES = 32;
 const RESET_TOKEN_EXP_MINUTES = 60;
+
+function resolveAccountStatus(
+  user: { accountStatus?: string | null; passwordHash?: string | null } | null | undefined
+): "active" | "suspended" | "deleted" {
+  const status = user?.accountStatus ?? null;
+  if (status === "active" || status === "suspended" || status === "deleted") {
+    return status;
+  }
+  return user?.passwordHash ? "active" : "suspended";
+}
 
 function buildAppBaseUrl(req: Request): string {
   const explicit = process.env.APP_BASE_URL?.trim();
@@ -106,6 +117,23 @@ authRouter.post("/forgot-password", async (req: Request, res: Response) => {
         detail: "Pruefen Sie E-Mail-Adresse und Mandant.",
       });
     }
+    const accountStatus = resolveAccountStatus(user);
+    if (accountStatus === "suspended") {
+      return res.status(403).json({
+        error: "Passwort-Reset-Mail konnte nicht versendet werden",
+        reason: "Konto ist gesperrt und kann nicht per Selbstservice entsperrt werden.",
+        code: "ACCOUNT_SUSPENDED",
+        detail: "Bitte wenden Sie sich an einen Mandanten- oder WebApp-Admin.",
+      });
+    }
+    if (accountStatus === "deleted") {
+      return res.status(403).json({
+        error: "Passwort-Reset-Mail konnte nicht versendet werden",
+        reason: "Konto ist geloescht und muss zuerst wiederhergestellt werden.",
+        code: "ACCOUNT_DELETED",
+        detail: "Bitte wenden Sie sich an einen Mandanten- oder WebApp-Admin.",
+      });
+    }
 
     const token = crypto.randomBytes(RESET_TOKEN_BYTES).toString("hex");
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
@@ -180,6 +208,16 @@ authRouter.post("/reset-password", async (req: Request, res: Response) => {
     const stored = await getValidPasswordResetToken(tokenHash);
     if (!stored) {
       return res.status(400).json({ error: "Reset-Link ist ungueltig oder abgelaufen" });
+    }
+    const user = await findUserById(stored.userId);
+    if (!user) {
+      return res.status(404).json({ error: "Benutzerkonto nicht gefunden" });
+    }
+    const accountStatus = resolveAccountStatus(user);
+    if (accountStatus !== "active") {
+      return res.status(403).json({
+        error: "Konto ist nicht aktiv. Passwort-Reset kann nicht ausgefuehrt werden.",
+      });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);

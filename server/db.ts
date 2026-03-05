@@ -753,6 +753,7 @@ export async function createUser(data: {
   passwordHash: string;
   displayName?: string | null;
   role?: "user" | "admin" | "mandant_admin" | "webapp_admin";
+  accountStatus?: "active" | "suspended" | "deleted";
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -763,6 +764,7 @@ export async function createUser(data: {
     passwordHash: data.passwordHash,
     displayName: data.displayName ?? null,
     role: (data.role ?? "user") as any,
+    accountStatus: data.accountStatus ?? "active",
   });
 }
 
@@ -774,6 +776,7 @@ export async function updateUserById(
     displayName?: string | null;
     role?: "user" | "admin" | "mandant_admin" | "webapp_admin";
     passwordHash?: string | null;
+    accountStatus?: "active" | "suspended" | "deleted";
   }
 ) {
   const db = await getDb();
@@ -787,6 +790,7 @@ export async function updateUserById(
       ...(data.displayName !== undefined ? { displayName: data.displayName } : {}),
       ...(data.role !== undefined ? { role: data.role as any } : {}),
       ...(data.passwordHash !== undefined ? { passwordHash: data.passwordHash } : {}),
+      ...(data.accountStatus !== undefined ? { accountStatus: data.accountStatus as any } : {}),
     })
     .where(eq(users.id, id));
 }
@@ -802,7 +806,8 @@ export async function listUsersGlobal() {
       email: users.email,
       displayName: users.displayName,
       role: users.role,
-      isActive: sql<number>`CASE WHEN ${users.passwordHash} IS NULL THEN 0 ELSE 1 END`,
+      accountStatus: users.accountStatus,
+      isActive: sql<number>`CASE WHEN ${users.accountStatus} = 'active' AND ${users.passwordHash} IS NOT NULL THEN 1 ELSE 0 END`,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
     })
@@ -821,7 +826,8 @@ export async function listUsersByMandantId(mandantId: number) {
       email: users.email,
       displayName: users.displayName,
       role: users.role,
-      isActive: sql<number>`CASE WHEN ${users.passwordHash} IS NULL THEN 0 ELSE 1 END`,
+      accountStatus: users.accountStatus,
+      isActive: sql<number>`CASE WHEN ${users.accountStatus} = 'active' AND ${users.passwordHash} IS NOT NULL THEN 1 ELSE 0 END`,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
     })
@@ -834,14 +840,58 @@ export async function suspendUserById(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { users } = await import("../drizzle/schema");
-  await db.update(users).set({ passwordHash: null }).where(eq(users.id, id));
+  await db.update(users).set({ accountStatus: "suspended" as any }).where(eq(users.id, id));
 }
 
 export async function deleteUserById(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { users } = await import("../drizzle/schema");
-  await db.delete(users).where(eq(users.id, id));
+  await db.update(users).set({ accountStatus: "deleted" as any }).where(eq(users.id, id));
+}
+
+export async function restoreUserById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { users } = await import("../drizzle/schema");
+  await db.update(users).set({ accountStatus: "active" as any }).where(eq(users.id, id));
+}
+
+export async function countActiveMandantAdmins(mandantId: number, excludeUserId?: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const { users } = await import("../drizzle/schema");
+  const conditions: any[] = [
+    eq(users.mandantId, mandantId),
+    or(eq(users.role, "mandant_admin"), eq(users.role, "admin")),
+    eq(users.accountStatus, "active"),
+  ];
+  if (excludeUserId !== undefined) {
+    conditions.push(sql`${users.id} <> ${excludeUserId}`);
+  }
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(and(...conditions));
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function countActiveGlobalSetupAdmins(excludeUserId?: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const { users } = await import("../drizzle/schema");
+  const conditions: any[] = [
+    eq(users.accountStatus, "active"),
+    or(eq(users.role, "webapp_admin"), and(eq(users.role, "admin"), eq(users.id, 1))),
+  ];
+  if (excludeUserId !== undefined) {
+    conditions.push(sql`${users.id} <> ${excludeUserId}`);
+  }
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(and(...conditions));
+  return Number(rows[0]?.count ?? 0);
 }
 
 // ─── END AUTH ─────────────────────────────────────────────────────────

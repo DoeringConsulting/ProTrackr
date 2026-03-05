@@ -92,6 +92,13 @@
       "when": 1772901000000,
       "tag": "0012_tax_calculation_mode_compat",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1773000000000,
+      "tag": "0013_users_account_status_and_recovery",
+      "breakpoints": true
     }
   ]
 }

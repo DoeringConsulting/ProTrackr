@@ -11,6 +11,7 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("passwordHash", { length: 255 }),     // bestehender Spaltenname in DB
   displayName: varchar("name", { length: 255 }),              // bestehender Spaltenname "name" in DB
   role: varchar("role", { length: 50 }).default("user").notNull(),
+  accountStatus: mysqlEnum("accountStatus", ["active", "suspended", "deleted"]).notNull().default("active"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -34,7 +34,8 @@ async function canAccessUserOwnedData(
 }
 
 function canAssignRoleAsMandantAdmin(role: string): boolean {
-  return role === "user";
+  const normalized = normalizeManagedRole(role);
+  return normalized === "user" || normalized === "mandant_admin";
 }
 
 function normalizeManagedRole(role: string): "user" | "admin" | "mandant_admin" | "webapp_admin" {
@@ -58,6 +59,24 @@ function isGlobalSetupAdmin(actor: { role?: string | null } | null | undefined):
   const id = actor && "id" in actor ? Number((actor as any).id) : null;
   const role = actor?.role ?? null;
   return role === "webapp_admin" || (role === "admin" && id === 1);
+}
+
+function isMandantAdminRoleValue(role: string | null | undefined): boolean {
+  return role === "mandant_admin" || role === "admin";
+}
+
+function isGlobalSetupAdminRoleValue(role: string | null | undefined, userId: number): boolean {
+  return role === "webapp_admin" || (role === "admin" && userId === 1);
+}
+
+function resolveAccountStatus(
+  user: { accountStatus?: string | null; passwordHash?: string | null } | null | undefined
+): "active" | "suspended" | "deleted" {
+  const status = user?.accountStatus ?? null;
+  if (status === "active" || status === "suspended" || status === "deleted") {
+    return status;
+  }
+  return user?.passwordHash ? "active" : "suspended";
 }
 
 async function canAccessCustomerOwnedData(
@@ -1353,7 +1372,13 @@ export const appRouter = router({
         )
         .parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { findUserByEmailAndMandant, findUserById, updateUserById } = await import("./db");
+      const {
+        countActiveGlobalSetupAdmins,
+        countActiveMandantAdmins,
+        findUserByEmailAndMandant,
+        findUserById,
+        updateUserById,
+      } = await import("./db");
       const { findMandantById } = await import("./db-mandanten");
 
       if (ctx.user.id === input.userId) {
@@ -1388,6 +1413,8 @@ export const appRouter = router({
       const nextMandantId = actorIsGlobalSetupAdmin
         ? input.mandantId ?? targetUser.mandantId
         : targetUser.mandantId;
+      const currentStatus = resolveAccountStatus(targetUser);
+      const currentIsActive = currentStatus === "active";
 
       const mandant = await findMandantById(nextMandantId);
       if (!mandant) {
@@ -1412,6 +1439,43 @@ export const appRouter = router({
       }
 
       const normalizedRole = input.role ? normalizeManagedRole(input.role) : undefined;
+      const nextRole = normalizedRole ?? String(targetUser.role ?? "user");
+      const targetUserId = Number(targetUser.id);
+      const currentIsGlobalSetupAdminRole = isGlobalSetupAdminRoleValue(
+        String(targetUser.role),
+        targetUserId
+      );
+      const nextIsGlobalSetupAdminRole = isGlobalSetupAdminRoleValue(nextRole, targetUserId);
+      const currentIsMandantAdminRole = isMandantAdminRoleValue(String(targetUser.role));
+      const nextIsMandantAdminRole = isMandantAdminRoleValue(nextRole);
+
+      if (currentIsActive && currentIsGlobalSetupAdminRole && !nextIsGlobalSetupAdminRole) {
+        const remainingGlobalAdmins = await countActiveGlobalSetupAdmins(targetUserId);
+        if (remainingGlobalAdmins < 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Mindestens ein aktiver WebApp-Admin muss global erhalten bleiben",
+          });
+        }
+      }
+
+      if (currentIsActive && currentIsMandantAdminRole && targetUser.mandantId) {
+        const leavesMandantAdminPool =
+          !nextIsMandantAdminRole || Number(nextMandantId) !== Number(targetUser.mandantId);
+        if (leavesMandantAdminPool) {
+          const remainingMandantAdmins = await countActiveMandantAdmins(
+            Number(targetUser.mandantId),
+            targetUserId
+          );
+          if (remainingMandantAdmins < 1) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Mindestens ein aktiver Mandanten-Admin pro Mandant muss erhalten bleiben",
+            });
+          }
+        }
+      }
+
       const passwordHash = input.password ? await bcrypt.hash(input.password, 10) : undefined;
 
       await updateUserById(input.userId, {
@@ -1430,7 +1494,12 @@ export const appRouter = router({
         userId: z.number().int().positive(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { findUserById, suspendUserById } = await import("./db");
+      const {
+        countActiveGlobalSetupAdmins,
+        countActiveMandantAdmins,
+        findUserById,
+        suspendUserById,
+      } = await import("./db");
 
       if (ctx.user.id === input.userId) {
         throw new TRPCError({
@@ -1443,13 +1512,42 @@ export const appRouter = router({
       if (!targetUser) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden" });
       }
+      const targetUserId = Number(targetUser.id);
+      const targetStatus = resolveAccountStatus(targetUser);
 
       if (!isGlobalSetupAdmin(ctx.user)) {
         if (!ctx.user.mandantId || targetUser.mandantId !== ctx.user.mandantId) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Benutzer" });
         }
-        if (String(targetUser.role) === "webapp_admin") {
+        if (isGlobalSetupAdminRoleValue(String(targetUser.role), targetUserId)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin kann nur global verwaltet werden" });
+        }
+      }
+
+      if (targetStatus !== "active") {
+        return { success: true };
+      }
+
+      if (isGlobalSetupAdminRoleValue(String(targetUser.role), targetUserId)) {
+        const remainingGlobalAdmins = await countActiveGlobalSetupAdmins(targetUserId);
+        if (remainingGlobalAdmins < 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Mindestens ein aktiver WebApp-Admin muss global erhalten bleiben",
+          });
+        }
+      }
+
+      if (isMandantAdminRoleValue(String(targetUser.role)) && targetUser.mandantId) {
+        const remainingMandantAdmins = await countActiveMandantAdmins(
+          Number(targetUser.mandantId),
+          targetUserId
+        );
+        if (remainingMandantAdmins < 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Mindestens ein aktiver Mandanten-Admin pro Mandant muss erhalten bleiben",
+          });
         }
       }
 
@@ -1461,7 +1559,12 @@ export const appRouter = router({
         userId: z.number().int().positive(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { deleteUserById, findUserById } = await import("./db");
+      const {
+        countActiveGlobalSetupAdmins,
+        countActiveMandantAdmins,
+        deleteUserById,
+        findUserById,
+      } = await import("./db");
 
       if (ctx.user.id === input.userId) {
         throw new TRPCError({
@@ -1474,17 +1577,67 @@ export const appRouter = router({
       if (!targetUser) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden" });
       }
+      const targetUserId = Number(targetUser.id);
+      const targetStatus = resolveAccountStatus(targetUser);
 
       if (!isGlobalSetupAdmin(ctx.user)) {
         if (!ctx.user.mandantId || targetUser.mandantId !== ctx.user.mandantId) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Benutzer" });
         }
-        if (String(targetUser.role) === "webapp_admin") {
+        if (isGlobalSetupAdminRoleValue(String(targetUser.role), targetUserId)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin kann nur global verwaltet werden" });
         }
       }
 
+      if (targetStatus === "active" && isGlobalSetupAdminRoleValue(String(targetUser.role), targetUserId)) {
+        const remainingGlobalAdmins = await countActiveGlobalSetupAdmins(targetUserId);
+        if (remainingGlobalAdmins < 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Mindestens ein aktiver WebApp-Admin muss global erhalten bleiben",
+          });
+        }
+      }
+
+      if (targetStatus === "active" && isMandantAdminRoleValue(String(targetUser.role)) && targetUser.mandantId) {
+        const remainingMandantAdmins = await countActiveMandantAdmins(
+          Number(targetUser.mandantId),
+          targetUserId
+        );
+        if (remainingMandantAdmins < 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Mindestens ein aktiver Mandanten-Admin pro Mandant muss erhalten bleiben",
+          });
+        }
+      }
+
       await deleteUserById(input.userId);
+      return { success: true };
+    }),
+    restore: adminOrMandantAdminProcedure.input((val: unknown) => {
+      return z.object({
+        userId: z.number().int().positive(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { findUserById, restoreUserById } = await import("./db");
+
+      const targetUser = await findUserById(input.userId);
+      if (!targetUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden" });
+      }
+      const targetUserId = Number(targetUser.id);
+
+      if (!isGlobalSetupAdmin(ctx.user)) {
+        if (!ctx.user.mandantId || targetUser.mandantId !== ctx.user.mandantId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Benutzer" });
+        }
+        if (isGlobalSetupAdminRoleValue(String(targetUser.role), targetUserId)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin kann nur global verwaltet werden" });
+        }
+      }
+
+      await restoreUserById(input.userId);
       return { success: true };
     }),
   }),

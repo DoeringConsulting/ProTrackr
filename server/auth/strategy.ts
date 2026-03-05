@@ -24,7 +24,24 @@ passport.use(
         }
         
         const user = await findUserByEmailAndMandant(email, mandant.id);
-        if (!user || !user.passwordHash) {
+        if (!user) {
+          return done(null, false, { message: "Ungültige Anmeldedaten" });
+        }
+        const accountStatus =
+          user.accountStatus === "active" ||
+          user.accountStatus === "suspended" ||
+          user.accountStatus === "deleted"
+            ? user.accountStatus
+            : user.passwordHash
+              ? "active"
+              : "suspended";
+        if (accountStatus === "suspended") {
+          return done(null, false, { message: "Konto ist gesperrt. Bitte Administrator kontaktieren." });
+        }
+        if (accountStatus === "deleted") {
+          return done(null, false, { message: "Konto ist geloescht. Bitte Administrator kontaktieren." });
+        }
+        if (!user.passwordHash) {
           return done(null, false, { message: "Ungültige Anmeldedaten" });
         }
         const isValid = await bcrypt.compare(password, user.passwordHash);
