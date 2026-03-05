@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.42",
+      "date": "2026-03-05",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Konten-Wiederherstellung fuer gesperrte und geloeschte Benutzer",
+          "description": "Benutzerkonten werden nun per Status (active/suspended/deleted) verwaltet und koennen durch Mandanten-Admin oder WebApp-Admin wiederhergestellt werden."
+        },
+        {
+          "type": "fix",
+          "title": "Sicherung gegen Lockout des letzten Admins",
+          "description": "Loeschen/Sperren/Rollenwechsel blockieren nun automatisch, wenn dadurch der letzte aktive Mandanten-Admin eines Mandanten oder der letzte globale WebApp-Admin wegfallen wuerde."
+        },
+        {
+          "type": "fix",
+          "title": "Passwort-Reset entsperrt gesperrte Konten nicht mehr",
+          "description": "Der Forgot-/Reset-Flow lehnt gesperrte oder geloeschte Konten mit klarer Fehlermeldung ab, um Selbst-Entsperrung zu verhindern."
+        }
+      ]
+    },
+    {
       "version": "1.0.41",
       "date": "2026-03-05",
       "changes": [
