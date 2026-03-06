@@ -165,6 +165,7 @@ export default function TimeTracking() {
   const [tempFlightTravelEnd, setTempFlightTravelEnd] = useState('');
   const [tempHotelCheckInDate, setTempHotelCheckInDate] = useState('');
   const [tempHotelNights, setTempHotelNights] = useState('1');
+  const [tempFullDay, setTempFullDay] = useState(false);
   const [editingExpense, setEditingExpense] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -266,6 +267,7 @@ export default function TimeTracking() {
     setTempFlightTravelEnd("");
     setTempHotelCheckInDate(defaultDate);
     setTempHotelNights("1");
+    setTempFullDay(false);
   };
 
   // Bulk copy functionality temporarily disabled
@@ -761,6 +763,7 @@ export default function TimeTracking() {
                                     : hotelCheckIn;
                                   setTempHotelCheckInDate(hotelCheckIn);
                                   setTempHotelNights(String(dayDiff(hotelCheckIn, hotelCheckOut)));
+                                  setTempFullDay(Boolean(expense.fullDay));
                                   setSelectedExpenseDate(parseDateKey(expenseDateKey));
                                   setIsExpensesDialogOpen(true);
                                 }}
@@ -993,6 +996,7 @@ export default function TimeTracking() {
                     amount: Math.round(parseFloat(tempExpenseAmount) * 100),
                     currency: tempExpenseCurrency,
                     comment: tempExpenseComment || undefined,
+                    fullDay: tempFullDay,
                   };
 
                   if (tempExpenseCategory === "flight") {
@@ -1168,6 +1172,15 @@ export default function TimeTracking() {
                     />
                   </div>
                 )}
+                <div className="flex items-center gap-2 rounded-md border p-3">
+                  <input
+                    id="expense-full-day"
+                    type="checkbox"
+                    checked={tempFullDay}
+                    onChange={(e) => setTempFullDay(e.target.checked)}
+                  />
+                  <Label htmlFor="expense-full-day">Ganzer Tag</Label>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="expense-comment">Kommentar (optional)</Label>
                   <Textarea

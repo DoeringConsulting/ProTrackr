@@ -592,6 +592,7 @@ export const appRouter = router({
     update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
+        date: z.string().optional(),
         category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]).optional(),
         distance: z.number().optional(),
         rate: z.number().optional(),
@@ -630,6 +631,7 @@ export const appRouter = router({
 
       const normalizedData = {
         ...data,
+        ...(data.date ? { date: new Date(data.date) } : {}),
         ...(data.checkInDate ? { checkInDate: new Date(data.checkInDate) } : {}),
         ...(data.checkOutDate ? { checkOutDate: new Date(data.checkOutDate) } : {}),
         ...(data.fullDay !== undefined ? { fullDay: data.fullDay ? 1 : 0 } : {}),

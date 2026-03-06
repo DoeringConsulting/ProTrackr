@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.46",
+      "date": "2026-03-06",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Reisekosten-Updatefehler bei Flug/Hotel behoben",
+          "description": "Das Speichern in der Bearbeiten-Maske wirft keinen toISOString-Fehler mehr, da Datumfelder im Update-Endpoint jetzt korrekt konvertiert werden."
+        },
+        {
+          "type": "fix",
+          "title": "Ganzer-Tag Schalter im Reisekosten-Dialog wieder sichtbar",
+          "description": "Der zuvor entfernte Schalter wurde in der Eingabemaske wiederhergestellt und wird erneut mitgespeichert."
+        }
+      ]
+    },
+    {
       "version": "1.0.45",
       "date": "2026-03-05",
       "changes": [
