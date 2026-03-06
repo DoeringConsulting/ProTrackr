@@ -473,8 +473,7 @@ function normalizeExpenseMutationPayload(data: Record<string, any>) {
       delete payload[key];
       continue;
     }
-    const sqlDateTime = parsed.toISOString().slice(0, 19).replace("T", " ");
-    payload[key] = sql`${sqlDateTime}`;
+    payload[key] = parsed;
   }
 
   for (const [key, value] of Object.entries(payload)) {

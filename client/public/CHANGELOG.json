@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.49",
+      "date": "2026-03-06",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Doppelte Datumskonvertierung im Reisekosten-Update entfernt",
+          "description": "Datumfelder werden jetzt nur noch zentral in server/db.ts normalisiert; die Router-Konvertierung wurde entfernt, um verbleibende value.toISOString-Typkonflikte beim Bearbeiten zu vermeiden."
+        }
+      ]
+    },
+    {
       "version": "1.0.48",
       "date": "2026-03-06",
       "changes": [

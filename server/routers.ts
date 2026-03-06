@@ -538,9 +538,6 @@ export const appRouter = router({
       const data = {
         ...input,
         userId: ownerUserId,
-        date: input.date ? new Date(input.date) : undefined,
-        checkInDate: input.checkInDate ? new Date(input.checkInDate) : undefined,
-        checkOutDate: input.checkOutDate ? new Date(input.checkOutDate) : undefined,
         fullDay: input.fullDay ? 1 : 0,
       };
       return await createExpense(data);
@@ -631,9 +628,6 @@ export const appRouter = router({
 
       const normalizedData = {
         ...data,
-        ...(data.date ? { date: new Date(data.date) } : {}),
-        ...(data.checkInDate ? { checkInDate: new Date(data.checkInDate) } : {}),
-        ...(data.checkOutDate ? { checkOutDate: new Date(data.checkOutDate) } : {}),
         ...(data.fullDay !== undefined ? { fullDay: data.fullDay ? 1 : 0 } : {}),
       };
       await updateExpense(id, normalizedData);
