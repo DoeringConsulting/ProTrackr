@@ -24,6 +24,8 @@ export async function checkMonthEnd() {
   // Calculate month revenue and expenses
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const firstDayStr = `${firstDay.toISOString().slice(0, 10)} 00:00:00`;
+  const lastDayStr = `${lastDay.toISOString().slice(0, 10)} 23:59:59`;
 
   const entries = await db
     .select()
@@ -44,8 +46,8 @@ export async function checkMonthEnd() {
     .from(expensesTable)
     .where(
       and(
-        gte(expensesTable.date, firstDay),
-        lte(expensesTable.date, lastDay)
+        gte(expensesTable.date, firstDayStr),
+        lte(expensesTable.date, lastDayStr)
       )
     );
   const expenses = expenseRecords.reduce((sum, exp) => sum + exp.amount, 0);

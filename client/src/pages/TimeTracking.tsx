@@ -107,7 +107,14 @@ function formatLocalDate(date: Date): string {
 
 function getDateKey(value: string | Date): string {
   if (typeof value === "string") {
-    return value.split("T")[0] ?? value;
+    const trimmed = value.trim();
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) {
+      const [dd, mm, yyyy] = trimmed.split(".");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    if (trimmed.includes("T")) return trimmed.split("T")[0] ?? trimmed;
+    if (trimmed.includes(" ")) return trimmed.split(" ")[0] ?? trimmed;
+    return trimmed;
   }
   return formatLocalDate(value);
 }

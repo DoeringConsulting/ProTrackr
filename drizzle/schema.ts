@@ -132,7 +132,7 @@ export const expenses = mysqlTable("expenses", {
   id: int("id").autoincrement().primaryKey(),
   timeEntryId: int("timeEntryId"),
   userId: int("userId"), // owner for standalone expenses (and optional duplicate for linked)
-  date: timestamp("date").notNull(), // Direct date for standalone expenses
+  date: timestamp("date", { mode: "string" }).notNull(), // Direct date for standalone expenses
   category: mysqlEnum("category", [
     "car",           // Mietwagen
     "train",         // Zug
@@ -160,8 +160,8 @@ export const expenses = mysqlTable("expenses", {
   departureTime: varchar("departureTime", { length: 10 }), // HH:MM format
   arrivalTime: varchar("arrivalTime", { length: 10 }), // HH:MM format
   // Hotel specific
-  checkInDate: timestamp("checkInDate"),
-  checkOutDate: timestamp("checkOutDate"),
+  checkInDate: timestamp("checkInDate", { mode: "string" }),
+  checkOutDate: timestamp("checkOutDate", { mode: "string" }),
   // Fuel specific
   liters: int("liters"), // in milliliters (e.g., 45500 = 45.5L)
   pricePerLiter: int("pricePerLiter"), // in EUR cents

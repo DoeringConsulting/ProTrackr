@@ -450,30 +450,48 @@ export async function deleteExpense(id: number) {
 function normalizeExpenseMutationPayload(data: Record<string, any>) {
   const payload: Record<string, any> = { ...data };
   const dateKeys = ["date", "checkInDate", "checkOutDate"] as const;
+  const formatSqlDateTime = (date: Date) => date.toISOString().slice(0, 19).replace("T", " ");
+  const normalizeDateInput = (value: unknown): string | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null || value === "") return null;
+
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) return undefined;
+      return formatSqlDateTime(value);
+    }
+
+    if (typeof value !== "string") return undefined;
+
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    // Accept HTML date input format.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return `${trimmed} 00:00:00`;
+    }
+
+    // Accept German date format (DD.MM.YYYY) from localized controls.
+    const deMatch = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (deMatch) {
+      const [, dd, mm, yyyy] = deMatch;
+      return `${yyyy}-${mm}-${dd} 00:00:00`;
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+    return formatSqlDateTime(parsed);
+  };
 
   for (const key of dateKeys) {
     if (!(key in payload)) continue;
     const value = payload[key];
 
-    if (value === undefined) {
+    const normalized = normalizeDateInput(value);
+    if (normalized === undefined) {
       delete payload[key];
       continue;
     }
-    if (value === null || value === "") {
-      payload[key] = null;
-      continue;
-    }
-    const parsed =
-      value instanceof Date
-        ? value
-        : typeof value === "string"
-          ? new Date(value)
-          : null;
-    if (!parsed || Number.isNaN(parsed.getTime())) {
-      delete payload[key];
-      continue;
-    }
-    payload[key] = parsed;
+    payload[key] = normalized;
   }
 
   for (const [key, value] of Object.entries(payload)) {

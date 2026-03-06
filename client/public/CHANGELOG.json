@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.50",
+      "date": "2026-03-06",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Reisekosten-Datumsmodell neu auf String-Mode umgestellt",
+          "description": "Die Expenses-Datumsfelder (date/checkInDate/checkOutDate) wurden in Drizzle auf Timestamp-String-Mode umgestellt, damit keine implizite Date-Encoder-Konvertierung mehr fehlschlagen kann."
+        },
+        {
+          "type": "fix",
+          "title": "Zentrale Datumsnormalisierung inkl. DE-Format (DD.MM.YYYY)",
+          "description": "createExpense/updateExpense normalisieren Datumswerte nun robust (ISO, SQL-Datetime, DE-Format) in ein einheitliches SQL-Datetime-Format vor dem Speichern."
+        },
+        {
+          "type": "fix",
+          "title": "Frontend-Datumsauswertung fuer Reisekosten gehaertet",
+          "description": "getDateKey verarbeitet jetzt ISO-, SQL- und DE-Datumsstrings konsistent, damit Bearbeitungsdialog und Kalenderkacheln stabil mit allen Rueckgabeformaten funktionieren."
+        }
+      ]
+    },
+    {
       "version": "1.0.49",
       "date": "2026-03-06",
       "changes": [
