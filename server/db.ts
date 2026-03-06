@@ -447,18 +447,62 @@ export async function deleteExpense(id: number) {
   await db.delete(expenses).where(eq(expenses.id, id));
 }
 
+function normalizeExpenseMutationPayload(data: Record<string, any>) {
+  const payload: Record<string, any> = { ...data };
+  const dateKeys = ["date", "checkInDate", "checkOutDate"] as const;
+
+  for (const key of dateKeys) {
+    if (!(key in payload)) continue;
+    const value = payload[key];
+
+    if (value === undefined) {
+      delete payload[key];
+      continue;
+    }
+    if (value === null || value === "") {
+      payload[key] = null;
+      continue;
+    }
+    if (value instanceof Date) {
+      payload[key] = value;
+      continue;
+    }
+    if (typeof value === "string") {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        payload[key] = parsed;
+      } else {
+        delete payload[key];
+      }
+      continue;
+    }
+
+    delete payload[key];
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === undefined) {
+      delete payload[key];
+    }
+  }
+
+  return payload;
+}
+
 export async function updateExpense(id: number, data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { expenses } = await import("../drizzle/schema");
-  await db.update(expenses).set(data).where(eq(expenses.id, id));
+  const payload = normalizeExpenseMutationPayload(data ?? {});
+  await db.update(expenses).set(payload as any).where(eq(expenses.id, id));
 }
 
 export async function createExpense(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { expenses } = await import("../drizzle/schema");
-  const result = await db.insert(expenses).values(data);
+  const payload = normalizeExpenseMutationPayload(data ?? {});
+  const result = await db.insert(expenses).values(payload as any);
   return result;
 }
 

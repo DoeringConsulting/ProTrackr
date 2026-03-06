@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.47",
+      "date": "2026-03-06",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Reisekosten-Edit robust gegen Datumsformat-Mischformen",
+          "description": "Die Persistenzschicht normalisiert date/checkInDate/checkOutDate jetzt zentral vor DB-Insert/Update, wodurch verbleibende toISOString-Typfehler im Bearbeiten-Dialog abgefangen werden."
+        }
+      ]
+    },
+    {
       "version": "1.0.46",
       "date": "2026-03-06",
       "changes": [
