@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.48",
+      "date": "2026-03-06",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Drizzle-Timestamp-Fehler bei Reisekosten-Update final abgefangen",
+          "description": "Datumfelder fuer Reisekosten werden vor dem Persistieren jetzt als SQL-Datetime-Bindings gesetzt, wodurch verbleibende value.toISOString-Fehler bei Hotel-/Flug-Updates verhindert werden."
+        }
+      ]
+    },
+    {
       "version": "1.0.47",
       "date": "2026-03-06",
       "changes": [

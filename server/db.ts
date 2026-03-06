@@ -463,21 +463,18 @@ function normalizeExpenseMutationPayload(data: Record<string, any>) {
       payload[key] = null;
       continue;
     }
-    if (value instanceof Date) {
-      payload[key] = value;
+    const parsed =
+      value instanceof Date
+        ? value
+        : typeof value === "string"
+          ? new Date(value)
+          : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      delete payload[key];
       continue;
     }
-    if (typeof value === "string") {
-      const parsed = new Date(value);
-      if (!Number.isNaN(parsed.getTime())) {
-        payload[key] = parsed;
-      } else {
-        delete payload[key];
-      }
-      continue;
-    }
-
-    delete payload[key];
+    const sqlDateTime = parsed.toISOString().slice(0, 19).replace("T", " ");
+    payload[key] = sql`${sqlDateTime}`;
   }
 
   for (const [key, value] of Object.entries(payload)) {
