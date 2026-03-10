@@ -145,10 +145,12 @@ type ExpenseCalendarItem = {
   date: string | Date;
   checkInDate?: string | Date | null;
   checkOutDate?: string | Date | null;
+  flightRouteType?: "domestic" | "international" | string | null;
   departureTime?: string | null;
   arrivalTime?: string | null;
   _showAmount?: boolean;
   _subLabel?: string;
+  _flightLeg?: "outbound" | "return";
 };
 
 export default function TimeTracking() {
@@ -168,6 +170,7 @@ export default function TimeTracking() {
   const [tempExpenseComment, setTempExpenseComment] = useState('');
   const [tempExpenseDate, setTempExpenseDate] = useState('');
   const [tempFlightReturnDate, setTempFlightReturnDate] = useState('');
+  const [tempFlightRouteType, setTempFlightRouteType] = useState<'domestic' | 'international'>('domestic');
   const [tempFlightTravelStart, setTempFlightTravelStart] = useState('');
   const [tempFlightTravelEnd, setTempFlightTravelEnd] = useState('');
   const [tempHotelCheckInDate, setTempHotelCheckInDate] = useState('');
@@ -270,6 +273,7 @@ export default function TimeTracking() {
     setTempExpenseComment("");
     setTempExpenseDate(defaultDate);
     setTempFlightReturnDate("");
+    setTempFlightRouteType("domestic");
     setTempFlightTravelStart("");
     setTempFlightTravelEnd("");
     setTempHotelCheckInDate(defaultDate);
@@ -458,12 +462,22 @@ export default function TimeTracking() {
       if (expense.category === "flight") {
         const items: ExpenseCalendarItem[] = [];
         if (primaryDate === dateStr) {
-          items.push({ ...baseItem, _showAmount: true, _subLabel: "Hinflug" });
+          items.push({
+            ...baseItem,
+            _showAmount: true,
+            _subLabel: "Hinflug",
+            _flightLeg: "outbound",
+          });
         }
         if (expense.checkOutDate) {
           const returnDate = getDateKey(expense.checkOutDate as string | Date);
           if (returnDate === dateStr && returnDate !== primaryDate) {
-            items.push({ ...baseItem, _showAmount: false, _subLabel: "Rueckflug" });
+            items.push({
+              ...baseItem,
+              _showAmount: false,
+              _subLabel: "Rückflug",
+              _flightLeg: "return",
+            });
           }
         }
         return items;
@@ -743,6 +757,14 @@ export default function TimeTracking() {
                           } else {
                             const expense = item.data as any;
                             const categoryColor = EXPENSE_CATEGORY_COLORS[expense.category as keyof typeof EXPENSE_CATEGORY_COLORS] || EXPENSE_CATEGORY_COLORS.other;
+                            const showOutboundDeparture =
+                              expense.category === "flight" &&
+                              expense._flightLeg !== "return" &&
+                              !!expense.departureTime;
+                            const showArrival =
+                              expense.category === "flight" &&
+                              !!expense.arrivalTime &&
+                              (expense._flightLeg === "return" || !expense.checkOutDate);
                             return (
                               <div
                                 key={`expense-${expense.id}`}
@@ -759,6 +781,9 @@ export default function TimeTracking() {
                                   setTempExpenseDate(expenseDateKey);
                                   setTempFlightReturnDate(
                                     expense.checkOutDate ? getDateKey(expense.checkOutDate as string | Date) : ""
+                                  );
+                                  setTempFlightRouteType(
+                                    expense.flightRouteType === "international" ? "international" : "domestic"
                                   );
                                   setTempFlightTravelStart(expense.departureTime || "");
                                   setTempFlightTravelEnd(expense.arrivalTime || "");
@@ -785,6 +810,12 @@ export default function TimeTracking() {
                                   <div className="text-[10px]">
                                     {(expense.amount / 100).toFixed(2)} {expense.currency || 'EUR'}
                                   </div>
+                                )}
+                                {showOutboundDeparture && (
+                                  <div className="text-[10px] opacity-80">Abflug: {expense.departureTime}</div>
+                                )}
+                                {showArrival && (
+                                  <div className="text-[10px] opacity-80">Ankunft: {expense.arrivalTime}</div>
                                 )}
                               </div>
                             );
@@ -1007,7 +1038,17 @@ export default function TimeTracking() {
                   };
 
                   if (tempExpenseCategory === "flight") {
+                    if (
+                      tempFlightRouteType === "international" &&
+                      (!tempFlightTravelStart || !tempFlightTravelEnd)
+                    ) {
+                      toast.error(
+                        "Bei internationalen Flügen sind Abflugzeit und Ankunftszeit verpflichtend"
+                      );
+                      return;
+                    }
                     payloadBase.date = normalizedPrimaryDate;
+                    payloadBase.flightRouteType = tempFlightRouteType;
                     payloadBase.departureTime = tempFlightTravelStart || undefined;
                     payloadBase.arrivalTime = tempFlightTravelEnd || undefined;
                     payloadBase.checkOutDate = tempFlightReturnDate || undefined;
@@ -1097,6 +1138,23 @@ export default function TimeTracking() {
                 </div>
                 {tempExpenseCategory === "flight" && (
                   <>
+                    <div className="space-y-2">
+                      <Label htmlFor="flight-route-type">Flugtyp</Label>
+                      <Select
+                        value={tempFlightRouteType}
+                        onValueChange={(value) =>
+                          setTempFlightRouteType(value as "domestic" | "international")
+                        }
+                      >
+                        <SelectTrigger id="flight-route-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="domestic">Inland</SelectItem>
+                          <SelectItem value="international">International (Inland ↔ Ausland)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="flight-outbound-date">Hinflug-Datum</Label>
@@ -1119,7 +1177,10 @@ export default function TimeTracking() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="flight-travel-start">Reise-Start (Abflugzeit, optional)</Label>
+                        <Label htmlFor="flight-travel-start">
+                          Reise-Start (Abflugzeit
+                          {tempFlightRouteType === "international" ? ", Pflicht" : ", optional"})
+                        </Label>
                         <Input
                           id="flight-travel-start"
                           type="time"
@@ -1128,7 +1189,10 @@ export default function TimeTracking() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="flight-travel-end">Reise-Ende (Landezeit, optional)</Label>
+                        <Label htmlFor="flight-travel-end">
+                          Reise-Ende (Landezeit
+                          {tempFlightRouteType === "international" ? ", Pflicht" : ", optional"})
+                        </Label>
                         <Input
                           id="flight-travel-end"
                           type="time"

@@ -124,6 +124,9 @@ describe("expenses", () => {
     await caller.expenses.create({
       timeEntryId: timeEntry.id,
       category: "hotel",
+      date: "2026-01-21",
+      checkInDate: "2026-01-21",
+      checkOutDate: "2026-01-22",
       amount: 12000, // 120 EUR
       comment: "Hotel stay",
     });
@@ -135,5 +138,39 @@ describe("expenses", () => {
     expect(expenses.length).toBeGreaterThan(0);
     expect(expenses[0]?.category).toBe("hotel");
     expect(expenses[0]?.amount).toBe(12000);
+  });
+
+  it("should reject international flights without mandatory times", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.expenses.create({
+        category: "flight",
+        date: "2026-02-11",
+        amount: 34500,
+        currency: "EUR",
+        flightRouteType: "international",
+      })
+    ).rejects.toThrow(
+      "Bei internationalen Fluegen sind Abflugzeit und Ankunftszeit verpflichtend"
+    );
+  });
+
+  it("should allow one-way international flight with required times", async () => {
+    const { ctx } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.expenses.create({
+      category: "flight",
+      date: "2026-02-12",
+      amount: 35500,
+      currency: "EUR",
+      flightRouteType: "international",
+      departureTime: "08:20",
+      arrivalTime: "11:05",
+    });
+
+    expect(result).toBeDefined();
   });
 });

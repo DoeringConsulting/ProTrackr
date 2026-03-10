@@ -322,7 +322,12 @@ export async function getExpensesByCustomer(userId: number, customerId: number, 
       amount: expenses.amount,
       currency: expenses.currency,
       comment: expenses.comment,
-      date: timeEntries.date,
+      date: expenses.date,
+      flightRouteType: expenses.flightRouteType,
+      departureTime: expenses.departureTime,
+      arrivalTime: expenses.arrivalTime,
+      checkInDate: expenses.checkInDate,
+      checkOutDate: expenses.checkOutDate,
     })
     .from(expenses)
     .innerJoin(timeEntries, eq(expenses.timeEntryId, timeEntries.id))
@@ -500,6 +505,15 @@ function normalizeExpenseMutationPayload(data: Record<string, any>) {
     }
   }
 
+  if ("flightRouteType" in payload) {
+    const raw = payload.flightRouteType;
+    if (raw === null || raw === "") {
+      payload.flightRouteType = null;
+    } else if (typeof raw === "string") {
+      payload.flightRouteType = raw.trim().toLowerCase();
+    }
+  }
+
   return payload;
 }
 
@@ -530,12 +544,12 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
   
   if (startDate) {
     timeEntryConditions.push(
-      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${timeEntries.date})) >= ${startDate}`
+      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) >= ${startDate}`
     );
   }
   if (endDate) {
     timeEntryConditions.push(
-      sql`DATE(COALESCE(${expenses.checkInDate}, ${timeEntries.date})) <= ${endDate}`
+      sql`DATE(COALESCE(${expenses.checkInDate}, ${expenses.date})) <= ${endDate}`
     );
   }
   
@@ -553,11 +567,12 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
       fullDay: expenses.fullDay,
       ticketNumber: expenses.ticketNumber,
       flightNumber: expenses.flightNumber,
+      flightRouteType: expenses.flightRouteType,
       departureTime: expenses.departureTime,
       arrivalTime: expenses.arrivalTime,
       checkInDate: expenses.checkInDate,
       checkOutDate: expenses.checkOutDate,
-      date: timeEntries.date,
+      date: expenses.date,
       createdAt: expenses.createdAt,
     })
     .from(expenses)
@@ -595,6 +610,7 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
       fullDay: expenses.fullDay,
       ticketNumber: expenses.ticketNumber,
       flightNumber: expenses.flightNumber,
+      flightRouteType: expenses.flightRouteType,
       departureTime: expenses.departureTime,
       arrivalTime: expenses.arrivalTime,
       checkInDate: expenses.checkInDate,

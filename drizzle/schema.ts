@@ -157,6 +157,7 @@ export const expenses = mysqlTable("expenses", {
   // Flight/Train specific
   ticketNumber: varchar("ticketNumber", { length: 100 }),
   flightNumber: varchar("flightNumber", { length: 100 }),
+  flightRouteType: varchar("flightRouteType", { length: 20 }),
   departureTime: varchar("departureTime", { length: 10 }), // HH:MM format
   arrivalTime: varchar("arrivalTime", { length: 10 }), // HH:MM format
   // Hotel specific

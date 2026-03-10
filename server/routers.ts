@@ -103,6 +103,120 @@ function formatMandatenNumber(sequence: number): string {
   return String(sequence).padStart(3, "0");
 }
 
+const expenseCategoryValues = [
+  "car",
+  "train",
+  "flight",
+  "taxi",
+  "transport",
+  "meal",
+  "hotel",
+  "food",
+  "fuel",
+  "other",
+] as const;
+
+const expenseCategorySchema = z.enum(expenseCategoryValues);
+const flightRouteTypeSchema = z.enum(["domestic", "international"]);
+const hhmmTimeSchema = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function toComparableDate(value: unknown): Date | null {
+  if (!value || typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) {
+    const [dd, mm, yyyy] = trimmed.split(".");
+    const parsed = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const parsed = new Date(`${trimmed}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function validateFlightAndHotelExpenseRules(input: {
+  category?: string;
+  date?: string;
+  checkInDate?: string;
+  checkOutDate?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  flightRouteType?: string;
+}) {
+  if (input.category === "flight") {
+    const routeType = input.flightRouteType ?? "domestic";
+    if (routeType !== "domestic" && routeType !== "international") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Ungueltiger Flugtyp. Erlaubt: domestic|international",
+      });
+    }
+
+    if (!input.date) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Flug erfordert ein Hinflug-Datum",
+      });
+    }
+
+    if (input.departureTime && !hhmmTimeSchema.test(input.departureTime)) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Abflugzeit muss im Format HH:MM angegeben werden",
+      });
+    }
+
+    if (input.arrivalTime && !hhmmTimeSchema.test(input.arrivalTime)) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Ankunftszeit muss im Format HH:MM angegeben werden",
+      });
+    }
+
+    if (routeType === "international") {
+      if (!input.departureTime || !input.arrivalTime) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Bei internationalen Fluegen sind Abflugzeit und Ankunftszeit verpflichtend",
+        });
+      }
+    }
+
+    const outboundDate = toComparableDate(input.date);
+    const returnDate = toComparableDate(input.checkOutDate);
+    if (outboundDate && returnDate && returnDate.getTime() < outboundDate.getTime()) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Rueckflug-Datum darf nicht vor dem Hinflug-Datum liegen",
+      });
+    }
+  }
+
+  if (input.category === "hotel") {
+    if (!input.checkInDate) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Hotel erfordert ein Check-in-Datum",
+      });
+    }
+    const checkIn = toComparableDate(input.checkInDate);
+    const checkOut = toComparableDate(input.checkOutDate);
+    if (checkIn && checkOut && checkOut.getTime() < checkIn.getTime()) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Check-out darf nicht vor Check-in liegen",
+      });
+    }
+  }
+}
+
 export const appRouter = router({
   invoiceNumbers: router({
     generate: protectedProcedure
@@ -501,7 +615,7 @@ export const appRouter = router({
       return z.object({
         timeEntryId: z.number().optional(),
         date: z.string().optional(), // ISO date string for standalone expenses
-        category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]),
+        category: expenseCategorySchema,
         distance: z.number().optional(),
         rate: z.number().optional(),
         amount: z.number(),
@@ -512,6 +626,7 @@ export const appRouter = router({
         fullDay: z.boolean().optional(),
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
+        flightRouteType: flightRouteTypeSchema.optional(),
         departureTime: z.string().optional(),
         arrivalTime: z.string().optional(),
         checkInDate: z.string().optional(),
@@ -534,9 +649,16 @@ export const appRouter = router({
         ownerUserId = timeEntry.userId;
       }
 
-      // Convert date string to Date object if provided
-      const data = {
+      const normalizedInput = {
         ...input,
+        ...(input.category === "flight"
+          ? { flightRouteType: input.flightRouteType ?? "domestic" }
+          : {}),
+      };
+      validateFlightAndHotelExpenseRules(normalizedInput);
+
+      const data = {
+        ...normalizedInput,
         userId: ownerUserId,
         fullDay: input.fullDay ? 1 : 0,
       };
@@ -546,7 +668,7 @@ export const appRouter = router({
       return z.object({
         timeEntryId: z.number(),
         expenses: z.array(z.object({
-          category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]),
+          category: expenseCategorySchema,
           distance: z.number().optional(),
           rate: z.number().optional(),
           amount: z.number(),
@@ -557,6 +679,7 @@ export const appRouter = router({
           fullDay: z.boolean().optional(),
           ticketNumber: z.string().optional(),
           flightNumber: z.string().optional(),
+          flightRouteType: flightRouteTypeSchema.optional(),
           departureTime: z.string().optional(),
           arrivalTime: z.string().optional(),
           checkInDate: z.string().optional(),
@@ -576,10 +699,18 @@ export const appRouter = router({
       }
       const results = [];
       for (const expense of input.expenses) {
+        const normalizedExpense = {
+          ...expense,
+          ...(expense.category === "flight"
+            ? { flightRouteType: expense.flightRouteType ?? "domestic" }
+            : {}),
+        };
+        validateFlightAndHotelExpenseRules(normalizedExpense);
+
         const result = await createExpense({
           timeEntryId: input.timeEntryId,
           userId: timeEntry.userId,
-          ...expense,
+          ...normalizedExpense,
           fullDay: expense.fullDay ? 1 : 0,
         });
         results.push(result);
@@ -590,7 +721,7 @@ export const appRouter = router({
       return z.object({
         id: z.number(),
         date: z.string().optional(),
-        category: z.enum(["car", "train", "flight", "taxi", "transport", "meal", "hotel", "food", "fuel", "other"]).optional(),
+        category: expenseCategorySchema.optional(),
         distance: z.number().optional(),
         rate: z.number().optional(),
         amount: z.number().optional(),
@@ -601,6 +732,7 @@ export const appRouter = router({
         fullDay: z.boolean().optional(),
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
+        flightRouteType: flightRouteTypeSchema.optional(),
         departureTime: z.string().optional(),
         arrivalTime: z.string().optional(),
         checkInDate: z.string().optional(),
@@ -626,9 +758,29 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Reisekosten-Eintrag" });
       }
 
+      const mergedValidationInput = {
+        category: data.category ?? expense.category ?? undefined,
+        date: data.date ?? (expense.date ? String(expense.date) : undefined),
+        checkInDate: data.checkInDate ?? (expense.checkInDate ? String(expense.checkInDate) : undefined),
+        checkOutDate: data.checkOutDate ?? (expense.checkOutDate ? String(expense.checkOutDate) : undefined),
+        departureTime: data.departureTime ?? (expense.departureTime ? String(expense.departureTime) : undefined),
+        arrivalTime: data.arrivalTime ?? (expense.arrivalTime ? String(expense.arrivalTime) : undefined),
+        flightRouteType:
+          data.flightRouteType ??
+          (expense.flightRouteType ? String(expense.flightRouteType) : undefined) ??
+          ((data.category ?? expense.category) === "flight" ? "domestic" : undefined),
+      };
+      validateFlightAndHotelExpenseRules(mergedValidationInput);
+
+      const nextCategory = mergedValidationInput.category;
+      const nextFlightRouteType =
+        nextCategory === "flight" ? mergedValidationInput.flightRouteType ?? "domestic" : undefined;
+
       const normalizedData = {
         ...data,
         ...(data.fullDay !== undefined ? { fullDay: data.fullDay ? 1 : 0 } : {}),
+        ...(nextFlightRouteType !== undefined ? { flightRouteType: nextFlightRouteType } : {}),
+        ...(data.category && data.category !== "flight" ? { flightRouteType: null } : {}),
       };
       await updateExpense(id, normalizedData);
       return { success: true };
