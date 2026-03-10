@@ -53,7 +53,7 @@ export default function ResetPassword() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error("Passwoerter stimmen nicht ueberein");
+      toast.error("Passwörter stimmen nicht überein");
       return;
     }
 
@@ -67,7 +67,7 @@ export default function ResetPassword() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error ?? "Passwort konnte nicht zurueckgesetzt werden");
+        toast.error(data.error ?? "Passwort konnte nicht zurückgesetzt werden");
         return;
       }
 
@@ -85,15 +85,15 @@ export default function ResetPassword() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Neues Passwort</CardTitle>
-          <CardDescription>Setzen Sie ein neues Passwort fuer Ihr Konto</CardDescription>
+          <CardDescription>Setzen Sie ein neues Passwort für Ihr Konto</CardDescription>
         </CardHeader>
         <CardContent>
           {isChecking ? (
-            <p className="text-sm text-muted-foreground text-center">Pruefe Reset-Link...</p>
+            <p className="text-sm text-muted-foreground text-center">Prüfe Reset-Link...</p>
           ) : !isTokenValid ? (
             <div className="space-y-4">
               <p className="text-sm text-red-600 text-center">
-                Der Reset-Link ist ungueltig oder abgelaufen.
+                Der Reset-Link ist ungültig oder abgelaufen.
               </p>
               <Button className="w-full" onClick={() => navigate("/forgot-password")}>
                 Neuen Link anfordern
@@ -114,7 +114,7 @@ export default function ResetPassword() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Passwort bestaetigen</Label>
+                <Label htmlFor="confirmPassword">Passwort bestätigen</Label>
                 <Input
                   id="confirmPassword"
                   type="password"

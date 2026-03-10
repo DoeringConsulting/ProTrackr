@@ -15,6 +15,12 @@ import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pd
 import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
 import { calculateAccountingUiData } from "@/lib/uiCalculations";
 import {
+  exportCustomerCostStatementToPDF,
+  exportCustomerTimesheetToPDF,
+  exportPolishBookkeepingReportToPDF,
+  type ReportLanguage,
+} from "@/lib/reportPdfExports";
+import {
   SUPPORTED_CURRENCIES,
   aggregateByCurrency,
   buildLatestRateMap,
@@ -22,6 +28,22 @@ import {
   formatMoney,
   type SupportedCurrency,
 } from "@/lib/currencyUtils";
+
+const EXPENSE_CATEGORY_LABELS: Record<
+  string,
+  { de: string; en: string; pl: string }
+> = {
+  car: { de: "Mietwagen", en: "Car", pl: "Auto" },
+  train: { de: "ÖPNV", en: "Train", pl: "Pociag" },
+  flight: { de: "Flug", en: "Flight", pl: "Lot" },
+  taxi: { de: "Taxi", en: "Taxi", pl: "Taxi" },
+  transport: { de: "Transport", en: "Transport", pl: "Transport" },
+  hotel: { de: "Hotel", en: "Hotel", pl: "Hotel" },
+  meal: { de: "Verpflegung", en: "Meal", pl: "Posilek" },
+  food: { de: "Gastronomie", en: "Food", pl: "Gastronomia" },
+  fuel: { de: "Kraftstoff", en: "Fuel", pl: "Paliwo" },
+  other: { de: "Sonstiges", en: "Other", pl: "Inne" },
+};
 
 export default function Reports() {
   const [startDate, setStartDate] = useState(() => {
@@ -35,6 +57,7 @@ export default function Reports() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
   const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
+  const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("de");
 
   const { data: customers = [] } = trpc.customers.list.useQuery();
   const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({ startDate, endDate });
@@ -83,6 +106,58 @@ export default function Reports() {
     );
   };
 
+  const customersById = useMemo(
+    () => new Map(customers.map((customer) => [customer.id, customer])),
+    [customers]
+  );
+
+  const entriesById = useMemo(
+    () => new Map(timeEntries.map((entry) => [entry.id, entry])),
+    [timeEntries]
+  );
+
+  const timeEntriesDetailed = useMemo(
+    () =>
+      timeEntries.map((entry) => {
+        const customer = customersById.get(entry.customerId);
+        const sourceCurrency = (
+          (entry.entryType === "onsite"
+            ? customer?.onsiteRateCurrency
+            : customer?.remoteRateCurrency) || "EUR"
+        ).toUpperCase();
+        const amountEur = convertToEur(entry.calculatedAmount, sourceCurrency);
+        return {
+          ...entry,
+          sourceCurrency,
+          amountEur,
+        };
+      }),
+    [timeEntries, customersById, rateMap]
+  );
+
+  const expensesDetailedAll = useMemo(
+    () =>
+      expenses.map((expense) => {
+        const sourceCurrency = (expense.currency || "EUR").toUpperCase();
+        const amountEur = convertToEur(expense.amount, sourceCurrency);
+        const amountPln =
+          sourceCurrency === "PLN"
+            ? expense.amount
+            : convertAmountCents(expense.amount, sourceCurrency, "PLN", rateMap);
+        const relatedEntry = expense.timeEntryId ? entriesById.get(expense.timeEntryId) : undefined;
+        const relatedCustomer = relatedEntry ? customersById.get(relatedEntry.customerId) : undefined;
+        return {
+          ...expense,
+          sourceCurrency,
+          amountEur,
+          amountPln,
+          relatedEntry,
+          relatedCustomer,
+        };
+      }),
+    [expenses, rateMap, entriesById, customersById]
+  );
+
   // Calculate accounting report data
   const calculateAccountingReport = () => {
     const fixedCostsDetailed = fixedCosts.map((cost) => {
@@ -95,22 +170,12 @@ export default function Reports() {
       };
     });
 
-    const expensesDetailed = expenses.map((expense) => {
-      const sourceCurrency = (expense.currency || "EUR").toUpperCase();
-      const amountEur = convertToEur(expense.amount, sourceCurrency);
-      return {
-        ...expense,
-        sourceCurrency,
-        amountEur,
-      };
-    });
+    const expensesDetailed = expensesDetailedAll;
 
-    // Revenue from time entries is in EUR in current system
-    const timeRevenue = timeEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
+    // Revenue normalized to EUR for tax/accounting calculations.
+    const timeRevenue = timeEntriesDetailed.reduce((sum, entry) => sum + (entry.amountEur ?? 0), 0);
 
     // Only travel costs from "exclusive" customers are billable as extra revenue.
-    const entriesById = new Map(timeEntries.map((entry) => [entry.id, entry]));
-    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
     const travelRevenueInGross = expensesDetailed.reduce((sum, expense) => {
       if (!expense.timeEntryId) return sum;
       const relatedEntry = entriesById.get(expense.timeEntryId);
@@ -126,7 +191,10 @@ export default function Reports() {
 
     const taxResult = calculateAccountingUiData({
       customers,
-      timeEntries: timeEntries.map((entry) => ({ ...entry, calculatedAmount: entry.calculatedAmount })),
+      timeEntries: timeEntriesDetailed.map((entry) => ({
+        ...entry,
+        calculatedAmount: entry.amountEur ?? 0,
+      })),
       expenses: expensesDetailed.map((expense) => ({
         ...expense,
         amount: expense.amountEur ?? 0,
@@ -201,30 +269,22 @@ export default function Reports() {
   const calculateCustomerReport = () => {
     if (!selectedCustomerId) return null;
 
-    const customerEntries = timeEntries.filter(e => e.customerId === selectedCustomerId);
+    const customerEntries = timeEntriesDetailed.filter((e) => e.customerId === selectedCustomerId);
     const customer = customers.find(c => c.id === selectedCustomerId);
 
     if (!customer) return null;
 
     const totalHours = customerEntries.reduce((sum, entry) => sum + entry.hours, 0);
-    const totalAmount = customerEntries.reduce((sum, entry) => sum + entry.calculatedAmount, 0); // EUR
+    const totalAmount = customerEntries.reduce((sum, entry) => sum + (entry.amountEur ?? 0), 0); // EUR
     const totalManDays = customerEntries.reduce((sum, entry) => sum + entry.manDays, 0);
 
     // Calculate expenses for this customer
-    const customerExpenses = expenses.filter(expense => {
+    const customerExpenses = expensesDetailedAll.filter(expense => {
       // Find the time entry for this expense
       const timeEntry = timeEntries.find(te => te.id === expense.timeEntryId);
       return timeEntry && timeEntry.customerId === selectedCustomerId;
     });
-    const customerExpensesDetailed = customerExpenses.map((expense) => {
-      const sourceCurrency = (expense.currency || "EUR").toUpperCase();
-      const amountEur = convertToEur(expense.amount, sourceCurrency);
-      return {
-        ...expense,
-        sourceCurrency,
-        amountEur,
-      };
-    });
+    const customerExpensesDetailed = customerExpenses;
 
     const totalExpenses = customerExpensesDetailed.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0); // EUR
     const billableExpenses = customer.costModel === "exclusive" ? totalExpenses : 0; // EUR
@@ -251,6 +311,153 @@ export default function Reports() {
 
   const accountingData = calculateAccountingReport();
   const customerData = calculateCustomerReport();
+
+  const handleExportPolishBookkeepingReport = async () => {
+    const bookkeepingEntries = timeEntriesDetailed.map((entry) => {
+      const customer = customersById.get(entry.customerId);
+      return {
+        date: entry.date,
+        weekday: entry.weekday,
+        projectName: entry.projectName,
+        provider: customer?.provider || "-",
+        location: customer?.location || "-",
+        entryType: entry.entryType,
+        hours: entry.hours,
+        manDays: entry.manDays,
+        rate: entry.rate || 0,
+        amount: entry.calculatedAmount,
+        sourceCurrency: entry.sourceCurrency,
+        amountEur: entry.amountEur ?? 0,
+        comment: entry.description || "",
+      };
+    });
+
+    const bookkeepingExpenses = expensesDetailedAll.map((expense) => ({
+      date: expense.date,
+      category: expense.category,
+      amount: expense.amount,
+      currency: expense.sourceCurrency,
+      amountEur: expense.amountEur ?? null,
+      amountPln: expense.amountPln ?? null,
+      comment: expense.comment || "",
+      provider: expense.relatedCustomer?.provider || "",
+      projectName: expense.relatedEntry?.projectName || "",
+    }));
+
+    await exportPolishBookkeepingReportToPDF({
+      startDate,
+      endDate,
+      advisorName: "Alexander Döring",
+      entries: bookkeepingEntries,
+      expenses: bookkeepingExpenses,
+      summary: {
+        totalHoursMinutes: timeEntries.reduce((sum, entry) => sum + entry.hours, 0),
+        totalManDays: timeEntries.reduce((sum, entry) => sum + entry.manDays, 0),
+        revenueEur: accountingData.grossRevenue,
+        travelEur: accountingData.variableCosts,
+        fixedCostsEur: accountingData.totalFixedCosts,
+        zusEur: accountingData.zus,
+        healthEur: accountingData.healthInsurance,
+        taxEur: accountingData.tax,
+        netEur: accountingData.netProfit,
+      },
+    });
+    toast.success("Polnischer Buchhaltungsbericht wurde erstellt");
+  };
+
+  const handleExportCustomerTimesheet = async () => {
+    if (!customerData) return;
+    await exportCustomerTimesheetToPDF({
+      language: reportLanguage,
+      startDate,
+      endDate,
+      customerName: customerData.customer.provider,
+      projectName: customerData.customer.projectName,
+      consultant: "Alexander Döring",
+      entries: customerData.entries.map((entry) => ({
+        date: entry.date,
+        weekday: entry.weekday,
+        entryType: entry.entryType,
+        hours: entry.hours,
+        manDays: entry.manDays,
+        description: entry.description || "",
+      })),
+      totalHours: customerData.totalHours,
+      totalManDays: customerData.totalManDays,
+    });
+    toast.success("Stundennachweis wurde erstellt");
+  };
+
+  const handleExportCustomerCostStatement = async () => {
+    if (!customerData) return;
+    const customerCurrency = (
+      customerData.customer.onsiteRateCurrency ||
+      customerData.customer.remoteRateCurrency ||
+      "EUR"
+    ).toUpperCase();
+
+    const convertToCustomerCurrency = (amount: number, sourceCurrency: string) => {
+      const source = sourceCurrency.toUpperCase();
+      if (source === customerCurrency) return amount;
+      return convertAmountCents(amount, source, customerCurrency, rateMap);
+    };
+
+    const rows = customerData.entries.map((entry) => {
+      const entryExpenses = customerData.customerExpensesDetailed.filter(
+        (expense) => expense.timeEntryId === entry.id
+      );
+
+      const convertedService =
+        convertToCustomerCurrency(entry.calculatedAmount, entry.sourceCurrency) ?? 0;
+      const convertedTravel = entryExpenses.reduce((sum, expense) => {
+        const converted = convertToCustomerCurrency(expense.amount, expense.sourceCurrency);
+        return converted === null ? sum : sum + converted;
+      }, 0);
+
+      return {
+        date: entry.date,
+        hours: entry.hours,
+        manDays: entry.manDays,
+        serviceAmount: convertedService,
+        travelAmount: convertedTravel,
+        travelCategories: entryExpenses
+          .map((exp) => {
+            const labels = EXPENSE_CATEGORY_LABELS[exp.category] || EXPENSE_CATEGORY_LABELS.other;
+            const label =
+              reportLanguage === "en" ? labels.en : reportLanguage === "pl" ? labels.pl : labels.de;
+            return `${label} (${exp.sourceCurrency})`;
+          })
+          .filter(Boolean)
+          .join(", "),
+      };
+    });
+
+    const serviceTotal = rows.reduce((sum, row) => sum + row.serviceAmount, 0);
+    const travelTotal = rows.reduce((sum, row) => sum + row.travelAmount, 0);
+
+    await exportCustomerCostStatementToPDF({
+      language: reportLanguage,
+      startDate,
+      endDate,
+      customerName: customerData.customer.provider,
+      projectName: customerData.customer.projectName,
+      customerCurrency,
+      rows: rows.map((row) => ({
+        date: row.date,
+        hours: row.hours,
+        manDays: row.manDays,
+        serviceAmount: row.serviceAmount,
+        travelAmount: row.travelAmount,
+        travelCategories: row.travelCategories,
+      })),
+      totals: {
+        serviceAmount: serviceTotal,
+        travelAmount: travelTotal,
+        grandTotal: serviceTotal + travelTotal,
+      },
+    });
+    toast.success("Kostenaufstellung wurde erstellt");
+  };
 
   const formatHours = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -301,6 +508,19 @@ export default function Reports() {
               </div>
             </div>
             <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <Select
+                value={reportLanguage}
+                onValueChange={(value) => setReportLanguage(value as ReportLanguage)}
+              >
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="de">Deutsch</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="pl">Polski</SelectItem>
+                </SelectContent>
+              </Select>
               <Button
                 type="button"
                 variant={showUnifiedCurrency ? "default" : "outline"}
@@ -352,6 +572,10 @@ export default function Reports() {
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
+                    <Button variant="outline" onClick={handleExportPolishBookkeepingReport}>
+                      <Download className="mr-2 h-4 w-4" />
+                      PL Buchhaltung (PDF)
+                    </Button>
                     <Button variant="outline" onClick={() => exportAccountingReportToPDF(accountingData, startDate, endDate)}>
                       <Download className="mr-2 h-4 w-4" />
                       PDF Export
@@ -579,6 +803,14 @@ export default function Reports() {
                         </CardDescription>
                       </div>
                       <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleExportCustomerTimesheet}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Stundennachweis (PDF)
+                        </Button>
+                        <Button variant="outline" onClick={handleExportCustomerCostStatement}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Kostenaufstellung (PDF)
+                        </Button>
                         <Button variant="outline" onClick={() => customerData && exportCustomerReportToPDF(customerData, startDate, endDate)}>
                           <Download className="mr-2 h-4 w-4" />
                           PDF Export
@@ -596,7 +828,7 @@ export default function Reports() {
                                 date: new Date(e.date).toLocaleDateString("de-DE"),
                                 hours: e.hours / 60,
                                 rate: e.rate || 0,
-                                amount: e.calculatedAmount,
+                                amount: e.amountEur ?? 0,
                                 expenses: 0,
                               })),
                               totalHours: customerData.totalHours,
@@ -730,7 +962,7 @@ export default function Reports() {
                               <TableCell className="text-right">{formatHours(entry.hours)}</TableCell>
                               <TableCell className="text-right">{formatManDays(entry.manDays)}</TableCell>
                               <TableCell className="text-right">
-                                {formatCalculatedCurrency(entry.calculatedAmount)}
+                                {formatCalculatedCurrency(entry.amountEur ?? 0)}
                               </TableCell>
                               <TableCell className="text-right">
                                 {showUnifiedCurrency

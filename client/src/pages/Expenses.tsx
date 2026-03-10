@@ -1,11 +1,20 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { TrendingUp, Receipt, DollarSign, Calendar } from "lucide-react";
+import {
+  SUPPORTED_CURRENCIES,
+  buildLatestRateMap,
+  convertAmountCents,
+  formatMoney,
+  type SupportedCurrency,
+} from "@/lib/currencyUtils";
 
 type FilterPeriod = "month" | "year" | "lifetime" | "average";
 
@@ -24,6 +33,8 @@ const COLORS = ["#048998", "#06a5b6", "#036d79", "#025a64", "#dbbe76", "#b98847"
 
 export default function Expenses() {
   const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>("month");
+  const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
+  const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -55,31 +66,60 @@ export default function Expenses() {
     startDate,
     endDate,
   });
+  const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
+
+  const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
+
+  const chartCurrency = showUnifiedCurrency ? targetCurrency : "EUR";
+  const expenseRows = useMemo(
+    () =>
+      allExpenses.map((expense: any) => {
+        const sourceCurrency = String(expense.currency || "EUR").toUpperCase();
+        const converted =
+          sourceCurrency === chartCurrency
+            ? expense.amount
+            : convertAmountCents(expense.amount, sourceCurrency, chartCurrency, rateMap);
+        return {
+          ...expense,
+          sourceCurrency,
+          convertedAmount: converted,
+        };
+      }),
+    [allExpenses, chartCurrency, rateMap]
+  );
 
   // Aggregate expenses by category
   const categoryData = useMemo(() => {
     const aggregated: Record<string, number> = {};
-    allExpenses.forEach((expense: any) => {
+    expenseRows.forEach((expense: any) => {
       const category = expense.category;
-      const amountInEur = expense.amount / 100; // Convert cents to EUR
-      aggregated[category] = (aggregated[category] || 0) + amountInEur;
+      const amountInChartCurrency = (expense.convertedAmount ?? 0) / 100;
+      aggregated[category] = (aggregated[category] || 0) + amountInChartCurrency;
     });
 
     return Object.entries(aggregated).map(([category, amount]) => ({
       category: CATEGORY_LABELS[category] || category,
       amount: parseFloat(amount.toFixed(2)),
     }));
-  }, [allExpenses]);
+  }, [expenseRows]);
 
   const totalAmount = useMemo(() => {
     return categoryData.reduce((sum, item) => sum + item.amount, 0);
   }, [categoryData]);
 
   const averagePerDay = useMemo(() => {
-    if (allExpenses.length === 0) return 0;
-    const uniqueDates = new Set(allExpenses.map((e: any) => e.date));
+    if (expenseRows.length === 0) return 0;
+    const uniqueDates = new Set(expenseRows.map((e: any) => e.date));
     return totalAmount / uniqueDates.size;
-  }, [allExpenses, totalAmount]);
+  }, [expenseRows, totalAmount]);
+
+  const missingConversionCount = useMemo(
+    () =>
+      expenseRows.filter(
+        (expense: any) => expense.sourceCurrency !== chartCurrency && expense.convertedAmount === null
+      ).length,
+    [expenseRows, chartCurrency]
+  );
 
   // Generate month options (last 12 months)
   const monthOptions = useMemo(() => {
@@ -169,6 +209,35 @@ export default function Expenses() {
                 </div>
               )}
             </div>
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant={showUnifiedCurrency ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowUnifiedCurrency((prev) => !prev)}
+              >
+                {showUnifiedCurrency ? "Einheitliche Währung aktiv" : "Einheitliche Währung"}
+              </Button>
+              <div className="w-[150px]">
+                <Label className="sr-only">Zielwährung</Label>
+                <Select
+                  value={targetCurrency}
+                  onValueChange={(value) => setTargetCurrency(value as SupportedCurrency)}
+                  disabled={!showUnifiedCurrency}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPORTED_CURRENCIES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -180,7 +249,9 @@ export default function Expenses() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalAmount.toFixed(2)} €</div>
+              <div className="text-2xl font-bold">
+                {formatMoney(Math.round(totalAmount * 100), chartCurrency)}
+              </div>
               <p className="text-xs text-muted-foreground">
                 {filterPeriod === "month" ? "Diesen Monat" : filterPeriod === "year" ? "Dieses Jahr" : "Gesamt"}
               </p>
@@ -193,9 +264,11 @@ export default function Expenses() {
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{averagePerDay.toFixed(2)} €</div>
+              <div className="text-2xl font-bold">
+                {formatMoney(Math.round(averagePerDay * 100), chartCurrency)}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Basierend auf {new Set(allExpenses.map((e: any) => e.date)).size} Tagen
+                Basierend auf {new Set(expenseRows.map((e: any) => e.date)).size} Tagen
               </p>
             </CardContent>
           </Card>
@@ -227,9 +300,11 @@ export default function Expenses() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="category" angle={-45} textAnchor="end" height={100} />
                   <YAxis />
-                  <Tooltip formatter={(value: number) => `${value.toFixed(2)} €`} />
+                  <Tooltip
+                    formatter={(value: number) => formatMoney(Math.round(Number(value) * 100), chartCurrency)}
+                  />
                   <Legend />
-                  <Bar dataKey="amount" fill="#048998" name="Betrag (€)" />
+                  <Bar dataKey="amount" fill="#048998" name={`Betrag (${chartCurrency})`} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -257,7 +332,9 @@ export default function Expenses() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => `${value.toFixed(2)} €`} />
+                  <Tooltip
+                    formatter={(value: number) => formatMoney(Math.round(Number(value) * 100), chartCurrency)}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -289,12 +366,19 @@ export default function Expenses() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  allExpenses.map((expense: any) => (
+                  expenseRows.map((expense: any) => (
                     <TableRow key={expense.id}>
                       <TableCell>{new Date(expense.date).toLocaleDateString("de-DE")}</TableCell>
                       <TableCell>{CATEGORY_LABELS[expense.category] || expense.category}</TableCell>
-                      <TableCell>{(expense.amount / 100).toFixed(2)} €</TableCell>
-                      <TableCell>{expense.currency || "EUR"}</TableCell>
+                      <TableCell>
+                        {formatMoney(expense.amount, expense.sourceCurrency)}
+                        {expense.convertedAmount !== null && expense.sourceCurrency !== chartCurrency && (
+                          <div className="text-xs text-muted-foreground">
+                            ≈ {formatMoney(expense.convertedAmount, chartCurrency)}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>{expense.sourceCurrency || "EUR"}</TableCell>
                       <TableCell className="max-w-xs truncate">{expense.comment || "-"}</TableCell>
                     </TableRow>
                   ))
@@ -303,6 +387,15 @@ export default function Expenses() {
             </Table>
           </CardContent>
         </Card>
+
+        {missingConversionCount > 0 && (
+          <Card className="border-amber-300 bg-amber-50/60">
+            <CardContent className="pt-6 text-amber-800">
+              Für {missingConversionCount} Position(en) fehlt ein Wechselkurs nach {chartCurrency}. Diese
+              Werte sind in Diagrammen/Summen als 0 enthalten, bis ein Kurs gepflegt ist.
+            </CardContent>
+          </Card>
+        )}
 
         {/* Info Card */}
         <Card className="bg-muted/50">

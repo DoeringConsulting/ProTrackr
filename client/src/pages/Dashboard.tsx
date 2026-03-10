@@ -727,7 +727,7 @@ export default function Dashboard() {
               </div>
               <CardDescription>
                 Monatlicher Umsatz ({selectedPeriodLabel}){" "}
-                {showUnifiedCurrency ? `in ${targetCurrency}` : "in Originalwaehrungen"}
+                {showUnifiedCurrency ? `in ${targetCurrency}` : "in Originalwährungen"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -779,7 +779,7 @@ export default function Dashboard() {
                 Kostenaufschluesselung ({selectedPeriodLabel}){" "}
                 {showUnifiedCurrency
                   ? `in ${targetCurrency}`
-                  : "Anteile nach EUR-Basis, Beschriftung in Originalwaehrungen"}{" "}
+                  : "Anteile nach EUR-Basis, Beschriftung in Originalwährungen"}{" "}
                 (0-Werte ausgeblendet)
               </CardDescription>
             </CardHeader>
@@ -853,7 +853,7 @@ export default function Dashboard() {
             </div>
             <CardDescription>
               Top 5 Projekte nach Umsatz ({selectedPeriodLabel}){" "}
-              {showUnifiedCurrency ? `in ${targetCurrency}` : "in Originalwaehrungen"}
+              {showUnifiedCurrency ? `in ${targetCurrency}` : "in Originalwährungen"}
             </CardDescription>
           </CardHeader>
           <CardContent>

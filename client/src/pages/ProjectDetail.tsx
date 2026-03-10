@@ -8,7 +8,15 @@ import { trpc } from "@/lib/trpc";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { ArrowLeft, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
+import {
+  SUPPORTED_CURRENCIES,
+  buildLatestRateMap,
+  convertAmountCents,
+  formatMoney,
+  type SupportedCurrency,
+} from "@/lib/currencyUtils";
 
 type FilterPeriod = "month" | "year" | "lifetime" | "average";
 
@@ -30,6 +38,8 @@ export default function ProjectDetail() {
   const customerId = params.id ? parseInt(params.id) : null;
   
   const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>("month");
+  const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
+  const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -69,31 +79,59 @@ export default function ProjectDetail() {
     },
     { enabled: !!customerId }
   );
+  const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
+
+  const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
+  const chartCurrency = showUnifiedCurrency ? targetCurrency : "EUR";
+  const expenseRows = useMemo(
+    () =>
+      expenses.map((expense: any) => {
+        const sourceCurrency = String(expense.currency || "EUR").toUpperCase();
+        const converted =
+          sourceCurrency === chartCurrency
+            ? expense.amount
+            : convertAmountCents(expense.amount, sourceCurrency, chartCurrency, rateMap);
+        return {
+          ...expense,
+          sourceCurrency,
+          convertedAmount: converted,
+        };
+      }),
+    [expenses, chartCurrency, rateMap]
+  );
 
   // Aggregate expenses by category
   const categoryData = useMemo(() => {
     const aggregated: Record<string, number> = {};
-    expenses.forEach((expense: any) => {
+    expenseRows.forEach((expense: any) => {
       const category = expense.category;
-      const amountInEur = expense.amount / 100; // Convert cents to EUR
-      aggregated[category] = (aggregated[category] || 0) + amountInEur;
+      const amountInChartCurrency = (expense.convertedAmount ?? 0) / 100;
+      aggregated[category] = (aggregated[category] || 0) + amountInChartCurrency;
     });
 
     return Object.entries(aggregated).map(([category, amount]) => ({
       category: CATEGORY_LABELS[category] || category,
       amount: parseFloat(amount.toFixed(2)),
     }));
-  }, [expenses]);
+  }, [expenseRows]);
 
   const totalAmount = useMemo(() => {
     return categoryData.reduce((sum, item) => sum + item.amount, 0);
   }, [categoryData]);
 
   const averagePerDay = useMemo(() => {
-    if (expenses.length === 0) return 0;
-    const uniqueDates = new Set(expenses.map((e: any) => e.date));
+    if (expenseRows.length === 0) return 0;
+    const uniqueDates = new Set(expenseRows.map((e: any) => e.date));
     return totalAmount / uniqueDates.size;
-  }, [expenses, totalAmount]);
+  }, [expenseRows, totalAmount]);
+
+  const missingConversionCount = useMemo(
+    () =>
+      expenseRows.filter(
+        (expense: any) => expense.sourceCurrency !== chartCurrency && expense.convertedAmount === null
+      ).length,
+    [expenseRows, chartCurrency]
+  );
 
   // Generate month options (last 12 months)
   const monthOptions = useMemo(() => {
@@ -205,6 +243,35 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
+            <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant={showUnifiedCurrency ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowUnifiedCurrency((prev) => !prev)}
+              >
+                {showUnifiedCurrency ? "Einheitliche Währung aktiv" : "Einheitliche Währung"}
+              </Button>
+              <div className="w-[150px]">
+                <Label className="sr-only">Zielwährung</Label>
+                <Select
+                  value={targetCurrency}
+                  onValueChange={(value) => setTargetCurrency(value as SupportedCurrency)}
+                  disabled={!showUnifiedCurrency}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPORTED_CURRENCIES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -213,7 +280,9 @@ export default function ProjectDetail() {
                   <CardDescription>Gesamtkosten</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">€{totalAmount.toFixed(2)}</div>
+                  <div className="text-2xl font-bold">
+                    {formatMoney(Math.round(totalAmount * 100), chartCurrency)}
+                  </div>
                 </CardContent>
               </Card>
               <Card>
@@ -221,7 +290,9 @@ export default function ProjectDetail() {
                   <CardDescription>Durchschnitt pro Tag</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">€{averagePerDay.toFixed(2)}</div>
+                  <div className="text-2xl font-bold">
+                    {formatMoney(Math.round(averagePerDay * 100), chartCurrency)}
+                  </div>
                 </CardContent>
               </Card>
               <Card>
@@ -229,7 +300,7 @@ export default function ProjectDetail() {
                   <CardDescription>Anzahl Einträge</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{expenses.length}</div>
+                  <div className="text-2xl font-bold">{expenseRows.length}</div>
                 </CardContent>
               </Card>
             </div>
@@ -245,9 +316,13 @@ export default function ProjectDetail() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="category" angle={-45} textAnchor="end" height={100} />
                       <YAxis />
-                      <Tooltip formatter={(value: number) => `€${value.toFixed(2)}`} />
+                      <Tooltip
+                        formatter={(value: number) =>
+                          formatMoney(Math.round(Number(value) * 100), chartCurrency)
+                        }
+                      />
                       <Legend />
-                      <Bar dataKey="amount" fill="#048998" name="Betrag (€)" />
+                      <Bar dataKey="amount" fill="#048998" name={`Betrag (${chartCurrency})`} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -264,13 +339,22 @@ export default function ProjectDetail() {
                         cx="50%"
                         cy="50%"
                         outerRadius={100}
-                        label={(entry) => `${entry.category}: €${entry.amount.toFixed(2)}`}
+                        label={(entry) =>
+                          `${entry.category}: ${formatMoney(
+                            Math.round(Number(entry.amount) * 100),
+                            chartCurrency
+                          )}`
+                        }
                       >
                         {categoryData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value: number) => `€${value.toFixed(2)}`} />
+                      <Tooltip
+                        formatter={(value: number) =>
+                          formatMoney(Math.round(Number(value) * 100), chartCurrency)
+                        }
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -287,8 +371,17 @@ export default function ProjectDetail() {
           </CardContent>
         </Card>
 
+        {missingConversionCount > 0 && (
+          <Card className="border-amber-300 bg-amber-50/60">
+            <CardContent className="pt-6 text-amber-800">
+              Für {missingConversionCount} Position(en) fehlt ein Wechselkurs nach {chartCurrency}. Diese
+              Werte sind in Diagrammen/Summen als 0 enthalten, bis ein Kurs gepflegt ist.
+            </CardContent>
+          </Card>
+        )}
+
         {/* Expense Table */}
-        {expenses.length > 0 && (
+        {expenseRows.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Einzelposten</CardTitle>
@@ -306,14 +399,19 @@ export default function ProjectDetail() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {expenses.map((expense: any) => (
+                    {expenseRows.map((expense: any) => (
                       <TableRow key={expense.id}>
                         <TableCell>
                           {new Date(expense.date).toLocaleDateString("de-DE")}
                         </TableCell>
                         <TableCell>{CATEGORY_LABELS[expense.category] || expense.category}</TableCell>
                         <TableCell className="text-right">
-                          €{(expense.amount / 100).toFixed(2)} {expense.currency !== "EUR" && `(${expense.currency})`}
+                          {formatMoney(expense.amount, expense.sourceCurrency)}
+                          {expense.convertedAmount !== null && expense.sourceCurrency !== chartCurrency && (
+                            <div className="text-xs text-muted-foreground">
+                              ≈ {formatMoney(expense.convertedAmount, chartCurrency)}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">{expense.comment || "-"}</TableCell>
                       </TableRow>

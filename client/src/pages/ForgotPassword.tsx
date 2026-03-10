@@ -38,7 +38,7 @@ export default function ForgotPassword() {
       }
       toast.success(
         data.message ??
-          "Wenn ein Konto existiert, wurde ein Link zum Zuruecksetzen versendet."
+          "Wenn ein Konto existiert, wurde ein Link zum Zurücksetzen versendet."
       );
       navigate("/login");
     } catch {
@@ -54,7 +54,7 @@ export default function ForgotPassword() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Passwort vergessen</CardTitle>
           <CardDescription>
-            Wir senden Ihnen einen Link zum Zuruecksetzen per E-Mail
+            Wir senden Ihnen einen Link zum Zurücksetzen per E-Mail
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -89,7 +89,7 @@ export default function ForgotPassword() {
               className="w-full"
               onClick={() => navigate("/login")}
             >
-              Zurueck zum Login
+              Zurück zum Login
             </Button>
           </form>
         </CardContent>

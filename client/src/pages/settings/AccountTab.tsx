@@ -57,7 +57,7 @@ function getAccountStatus(user: ManagedUser): "active" | "suspended" | "deleted"
 }
 
 function getAccountStatusLabel(status: "active" | "suspended" | "deleted") {
-  if (status === "deleted") return "Geloescht";
+  if (status === "deleted") return "Gelöscht";
   if (status === "suspended") return "Gesperrt";
   return "Aktiv";
 }
@@ -224,12 +224,12 @@ export default function AccountTab() {
   const deleteMutation = trpc.usersAdmin.delete.useMutation({
     onSuccess: () => {
       utils.usersAdmin.list.invalidate();
-      toast.success("Benutzer wurde geloescht");
+      toast.success("Benutzer wurde gelöscht");
       setIsDeleteOpen(false);
       setSelectedUser(null);
     },
     onError: (error) => {
-      toast.error(`Fehler beim Loeschen: ${error.message}`);
+      toast.error(`Fehler beim Löschen: ${error.message}`);
     },
   });
 
@@ -256,7 +256,7 @@ export default function AccountTab() {
     }
 
     if (isGlobalSetupAdmin && !mandantId) {
-      toast.error("Bitte zuerst einen Mandanten auswaehlen");
+      toast.error("Bitte zuerst einen Mandanten auswählen");
       return;
     }
 
@@ -309,7 +309,7 @@ export default function AccountTab() {
       return;
     }
     if (isGlobalSetupAdmin && !editMandantId) {
-      toast.error("Bitte Mandant auswaehlen");
+      toast.error("Bitte Mandant auswählen");
       return;
     }
     if (editPassword && editPassword.length < 8) {
@@ -359,7 +359,7 @@ export default function AccountTab() {
           <p className="text-muted-foreground">
             {isGlobalSetupAdmin
               ? "Setup-Flow: Mandant anlegen, Mandanten-Admin anlegen, dann Benutzer je Mandant verwalten"
-              : "Mandanten-Benutzer verwalten (anlegen, sperren, loeschen, wiederherstellen)"}
+              : "Mandanten-Benutzer verwalten (anlegen, sperren, löschen, wiederherstellen)"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -531,7 +531,7 @@ export default function AccountTab() {
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Loeschen
+                            Löschen
                           </Button>
                           <Button
                             size="sm"
@@ -607,7 +607,7 @@ export default function AccountTab() {
             <DialogTitle>{isGlobalSetupAdmin ? "Benutzer / Admin anlegen" : "Neuen Benutzer anlegen"}</DialogTitle>
             <DialogDescription>
               {isGlobalSetupAdmin
-                ? "Schritt 2/3: Rolle waehlen und Benutzer fuer den ausgewaehlten Mandanten anlegen."
+                ? "Schritt 2/3: Rolle wählen und Benutzer für den ausgewählten Mandanten anlegen."
                 : "Direkte Anlage im eigenen Mandanten ohne Einladungs-E-Mail."}
             </DialogDescription>
           </DialogHeader>
@@ -665,7 +665,7 @@ export default function AccountTab() {
                 <Label>Mandant *</Label>
                 <Select value={mandantId} onValueChange={setMandantId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Mandant auswaehlen" />
+                    <SelectValue placeholder="Mandant auswählen" />
                   </SelectTrigger>
                   <SelectContent>
                     {(mandanten as MandantItem[]).map((mandant) => (
@@ -749,7 +749,7 @@ export default function AccountTab() {
                 minLength={8}
                 value={editPassword}
                 onChange={(e) => setEditPassword(e.target.value)}
-                placeholder="Leer lassen, um Passwort nicht zu aendern"
+                placeholder="Leer lassen, um Passwort nicht zu ändern"
               />
             </div>
             {isGlobalSetupAdmin ? (
@@ -778,7 +778,7 @@ export default function AccountTab() {
                   <Label>Mandant</Label>
                   <Select value={editMandantId} onValueChange={setEditMandantId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Mandant auswaehlen" />
+                      <SelectValue placeholder="Mandant auswählen" />
                     </SelectTrigger>
                     <SelectContent>
                       {(mandanten as MandantItem[]).map((mandant) => (
@@ -818,7 +818,7 @@ export default function AccountTab() {
               Abbrechen
             </Button>
             <Button onClick={handleUpdateUser} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? "Speichere..." : "Aenderungen speichern"}
+              {updateMutation.isPending ? "Speichere..." : "Änderungen speichern"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -848,11 +848,11 @@ export default function AccountTab() {
       <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Benutzer loeschen?</AlertDialogTitle>
+            <AlertDialogTitle>Benutzer löschen?</AlertDialogTitle>
             <AlertDialogDescription>
               {selectedUser
-                ? `Der Benutzer ${selectedUser.email} wird als geloescht markiert und kann wiederhergestellt werden.`
-                : "Der Benutzer wird als geloescht markiert und kann wiederhergestellt werden."}
+                ? `Der Benutzer ${selectedUser.email} wird als gelöscht markiert und kann wiederhergestellt werden.`
+                : "Der Benutzer wird als gelöscht markiert und kann wiederhergestellt werden."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -860,7 +860,7 @@ export default function AccountTab() {
             <AlertDialogAction
               onClick={() => selectedUser && deleteMutation.mutate({ userId: selectedUser.id })}
             >
-              Loeschen
+              Löschen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

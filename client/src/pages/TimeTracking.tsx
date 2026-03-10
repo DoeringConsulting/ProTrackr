@@ -1166,7 +1166,7 @@ export default function TimeTracking() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="flight-return-date">Rueckflug-Datum (optional)</Label>
+                        <Label htmlFor="flight-return-date">Rückflug-Datum (optional)</Label>
                         <Input
                           id="flight-return-date"
                           type="date"
@@ -1216,7 +1216,7 @@ export default function TimeTracking() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="hotel-nights">Anzahl Naechte</Label>
+                        <Label htmlFor="hotel-nights">Anzahl Nächte</Label>
                         <Input
                           id="hotel-nights"
                           type="number"

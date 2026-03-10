@@ -312,6 +312,19 @@ export async function getExpensesByCustomer(userId: number, customerId: number, 
   const db = await getDb();
   if (!db) return [];
   const { expenses, timeEntries } = await import("../drizzle/schema");
+  const conditions = [eq(timeEntries.userId, userId), eq(timeEntries.customerId, customerId)];
+  if (startDate) {
+    const startKey = startDate.toISOString().slice(0, 10);
+    conditions.push(
+      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) >= ${startKey}`
+    );
+  }
+  if (endDate) {
+    const endKey = endDate.toISOString().slice(0, 10);
+    conditions.push(
+      sql`DATE(COALESCE(${expenses.checkInDate}, ${expenses.date})) <= ${endKey}`
+    );
+  }
   
   // Join expenses with timeEntries to filter by customerId
   const result = await db
@@ -331,10 +344,7 @@ export async function getExpensesByCustomer(userId: number, customerId: number, 
     })
     .from(expenses)
     .innerJoin(timeEntries, eq(expenses.timeEntryId, timeEntries.id))
-    .where(and(
-      eq(timeEntries.userId, userId),
-      eq(timeEntries.customerId, customerId)
-    ));
+    .where(and(...conditions));
   
   return result;
 }
