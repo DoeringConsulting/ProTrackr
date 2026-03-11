@@ -102,11 +102,39 @@ export default function Expenses() {
     [allExpenses, chartCurrency, rateMap]
   );
 
+  const dateKeyOf = (value: string | Date | null | undefined) => {
+    if (!value) return "";
+    const date = typeof value === "string" ? new Date(value) : value;
+    if (Number.isNaN(date.getTime())) return "";
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const customerIdsByDate = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+    timeEntries.forEach((entry: any) => {
+      const key = dateKeyOf(entry.date);
+      if (!key) return;
+      const existing = map.get(key) ?? new Set<number>();
+      existing.add(Number(entry.customerId));
+      map.set(key, existing);
+    });
+    return map;
+  }, [timeEntries]);
+
   const filteredExpenseRows = useMemo(() => {
     if (selectedCustomerId === "all") return expenseRows;
     const customerId = Number(selectedCustomerId);
-    return expenseRows.filter((expense: any) => Number(expense.customerId) === customerId);
-  }, [expenseRows, selectedCustomerId]);
+    return expenseRows.filter((expense: any) => {
+      if (Number(expense.customerId) === customerId) return true;
+      if (expense.customerId !== null && expense.customerId !== undefined) return false;
+      const startDateKey = dateKeyOf(expense.checkInDate || expense.date);
+      if (!startDateKey) return false;
+      return customerIdsByDate.get(startDateKey)?.has(customerId) ?? false;
+    });
+  }, [expenseRows, selectedCustomerId, customerIdsByDate]);
 
   const relevantTimeEntries = useMemo(() => {
     if (selectedCustomerId === "all") return timeEntries;

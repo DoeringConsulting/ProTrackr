@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.53",
+      "date": "2026-03-11",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Reisekosten-Kundenfilter: Fallback fuer nicht verknuepfte Eintraege",
+          "description": "Wenn Reisekosten keinen direkten customerId-Bezug haben, werden sie fuer die Kundenansicht ueber das Eintragsdatum den vorhandenen Projekt-Zeiteintraegen zugeordnet."
+        }
+      ]
+    },
+    {
       "version": "1.0.52",
       "date": "2026-03-11",
       "changes": [
