@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.55",
+      "date": "2026-03-11",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Reisekostenliste: Sortierung je Spalte",
+          "description": "Die Tabelle im Reiter Reisekosten ist jetzt auf-/absteigend sortierbar (Datum, Kategorie, Betrag, Waehrung, Kommentar); Standard ist Datum aufsteigend."
+        }
+      ]
+    },
+    {
       "version": "1.0.54",
       "date": "2026-03-11",
       "changes": [

@@ -17,6 +17,7 @@ import {
 } from "@/lib/currencyUtils";
 
 type FilterPeriod = "month" | "year" | "lifetime" | "average";
+type ExpenseSortKey = "date" | "category" | "amount" | "currency" | "comment";
 
 const CATEGORY_LABELS: Record<string, string> = {
   car: "Mietwagen",
@@ -44,6 +45,8 @@ export default function Expenses() {
   const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
   const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(getInitialCustomerFilter);
+  const [sortKey, setSortKey] = useState<ExpenseSortKey>("date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -135,6 +138,54 @@ export default function Expenses() {
       return customerIdsByDate.get(startDateKey)?.has(customerId) ?? false;
     });
   }, [expenseRows, selectedCustomerId, customerIdsByDate]);
+
+  const sortedExpenseRows = useMemo(() => {
+    const rows = [...filteredExpenseRows];
+    rows.sort((a: any, b: any) => {
+      let left: any;
+      let right: any;
+
+      if (sortKey === "date") {
+        left = new Date(a.date).getTime();
+        right = new Date(b.date).getTime();
+      } else if (sortKey === "amount") {
+        left = Number(a.convertedAmount ?? a.amount ?? 0);
+        right = Number(b.convertedAmount ?? b.amount ?? 0);
+      } else if (sortKey === "category") {
+        left = String(CATEGORY_LABELS[a.category] || a.category || "");
+        right = String(CATEGORY_LABELS[b.category] || b.category || "");
+      } else if (sortKey === "currency") {
+        left = String(a.sourceCurrency || "");
+        right = String(b.sourceCurrency || "");
+      } else {
+        left = String(a.comment || "");
+        right = String(b.comment || "");
+      }
+
+      if (typeof left === "string" || typeof right === "string") {
+        const cmp = String(left).localeCompare(String(right), "de");
+        return sortDirection === "asc" ? cmp : -cmp;
+      }
+
+      const cmp = Number(left) - Number(right);
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+    return rows;
+  }, [filteredExpenseRows, sortKey, sortDirection]);
+
+  const handleSort = (key: ExpenseSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
+
+  const sortSymbol = (key: ExpenseSortKey) => {
+    if (sortKey !== key) return "↕";
+    return sortDirection === "asc" ? "↑" : "↓";
+  };
 
   const relevantTimeEntries = useMemo(() => {
     if (selectedCustomerId === "all") return timeEntries;
@@ -456,11 +507,31 @@ export default function Expenses() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Datum</TableHead>
-                  <TableHead>Kategorie</TableHead>
-                  <TableHead>Betrag</TableHead>
-                  <TableHead>Währung</TableHead>
-                  <TableHead>Kommentar</TableHead>
+                  <TableHead>
+                    <Button type="button" variant="ghost" size="sm" className="h-8 px-1" onClick={() => handleSort("date")}>
+                      Datum {sortSymbol("date")}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button type="button" variant="ghost" size="sm" className="h-8 px-1" onClick={() => handleSort("category")}>
+                      Kategorie {sortSymbol("category")}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button type="button" variant="ghost" size="sm" className="h-8 px-1" onClick={() => handleSort("amount")}>
+                      Betrag {sortSymbol("amount")}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button type="button" variant="ghost" size="sm" className="h-8 px-1" onClick={() => handleSort("currency")}>
+                      Währung {sortSymbol("currency")}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button type="button" variant="ghost" size="sm" className="h-8 px-1" onClick={() => handleSort("comment")}>
+                      Kommentar {sortSymbol("comment")}
+                    </Button>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -471,7 +542,7 @@ export default function Expenses() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredExpenseRows.map((expense: any) => (
+                  sortedExpenseRows.map((expense: any) => (
                     <TableRow key={expense.id}>
                       <TableCell>{new Date(expense.date).toLocaleDateString("de-DE")}</TableCell>
                       <TableCell>{CATEGORY_LABELS[expense.category] || expense.category}</TableCell>
