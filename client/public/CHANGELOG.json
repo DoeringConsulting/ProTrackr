@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.52",
+      "date": "2026-03-11",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Buchhaltungsbericht: Ergebnisberechnung auf konsistente PLN-Basis gestellt",
+          "description": "Steuerrelevante Summen (Umsatz/Kosten fuer Steuerlogik) werden jetzt zuerst in PLN vereinheitlicht berechnet; Nettogewinn wird daraus abgeleitet und korrekt angezeigt."
+        },
+        {
+          "type": "feature",
+          "title": "Reisekosten-Reiter: Projekt/Kunde-Filter hinzugefuegt",
+          "description": "Reisekosten lassen sich jetzt gezielt je Kunde/Projekt analysieren, inklusive Diagrammen, Summen, Durchschnitt und Tabellenansicht."
+        },
+        {
+          "type": "fix",
+          "title": "Kunden-Reiter: Reisekosten-Analyse-Link mit Kunden-Vorfilter",
+          "description": "Der Button oeffnet jetzt den Reisekosten-Reiter mit customerId-Voreinstellung, sodass die zugehoerigen Daten direkt geladen werden."
+        }
+      ]
+    },
+    {
       "version": "1.0.51",
       "date": "2026-03-11",
       "changes": [

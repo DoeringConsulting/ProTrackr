@@ -600,6 +600,7 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
     .select({
       id: expenses.id,
       timeEntryId: expenses.timeEntryId,
+      customerId: timeEntries.customerId,
       category: expenses.category,
       amount: expenses.amount,
       currency: expenses.currency,
@@ -643,6 +644,7 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
     .select({
       id: expenses.id,
       timeEntryId: expenses.timeEntryId,
+      customerId: sql<number | null>`NULL`,
       category: expenses.category,
       amount: expenses.amount,
       currency: expenses.currency,

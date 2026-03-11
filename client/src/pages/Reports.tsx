@@ -13,7 +13,6 @@ import { trpc } from "@/lib/trpc";
 import { FileText, Download, Calculator } from "lucide-react";
 import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
 import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
-import { calculateAccountingUiData } from "@/lib/uiCalculations";
 import { calculatePolishTaxResult } from "@/lib/taxEnginePl";
 import {
   exportCustomerCostStatementToPDF,
@@ -208,23 +207,6 @@ export default function Reports() {
 
     const expensesDetailed = expensesDetailedAll;
 
-    // Revenue normalized to EUR for tax/accounting calculations.
-    const timeRevenue = timeEntriesDetailed.reduce((sum, entry) => sum + (entry.amountEur ?? 0), 0);
-
-    // Only travel costs from "exclusive" customers are billable as extra revenue.
-    const travelRevenueInGross = expensesDetailed.reduce((sum, expense) => {
-      if (!expense.timeEntryId) return sum;
-      const relatedEntry = entriesById.get(expense.timeEntryId);
-      if (!relatedEntry) return sum;
-      const relatedCustomer = customersById.get(relatedEntry.customerId);
-      if (relatedCustomer?.costModel !== "exclusive") return sum;
-      return sum + (expense.amountEur ?? 0);
-    }, 0);
-
-    const grossRevenue = timeRevenue + travelRevenueInGross;
-    const totalFixedCosts = fixedCostsDetailed.reduce((sum, cost) => sum + (cost.amountEur ?? 0), 0);
-    const variableCosts = expensesDetailed.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0);
-
     const mappedTaxProfile = taxProfile
       ? {
           taxCalculationMode: taxProfile.taxCalculationMode,
@@ -250,27 +232,6 @@ export default function Reports() {
           fpFsRateBp: taxConfig.fpFsRateBp,
         }
       : null;
-
-    const taxResult = calculateAccountingUiData({
-      customers,
-      timeEntries: timeEntriesDetailed.map((entry) => ({
-        ...entry,
-        calculatedAmount: entry.amountEur ?? 0,
-      })),
-      expenses: expensesDetailed.map((expense) => ({
-        ...expense,
-        amount: expense.amountEur ?? 0,
-      })),
-      fixedCosts: fixedCostsDetailed.map((cost) => ({
-        ...cost,
-        amount: cost.amountEur ?? 0,
-      })),
-      startDate,
-      endDate,
-      taxProfile: mappedTaxProfile,
-      taxConfig: mappedTaxConfig,
-      legacySettings: taxSettings,
-    });
 
     let missingTaxPlnConversionCount = 0;
     const convertAmountToPlnForTax = (amountCents: number, sourceCurrency?: string | null) => {
@@ -315,6 +276,28 @@ export default function Reports() {
       legacySettings: taxSettings,
     });
 
+    const convertPlnResultToEur = (amountPlnCents: number) => {
+      const converted = convertToEur(amountPlnCents, "PLN");
+      if (converted === null) {
+        missingTaxPlnConversionCount += 1;
+        return 0;
+      }
+      return converted;
+    };
+
+    // Kompatibilitätsfelder in EUR für bestehende Exporte/Anzeige.
+    const timeRevenue = convertPlnResultToEur(timeRevenuePln);
+    const travelRevenueInGross = convertPlnResultToEur(travelRevenueInGrossPln);
+    const grossRevenue = convertPlnResultToEur(grossRevenuePln);
+    const totalFixedCosts = convertPlnResultToEur(totalFixedCostsPln);
+    const variableCosts = convertPlnResultToEur(variableCostsPln);
+    const zus = convertPlnResultToEur(taxResultPln.zus);
+    const healthInsurance = convertPlnResultToEur(taxResultPln.healthInsurance);
+    const deductibleHealth = convertPlnResultToEur(taxResultPln.deductibleHealth);
+    const taxBase = convertPlnResultToEur(taxResultPln.taxBase);
+    const tax = convertPlnResultToEur(taxResultPln.tax);
+    const netProfit = convertPlnResultToEur(taxResultPln.netProfit);
+
     const fixedCostsByCurrency = aggregateByCurrency(
       fixedCostsDetailed.map((cost) => ({
         amount: cost.amount,
@@ -334,13 +317,18 @@ export default function Reports() {
       missingTaxPlnConversionCount;
 
     return {
-      ...taxResult,
-      // keep these fields in EUR for calculation/export compatibility
+      calculationSource: taxResultPln.source,
       timeRevenue,
       travelRevenueInGross,
       grossRevenue,
       totalFixedCosts,
       variableCosts,
+      zus,
+      healthInsurance,
+      deductibleHealth,
+      taxBase,
+      tax,
+      netProfit,
       fixedCostsDetailed,
       expensesDetailed,
       fixedCostsByCurrency,
@@ -881,7 +869,7 @@ export default function Reports() {
                     <TableRow className="border-t-4 bg-muted/50">
                       <TableCell className="font-bold text-lg">Nettogewinn</TableCell>
                       <TableCell className="text-right font-bold text-lg text-primary">
-                        {formatCalculatedCurrency(accountingData.netProfit)}
+                        {formatPlnBasedCurrency(accountingData.taxResultPln.netProfit)}
                       </TableCell>
                     </TableRow>
                   </TableBody>

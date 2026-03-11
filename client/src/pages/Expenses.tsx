@@ -32,9 +32,18 @@ const CATEGORY_LABELS: Record<string, string> = {
 const COLORS = ["#048998", "#06a5b6", "#036d79", "#025a64", "#dbbe76", "#b98847", "#7a8f94", "#dc2626"];
 
 export default function Expenses() {
+  const getInitialCustomerFilter = () => {
+    if (typeof window === "undefined") return "all";
+    const raw = new URLSearchParams(window.location.search).get("customerId");
+    if (!raw) return "all";
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : "all";
+  };
+
   const [filterPeriod, setFilterPeriod] = useState<FilterPeriod>("month");
   const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
   const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(getInitialCustomerFilter);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -66,6 +75,7 @@ export default function Expenses() {
     startDate,
     endDate,
   });
+  const { data: customers = [] } = trpc.customers.list.useQuery();
   const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({
     startDate,
     endDate,
@@ -92,10 +102,22 @@ export default function Expenses() {
     [allExpenses, chartCurrency, rateMap]
   );
 
+  const filteredExpenseRows = useMemo(() => {
+    if (selectedCustomerId === "all") return expenseRows;
+    const customerId = Number(selectedCustomerId);
+    return expenseRows.filter((expense: any) => Number(expense.customerId) === customerId);
+  }, [expenseRows, selectedCustomerId]);
+
+  const relevantTimeEntries = useMemo(() => {
+    if (selectedCustomerId === "all") return timeEntries;
+    const customerId = Number(selectedCustomerId);
+    return timeEntries.filter((entry: any) => Number(entry.customerId) === customerId);
+  }, [timeEntries, selectedCustomerId]);
+
   // Aggregate expenses by category
   const categoryData = useMemo(() => {
     const aggregated: Record<string, number> = {};
-    expenseRows.forEach((expense: any) => {
+    filteredExpenseRows.forEach((expense: any) => {
       const category = expense.category;
       const amountInChartCurrency = (expense.convertedAmount ?? 0) / 100;
       aggregated[category] = (aggregated[category] || 0) + amountInChartCurrency;
@@ -105,7 +127,7 @@ export default function Expenses() {
       category: CATEGORY_LABELS[category] || category,
       amount: parseFloat(amount.toFixed(2)),
     }));
-  }, [expenseRows]);
+  }, [filteredExpenseRows]);
 
   const totalAmount = useMemo(() => {
     return categoryData.reduce((sum, item) => sum + item.amount, 0);
@@ -113,7 +135,7 @@ export default function Expenses() {
 
   const averageStats = useMemo(() => {
     const entryDayKeys = new Set(
-      timeEntries
+      relevantTimeEntries
         .filter((entry: any) => Number(entry.hours || 0) > 0)
         .map((entry: any) => {
           const date = new Date(entry.date);
@@ -123,9 +145,18 @@ export default function Expenses() {
           return `${y}-${m}-${d}`;
         })
     );
-    const calendarEntryDays = Math.max(1, entryDayKeys.size || expenseRows.length || 1);
+    if (entryDayKeys.size === 0 && filteredExpenseRows.length > 0) {
+      filteredExpenseRows.forEach((expense: any) => {
+        const date = new Date(expense.date);
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        const d = String(date.getDate()).padStart(2, "0");
+        entryDayKeys.add(`${y}-${m}-${d}`);
+      });
+    }
+    const calendarEntryDays = Math.max(1, entryDayKeys.size || filteredExpenseRows.length || 1);
     const manDays =
-      timeEntries.reduce((sum: number, entry: any) => sum + Number(entry.manDays || 0), 0) / 1000;
+      relevantTimeEntries.reduce((sum: number, entry: any) => sum + Number(entry.manDays || 0), 0) / 1000;
     const safeManDays = Math.max(0.001, manDays);
 
     return {
@@ -134,14 +165,14 @@ export default function Expenses() {
       averagePerCalendarDay: totalAmount / calendarEntryDays,
       averagePerManDay: totalAmount / safeManDays,
     };
-  }, [timeEntries, expenseRows, totalAmount]);
+  }, [relevantTimeEntries, filteredExpenseRows, totalAmount]);
 
   const missingConversionCount = useMemo(
     () =>
-      expenseRows.filter(
+      filteredExpenseRows.filter(
         (expense: any) => expense.sourceCurrency !== chartCurrency && expense.convertedAmount === null
       ).length,
-    [expenseRows, chartCurrency]
+    [filteredExpenseRows, chartCurrency]
   );
 
   // Generate month options (last 12 months)
@@ -231,6 +262,23 @@ export default function Expenses() {
                   </Select>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Projekt/Kunde</label>
+                <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
+                  <SelectTrigger className="w-[280px]">
+                    <SelectValue placeholder="Alle Projekte" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle Projekte</SelectItem>
+                    {customers.map((customer: any) => (
+                      <SelectItem key={customer.id} value={String(customer.id)}>
+                        {customer.projectName} - {customer.provider}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
               <Button
@@ -308,7 +356,7 @@ export default function Expenses() {
               <Receipt className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{allExpenses.length}</div>
+              <div className="text-2xl font-bold">{filteredExpenseRows.length}</div>
               <p className="text-xs text-muted-foreground">
                 Reisekosten-Positionen
               </p>
@@ -388,14 +436,14 @@ export default function Expenses() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {allExpenses.length === 0 ? (
+                {filteredExpenseRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      Keine Reisekosten im ausgewählten Zeitraum
+                      Keine Reisekosten für Filterauswahl im ausgewählten Zeitraum
                     </TableCell>
                   </TableRow>
                 ) : (
-                  expenseRows.map((expense: any) => (
+                  filteredExpenseRows.map((expense: any) => (
                     <TableRow key={expense.id}>
                       <TableCell>{new Date(expense.date).toLocaleDateString("de-DE")}</TableCell>
                       <TableCell>{CATEGORY_LABELS[expense.category] || expense.category}</TableCell>
