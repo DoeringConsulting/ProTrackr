@@ -79,6 +79,10 @@ export default function ProjectDetail() {
     },
     { enabled: !!customerId }
   );
+  const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({
+    startDate,
+    endDate,
+  });
   const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
 
   const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
@@ -121,9 +125,31 @@ export default function ProjectDetail() {
 
   const averagePerDay = useMemo(() => {
     if (expenseRows.length === 0) return 0;
-    const uniqueDates = new Set(expenseRows.map((e: any) => e.date));
-    return totalAmount / uniqueDates.size;
-  }, [expenseRows, totalAmount]);
+    const parseDayKey = (value: string | Date) => {
+      const date = typeof value === "string" ? new Date(value) : value;
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    };
+    const countCalendarDays = (from: Date, to: Date) => {
+      const ms = to.getTime() - from.getTime();
+      return Math.max(1, Math.floor(ms / (1000 * 60 * 60 * 24)) + 1);
+    };
+
+    let calendarDays = 1;
+    if (startDate && endDate) {
+      calendarDays = countCalendarDays(parseDayKey(startDate), parseDayKey(endDate));
+    } else {
+      const sorted = expenseRows
+        .map((row: any) => parseDayKey(row.date))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+      calendarDays = countCalendarDays(sorted[0], sorted[sorted.length - 1]);
+    }
+
+    const customerEntries = timeEntries.filter((entry: any) => entry.customerId === customerId);
+    const manDays =
+      customerEntries.reduce((sum: number, entry: any) => sum + Number(entry.manDays || 0), 0) / 1000;
+    const divisor = Math.max(1, calendarDays, Math.ceil(manDays));
+    return totalAmount / divisor;
+  }, [expenseRows, totalAmount, timeEntries, customerId, startDate, endDate]);
 
   const missingConversionCount = useMemo(
     () =>

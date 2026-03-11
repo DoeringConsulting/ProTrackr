@@ -83,6 +83,7 @@ export default function Import() {
               mandatenNr: row["Mandanten-Nr"] || "",
               projectName: row["Projekt"] || row["Project"] || "",
               location: row["Ort"] || row["Location"] || "",
+              standardDayHours: Math.round((row["Stunden/Tag"] || row["Hours/Day"] || 8) * 100),
               onsiteRate: Math.round((row["Onsite-Tagessatz"] || 0) * 100),
               remoteRate: Math.round((row["Remote-Tagessatz"] || 0) * 100),
               kmRate: Math.round((row["km-Pauschale"] || 0) * 100),
@@ -238,7 +239,7 @@ export default function Import() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>• Die Excel-Datei sollte ein Tabellenblatt namens "Kunden" enthalten</p>
-            <p>• Erforderliche Spalten: Provider, Mandanten-Nr, Projekt, Ort, Onsite-Tagessatz, Remote-Tagessatz, km-Pauschale, Verpflegungspauschale, Kostenmodell</p>
+            <p>• Erforderliche Spalten: Provider, Mandanten-Nr, Projekt, Ort, Stunden/Tag, Onsite-Tagessatz, Remote-Tagessatz, km-Pauschale, Verpflegungspauschale, Kostenmodell</p>
             <p>• Tagessätze und Pauschalen sollten als Dezimalzahlen angegeben werden (z.B. 800.00 für €800)</p>
             <p>• Kostenmodell sollte entweder "Inclusive" oder "Exclusive" sein</p>
             <p>• Duplikate werden übersprungen und als Fehler gemeldet</p>

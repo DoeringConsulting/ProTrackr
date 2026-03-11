@@ -38,6 +38,7 @@ type CustomerFormData = {
   mandatenNr: string;
   projectName: string;
   location: string;
+  standardDayHours: string;
   onsiteRate: string;
   onsiteRateCurrency: string;
   remoteRate: string;
@@ -59,6 +60,7 @@ const initialFormData: CustomerFormData = {
   mandatenNr: "",
   projectName: "",
   location: "",
+  standardDayHours: "8.00",
   onsiteRate: "",
   onsiteRateCurrency: "EUR",
   remoteRate: "",
@@ -182,10 +184,16 @@ export default function Customers() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!formData.standardDayHours || Number(formData.standardDayHours) <= 0) {
+      toast.error("Bitte eine gültige Stundenanzahl pro Tag angeben");
+      return;
+    }
+
     const baseData = {
       provider: formData.provider,
       projectName: formData.projectName,
       location: formData.location,
+      standardDayHours: Math.round(parseFloat(formData.standardDayHours || "8") * 100),
       onsiteRate: Math.round(parseFloat(formData.onsiteRate) * 100),
       onsiteRateCurrency: formData.onsiteRateCurrency,
       remoteRate: Math.round(parseFloat(formData.remoteRate) * 100),
@@ -224,6 +232,7 @@ export default function Customers() {
       mandatenNr: customer.mandatenNr,
       projectName: customer.projectName,
       location: customer.location,
+      standardDayHours: ((customer.standardDayHours ?? 800) / 100).toFixed(2),
       onsiteRate: (customer.onsiteRate / 100).toFixed(2),
       onsiteRateCurrency: customer.onsiteRateCurrency || "EUR",
       remoteRate: (customer.remoteRate / 100).toFixed(2),
@@ -359,6 +368,21 @@ export default function Customers() {
                         required
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="standardDayHours">Stunden pro Tag (Berechnungsbasis) *</Label>
+                    <Input
+                      id="standardDayHours"
+                      type="number"
+                      step="0.25"
+                      min="1"
+                      value={formData.standardDayHours}
+                      onChange={(e) =>
+                        setFormData({ ...formData, standardDayHours: e.target.value })
+                      }
+                      required
+                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -619,6 +643,7 @@ export default function Customers() {
                       <TableHead>Mandanten-Nr</TableHead>
                       <TableHead>Projekt</TableHead>
                       <TableHead>Ort</TableHead>
+                      <TableHead className="text-right">Std/Tag</TableHead>
                       <TableHead className="text-right">Onsite</TableHead>
                       <TableHead className="text-right">Remote</TableHead>
                       <TableHead>Modell</TableHead>
@@ -654,6 +679,9 @@ export default function Customers() {
                         <TableCell>{customer.mandatenNr}</TableCell>
                         <TableCell>{customer.projectName}</TableCell>
                         <TableCell>{customer.location}</TableCell>
+                        <TableCell className="text-right">
+                          {((customer.standardDayHours ?? 800) / 100).toFixed(2)}
+                        </TableCell>
                         <TableCell className="text-right">
                           €{(customer.onsiteRate / 100).toFixed(2)}
                         </TableCell>

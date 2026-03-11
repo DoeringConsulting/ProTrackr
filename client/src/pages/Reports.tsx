@@ -375,23 +375,18 @@ export default function Reports() {
       };
     });
 
-    const getExpenseBlock = (category: string) => {
-      if (category === "hotel") return "Hotel";
-      if (category === "flight") return "Przelot";
-      if (category === "taxi" || category === "train" || category === "car" || category === "transport") {
-        return "Transport";
-      }
-      if (category === "meal" || category === "food") return "Gastronomia";
-      if (category === "fuel") return "Paliwo";
-      return "Inne";
-    };
-
     const bookkeepingExpenses = expensesDetailedAll.map((expense) => {
       const dateKey = dateKeyOf(expense.date as any);
       const dateProject = projectByDate.get(dateKey);
+      const endDate =
+        expense.category === "hotel"
+          ? expense.checkOutDate || expense.date
+          : expense.category === "flight"
+            ? expense.checkOutDate || expense.date
+            : expense.date;
       return {
         date: expense.date,
-        block: getExpenseBlock(expense.category),
+        endDate,
         category: expense.category,
         amount: expense.amount,
         currency: expense.sourceCurrency,

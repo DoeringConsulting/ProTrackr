@@ -293,6 +293,29 @@ function validateFlightAndHotelExpenseRules(input: {
   }
 }
 
+function calculateTimeEntryFinancials(input: {
+  hoursMinutes: number;
+  entryType: string;
+  customer: {
+    onsiteRate: number;
+    remoteRate: number;
+    standardDayHours?: number | null;
+  };
+}) {
+  const baseHours = Math.max(1, Number(input.customer.standardDayHours ?? 800) / 100);
+  const baseMinutesPerManDay = baseHours * 60;
+  const rawManDays = input.hoursMinutes / baseMinutesPerManDay;
+  const manDaysThousandths = Math.round(rawManDays * 1000);
+  const manDays = manDaysThousandths / 1000;
+  const selectedRate = input.entryType === "onsite" ? input.customer.onsiteRate : input.customer.remoteRate;
+  const calculatedAmount = Math.round(manDays * selectedRate);
+  return {
+    rate: selectedRate,
+    manDaysThousandths,
+    calculatedAmount,
+  };
+}
+
 export const appRouter = router({
   invoiceNumbers: router({
     generate: protectedProcedure
@@ -364,6 +387,7 @@ export const appRouter = router({
         mandatenNr: z.string().optional(),
         projectName: z.string(),
         location: z.string(),
+        standardDayHours: z.number().min(1).max(2400).optional(),
         onsiteRate: z.number(),
         onsiteRateCurrency: z.string().optional(),
         remoteRate: z.number(),
@@ -418,6 +442,7 @@ export const appRouter = router({
 
       return await createCustomer({
         ...input,
+        standardDayHours: input.standardDayHours ?? 800,
         mandatenNr: assignedMandatenNr,
         userId: ctx.user.id,
       });
@@ -429,6 +454,7 @@ export const appRouter = router({
         mandatenNr: z.string().optional(),
         projectName: z.string().optional(),
         location: z.string().optional(),
+        standardDayHours: z.number().min(1).max(2400).optional(),
         onsiteRate: z.number().optional(),
         onsiteRateCurrency: z.string().optional(),
         remoteRate: z.number().optional(),
@@ -550,16 +576,33 @@ export const appRouter = router({
         entryType: z.enum(["onsite", "remote", "off_duty", "business_trip"]),
         description: z.string().optional(),
         hours: z.number(),
-        rate: z.number(),
-        calculatedAmount: z.number(),
-        manDays: z.number(),
+        rate: z.number().optional(),
+        calculatedAmount: z.number().optional(),
+        manDays: z.number().optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { createTimeEntry } = await import("./db");
+      const { createTimeEntry, getCustomerById } = await import("./db");
+      const customer = await getCustomerById(input.customerId);
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+      }
+      if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+      }
+
+      const financials = calculateTimeEntryFinancials({
+        hoursMinutes: input.hours,
+        entryType: input.entryType,
+        customer,
+      });
+
       return await createTimeEntry({
         ...input,
         userId: ctx.user.id,
         date: new Date(input.date),
+        rate: financials.rate,
+        manDays: financials.manDaysThousandths,
+        calculatedAmount: financials.calculatedAmount,
       });
     }),
     update: protectedProcedure.input((val: unknown) => {
@@ -578,7 +621,7 @@ export const appRouter = router({
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { id, date, ...data } = input;
-      const { getTimeEntryById, updateTimeEntry } = await import("./db");
+      const { getCustomerById, getTimeEntryById, updateTimeEntry } = await import("./db");
       const existing = await getTimeEntryById(id);
 
       if (!existing) {
@@ -588,9 +631,29 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
       }
 
+      const nextCustomerId = data.customerId ?? existing.customerId;
+      const customer = await getCustomerById(nextCustomerId);
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+      }
+      if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+      }
+
+      const nextHours = data.hours ?? existing.hours;
+      const nextEntryType = data.entryType ?? existing.entryType;
+      const financials = calculateTimeEntryFinancials({
+        hoursMinutes: nextHours,
+        entryType: nextEntryType,
+        customer,
+      });
+
       await updateTimeEntry(id, {
         ...data,
         ...(date ? { date: new Date(date) } : {}),
+        rate: financials.rate,
+        manDays: financials.manDaysThousandths,
+        calculatedAmount: financials.calculatedAmount,
       });
       return { success: true };
     }),
@@ -692,7 +755,7 @@ export const appRouter = router({
         const weekday = `${weekdayDe[shiftedDate.getDay()]}/${weekdayPl[shiftedDate.getDay()]}`;
 
         const created = await createTimeEntry({
-          userId: ctx.user.id,
+          userId: entry.userId,
           customerId: entry.customerId,
           date: new Date(`${shiftedDateKey}T00:00:00`),
           weekday,
@@ -726,7 +789,7 @@ export const appRouter = router({
 
         const payload: Record<string, any> = {
           timeEntryId: mappedTimeEntryId ?? undefined,
-          userId: mappedTimeEntryId ? undefined : ctx.user.id,
+          userId: mappedTimeEntryId ? undefined : expense.userId ?? ctx.user.id,
           date: shiftedPrimaryDate,
           category: expense.category,
           amount: expense.amount,

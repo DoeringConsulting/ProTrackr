@@ -446,7 +446,6 @@ export default function TimeTracking() {
     }
 
     const totalMinutes = parseInt(formData.hours) * 60 + parseInt(formData.minutes);
-    const manDays = totalMinutes / 480; // 8 hours = 1 man day
 
     const selectedDate = new Date(formData.date);
     const weekdayDe = WEEKDAYS_DE[selectedDate.getDay()];
@@ -454,6 +453,9 @@ export default function TimeTracking() {
 
     // Get customer to calculate rate
     const customer = customers?.find(c => c.id === formData.customerId);
+    const standardDayHours = Math.max(1, Number(customer?.standardDayHours ?? 800) / 100);
+    const baseMinutesPerManDay = standardDayHours * 60;
+    const manDays = totalMinutes / baseMinutesPerManDay;
     const rate = formData.entryType === "onsite" ? (customer?.onsiteRate || 0) : (customer?.remoteRate || 0);
     const calculatedAmount = Math.round((manDays * rate));
 
@@ -589,7 +591,9 @@ export default function TimeTracking() {
     const totalMinutes = timeEntries.reduce((sum, entry) => sum + entry.hours, 0);
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    const manDays = (totalMinutes / 480).toFixed(3);
+    const manDays = (
+      timeEntries.reduce((sum, entry) => sum + Number(entry.manDays || 0), 0) / 1000
+    ).toFixed(3);
     return { hours: `${hours}:${minutes.toString().padStart(2, '0')}h`, manDays: `${manDays} MT` };
   };
 

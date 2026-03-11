@@ -66,6 +66,10 @@ export default function Expenses() {
     startDate,
     endDate,
   });
+  const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({
+    startDate,
+    endDate,
+  });
   const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
 
   const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
@@ -109,9 +113,57 @@ export default function Expenses() {
 
   const averagePerDay = useMemo(() => {
     if (expenseRows.length === 0) return 0;
-    const uniqueDates = new Set(expenseRows.map((e: any) => e.date));
-    return totalAmount / uniqueDates.size;
-  }, [expenseRows, totalAmount]);
+
+    const parseDayKey = (value: string | Date) => {
+      const date = typeof value === "string" ? new Date(value) : value;
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    };
+    const countCalendarDays = (from: Date, to: Date) => {
+      const ms = to.getTime() - from.getTime();
+      return Math.max(1, Math.floor(ms / (1000 * 60 * 60 * 24)) + 1);
+    };
+
+    let calendarDays = 1;
+    if (startDate && endDate) {
+      calendarDays = countCalendarDays(parseDayKey(startDate), parseDayKey(endDate));
+    } else {
+      const dateCandidates = expenseRows
+        .map((row: any) => parseDayKey(row.date))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+      const minDate = dateCandidates[0];
+      const maxDate = dateCandidates[dateCandidates.length - 1];
+      if (minDate && maxDate) {
+        calendarDays = countCalendarDays(minDate, maxDate);
+      }
+    }
+
+    const manDays = timeEntries.reduce((sum: number, entry: any) => sum + Number(entry.manDays || 0), 0) / 1000;
+    const divisor = Math.max(1, calendarDays, Math.ceil(manDays));
+    return totalAmount / divisor;
+  }, [expenseRows, totalAmount, timeEntries, startDate, endDate]);
+
+  const averageBaseLabel = useMemo(() => {
+    const parseDayKey = (value: string | Date) => {
+      const date = typeof value === "string" ? new Date(value) : value;
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    };
+    const countCalendarDays = (from: Date, to: Date) => {
+      const ms = to.getTime() - from.getTime();
+      return Math.max(1, Math.floor(ms / (1000 * 60 * 60 * 24)) + 1);
+    };
+    let calendarDays = 1;
+    if (startDate && endDate) {
+      calendarDays = countCalendarDays(parseDayKey(startDate), parseDayKey(endDate));
+    } else if (expenseRows.length > 0) {
+      const sorted = expenseRows
+        .map((row: any) => parseDayKey(row.date))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+      calendarDays = countCalendarDays(sorted[0], sorted[sorted.length - 1]);
+    }
+    const manDays =
+      timeEntries.reduce((sum: number, entry: any) => sum + Number(entry.manDays || 0), 0) / 1000;
+    return `Kalendertage: ${calendarDays} | kalk. Manntage: ${manDays.toFixed(3)}`;
+  }, [expenseRows, timeEntries, startDate, endDate]);
 
   const missingConversionCount = useMemo(
     () =>
@@ -268,7 +320,7 @@ export default function Expenses() {
                 {formatMoney(Math.round(averagePerDay * 100), chartCurrency)}
               </div>
               <p className="text-xs text-muted-foreground">
-                Basierend auf {new Set(expenseRows.map((e: any) => e.date)).size} Tagen
+                Basierend auf {averageBaseLabel}
               </p>
             </CardContent>
           </Card>

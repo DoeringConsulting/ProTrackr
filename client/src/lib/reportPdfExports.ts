@@ -22,8 +22,8 @@ type BookkeepingEntry = {
 
 type BookkeepingExpense = {
   date: string | Date;
+  endDate?: string | Date | null;
   category: string;
-  block: string;
   amount: number;
   currency: string;
   amountEur: number | null;
@@ -72,15 +72,41 @@ function getExpenseDetailLabel(expense: BookkeepingExpense) {
   if (expense.category === "hotel") {
     const checkIn = expense.checkInDate ? formatDateDe(expense.checkInDate) : "-";
     const checkOut = expense.checkOutDate ? formatDateDe(expense.checkOutDate) : "-";
-    return `Check-in: ${checkIn} | Check-out: ${checkOut}`;
+    return `Zameldowanie: ${checkIn} | Wymeldowanie: ${checkOut}`;
   }
   if (expense.category === "flight") {
-    const route = expense.flightRouteType === "international" ? "International" : "Inland";
+    const route = expense.flightRouteType === "international" ? "Miedzynarodowy" : "Krajowy";
     const departure = expense.departureTime || "-";
     const arrival = expense.arrivalTime || "-";
-    return `Typ: ${route} | Abflug: ${departure} | Ankunft: ${arrival}`;
+    return `Typ lotu: ${route} | Odlot: ${departure} | Przylot: ${arrival}`;
   }
   return "-";
+}
+
+function getExpenseCategoryPl(category: string) {
+  const map: Record<string, string> = {
+    hotel: "Hotel",
+    flight: "Lot",
+    taxi: "Taxi",
+    train: "Pociag",
+    car: "Samochod",
+    transport: "Transport",
+    fuel: "Paliwo",
+    meal: "Posilek",
+    food: "Gastronomia",
+    other: "Inne",
+  };
+  return map[category] || category;
+}
+
+function getEntryTypePl(entryType: string) {
+  const map: Record<string, string> = {
+    onsite: "Stacjonarnie",
+    remote: "Zdalnie",
+    off_duty: "Wolne",
+    business_trip: "Podroz sluzbowa",
+  };
+  return map[entryType] || entryType;
 }
 
 async function savePdfWithFallback(doc: jsPDF, filename: string) {
@@ -134,7 +160,7 @@ export async function exportPolishBookkeepingReportToPDF(input: {
       entry.projectName || "-",
       entry.provider || "-",
       entry.location || "-",
-      entry.entryType || "-",
+      getEntryTypePl(entry.entryType || "-"),
       formatHours(entry.hours),
       formatManDays(entry.manDays),
       formatMoney(entry.rate, entry.sourceCurrency || "EUR"),
@@ -148,8 +174,8 @@ export async function exportPolishBookkeepingReportToPDF(input: {
   autoTable(doc, {
     startY: detailStartY,
     head: [[
-      "Data",
-      "Blok",
+      "Data poczatkowa",
+      "Data koncowa",
       "Kategoria",
       "Projekt/Klient",
       "Szczegoly",
@@ -160,8 +186,8 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     ]],
     body: input.expenses.map((exp) => [
       formatDateDe(exp.date),
-      exp.block,
-      exp.category,
+      exp.endDate ? formatDateDe(exp.endDate) : formatDateDe(exp.date),
+      getExpenseCategoryPl(exp.category),
       `${exp.projectName || "-"} / ${exp.provider || "-"}`,
       getExpenseDetailLabel(exp),
       formatMoney(exp.amount, exp.currency),
@@ -180,10 +206,10 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     body: [
       ["Suma godzin", formatHours(input.summary.totalHoursMinutes)],
       ["Suma man-days", formatManDays(input.summary.totalManDays)],
-      ["Umsatz (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
+      ["Przychod (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
       ["Koszty podrozy (EUR)", formatMoney(input.summary.travelEur, "EUR")],
       [
-        "Ergebnis (Umsatz - Reisekosten) (EUR)",
+        "Wynik (Przychod - Koszty podrozy) (EUR)",
         formatMoney(input.summary.revenueEur - input.summary.travelEur, "EUR"),
       ],
     ],

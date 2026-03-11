@@ -61,6 +61,7 @@ export const customers = mysqlTable("customers", {
   mandatenNr: varchar("mandatenNr", { length: 50 }).notNull(),
   projectName: varchar("projectName", { length: 255 }).notNull(),
   location: varchar("location", { length: 255 }).notNull(),
+  standardDayHours: int("standardDayHours").notNull().default(800), // hundredths (800 = 8.00h)
   onsiteRate: int("onsiteRate").notNull(), // in cents
   onsiteRateCurrency: varchar("onsiteRateCurrency", { length: 3 }).default("EUR").notNull(),
   remoteRate: int("remoteRate").notNull(), // in cents
