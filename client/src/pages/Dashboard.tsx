@@ -535,7 +535,7 @@ export default function Dashboard() {
       const [currency, amount] = Array.from(expenseByCurrency.entries())[0];
       return formatMoney(amount, currency);
     }
-    return `${expenseByCurrency.size} Waehrungen`;
+    return `${expenseByCurrency.size} Währungen`;
   })();
 
   const stats = [
@@ -686,7 +686,7 @@ export default function Dashboard() {
             {showUnifiedCurrency ? "Einheitliche Währung aktiv" : "Einheitliche Währung"}
           </Button>
           <div className="w-[150px]">
-            <Label className="sr-only">Zielwaehrung</Label>
+            <Label className="sr-only">Zielwährung</Label>
             <Select
               value={targetCurrency}
               onValueChange={(value) => setTargetCurrency(value as SupportedCurrency)}
@@ -776,7 +776,7 @@ export default function Dashboard() {
                 <CardTitle>Kostenverteilung</CardTitle>
               </div>
               <CardDescription>
-                Kostenaufschluesselung ({selectedPeriodLabel}){" "}
+                Kostenaufschlüsselung ({selectedPeriodLabel}){" "}
                 {showUnifiedCurrency
                   ? `in ${targetCurrency}`
                   : "Anteile nach EUR-Basis, Beschriftung in Originalwährungen"}{" "}

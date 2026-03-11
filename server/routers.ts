@@ -103,6 +103,82 @@ function formatMandatenNumber(sequence: number): string {
   return String(sequence).padStart(3, "0");
 }
 
+type CopyScope = "day" | "week" | "month";
+
+function formatDateKeyLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKeyInput(value: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00`);
+  }
+  return new Date(value);
+}
+
+function addMonthsClamped(date: Date, months: number): Date {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+
+  const targetMonthDate = new Date(year, month + months, 1);
+  const targetYear = targetMonthDate.getFullYear();
+  const targetMonth = targetMonthDate.getMonth();
+  const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  return new Date(targetYear, targetMonth, Math.min(day, lastDayOfTargetMonth));
+}
+
+function getScopeRange(anchorDate: Date, scope: CopyScope) {
+  const normalizedAnchor = new Date(
+    anchorDate.getFullYear(),
+    anchorDate.getMonth(),
+    anchorDate.getDate()
+  );
+
+  if (scope === "day") {
+    return { start: normalizedAnchor, end: normalizedAnchor };
+  }
+
+  if (scope === "week") {
+    const start = new Date(normalizedAnchor);
+    const day = start.getDay();
+    const diffToMonday = (day + 6) % 7;
+    start.setDate(start.getDate() - diffToMonday);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return { start, end };
+  }
+
+  const start = new Date(normalizedAnchor.getFullYear(), normalizedAnchor.getMonth(), 1);
+  const end = new Date(normalizedAnchor.getFullYear(), normalizedAnchor.getMonth() + 1, 0);
+  return { start, end };
+}
+
+function shiftDateByScope(sourceDate: Date, scope: CopyScope): Date {
+  const normalized = new Date(sourceDate.getFullYear(), sourceDate.getMonth(), sourceDate.getDate());
+  if (scope === "day") {
+    normalized.setDate(normalized.getDate() + 1);
+    return normalized;
+  }
+  if (scope === "week") {
+    normalized.setDate(normalized.getDate() + 7);
+    return normalized;
+  }
+  return addMonthsClamped(normalized, 1);
+}
+
+function tryShiftDateValue(value: unknown, scope: CopyScope): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const input = String(value).trim();
+  if (!input) return undefined;
+  const source = parseDateKeyInput(input.split(" ")[0] ?? input);
+  if (Number.isNaN(source.getTime())) return undefined;
+  return formatDateKeyLocal(shiftDateByScope(source, scope));
+}
+
 const expenseCategoryValues = [
   "car",
   "train",
@@ -569,6 +645,121 @@ export const appRouter = router({
       }
       
       return { success: true, count: createdEntries.length };
+    }),
+    copyRangeToNext: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        scope: z.enum(["day", "week", "month"]),
+        anchorDate: z.string(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { getTimeEntries, getAllExpenses, createTimeEntry, createExpense } = await import("./db");
+
+      const anchor = parseDateKeyInput(input.anchorDate);
+      if (Number.isNaN(anchor.getTime())) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Ungueltiges Datum fuer Kopiervorgang" });
+      }
+
+      const { start, end } = getScopeRange(anchor, input.scope);
+      const sourceStartKey = formatDateKeyLocal(start);
+      const sourceEndKey = formatDateKeyLocal(end);
+
+      const sourceEntries = await getTimeEntries(ctx.user.id, start, end);
+      const sourceExpenses = await getAllExpenses(ctx.user.id, sourceStartKey, sourceEndKey);
+
+      if (sourceEntries.length === 0 && sourceExpenses.length === 0) {
+        return {
+          success: true,
+          copiedTimeEntries: 0,
+          copiedExpenses: 0,
+          skippedExpenses: 0,
+          sourceStart: sourceStartKey,
+          sourceEnd: sourceEndKey,
+        };
+      }
+
+      const weekdayDe = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+      const weekdayPl = ["Nd", "Pn", "Wt", "Sr", "Cz", "Pt", "Sb"];
+      const entryIdMap = new Map<number, number>();
+      let copiedTimeEntries = 0;
+      let copiedExpenses = 0;
+      let skippedExpenses = 0;
+
+      for (const entry of sourceEntries) {
+        const sourceDate = new Date(entry.date as any);
+        if (Number.isNaN(sourceDate.getTime())) continue;
+        const shiftedDate = shiftDateByScope(sourceDate, input.scope);
+        const shiftedDateKey = formatDateKeyLocal(shiftedDate);
+        const weekday = `${weekdayDe[shiftedDate.getDay()]}/${weekdayPl[shiftedDate.getDay()]}`;
+
+        const created = await createTimeEntry({
+          userId: ctx.user.id,
+          customerId: entry.customerId,
+          date: new Date(`${shiftedDateKey}T00:00:00`),
+          weekday,
+          projectName: entry.projectName,
+          entryType: entry.entryType,
+          description: entry.description,
+          hours: entry.hours,
+          rate: entry.rate,
+          calculatedAmount: entry.calculatedAmount,
+          manDays: entry.manDays,
+        });
+        if (created && typeof created === "object" && "id" in created) {
+          entryIdMap.set(Number(entry.id), Number((created as any).id));
+          copiedTimeEntries += 1;
+        }
+      }
+
+      for (const expense of sourceExpenses as any[]) {
+        const shiftedPrimaryDate = tryShiftDateValue(expense.date, input.scope);
+        if (!shiftedPrimaryDate) continue;
+
+        const mappedTimeEntryId =
+          expense.timeEntryId && entryIdMap.has(Number(expense.timeEntryId))
+            ? Number(entryIdMap.get(Number(expense.timeEntryId)))
+            : null;
+
+        if (expense.timeEntryId && !mappedTimeEntryId) {
+          skippedExpenses += 1;
+          continue;
+        }
+
+        const payload: Record<string, any> = {
+          timeEntryId: mappedTimeEntryId ?? undefined,
+          userId: mappedTimeEntryId ? undefined : ctx.user.id,
+          date: shiftedPrimaryDate,
+          category: expense.category,
+          amount: expense.amount,
+          currency: expense.currency || "EUR",
+          comment: expense.comment || undefined,
+          travelStart: expense.travelStart || undefined,
+          travelEnd: expense.travelEnd || undefined,
+          fullDay: Number(expense.fullDay || 0),
+          ticketNumber: expense.ticketNumber || undefined,
+          flightNumber: expense.flightNumber || undefined,
+          flightRouteType: expense.flightRouteType || undefined,
+          departureTime: expense.departureTime || undefined,
+          arrivalTime: expense.arrivalTime || undefined,
+          checkInDate: tryShiftDateValue(expense.checkInDate, input.scope) || undefined,
+          checkOutDate: tryShiftDateValue(expense.checkOutDate, input.scope) || undefined,
+          distance: expense.distance ?? undefined,
+          rate: expense.rate ?? undefined,
+          liters: expense.liters ?? undefined,
+          pricePerLiter: expense.pricePerLiter ?? undefined,
+        };
+
+        await createExpense(payload);
+        copiedExpenses += 1;
+      }
+
+      return {
+        success: true,
+        copiedTimeEntries,
+        copiedExpenses,
+        skippedExpenses,
+        sourceStart: sourceStartKey,
+        sourceEnd: sourceEndKey,
+      };
     }),
   }),
 

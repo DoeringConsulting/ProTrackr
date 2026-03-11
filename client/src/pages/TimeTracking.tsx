@@ -41,6 +41,8 @@ type TimeEntryFormData = {
   notes: string;
 };
 
+type CopyScope = "day" | "week" | "month";
+
 const initialFormData: TimeEntryFormData = {
   customerId: null,
   date: "",
@@ -136,6 +138,48 @@ function dayDiff(startDateKey: string, endDateKey: string): number {
   return Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
 }
 
+function addMonthsClamped(dateKey: string, months: number): string {
+  const source = parseDateKey(dateKey);
+  const y = source.getFullYear();
+  const m = source.getMonth();
+  const d = source.getDate();
+  const targetStart = new Date(y, m + months, 1);
+  const lastDay = new Date(targetStart.getFullYear(), targetStart.getMonth() + 1, 0).getDate();
+  return formatLocalDate(
+    new Date(targetStart.getFullYear(), targetStart.getMonth(), Math.min(d, lastDay))
+  );
+}
+
+function getScopeRanges(anchorDateKey: string, scope: CopyScope) {
+  const anchor = parseDateKey(anchorDateKey);
+  let sourceStart = formatLocalDate(anchor);
+  let sourceEnd = formatLocalDate(anchor);
+  let targetStart = addDays(sourceStart, 1);
+  let targetEnd = addDays(sourceEnd, 1);
+
+  if (scope === "week") {
+    const day = anchor.getDay();
+    const diffToMonday = (day + 6) % 7;
+    const monday = new Date(anchor);
+    monday.setDate(anchor.getDate() - diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sourceStart = formatLocalDate(monday);
+    sourceEnd = formatLocalDate(sunday);
+    targetStart = addDays(sourceStart, 7);
+    targetEnd = addDays(sourceEnd, 7);
+  } else if (scope === "month") {
+    const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+    sourceStart = formatLocalDate(monthStart);
+    sourceEnd = formatLocalDate(monthEnd);
+    targetStart = addMonthsClamped(sourceStart, 1);
+    targetEnd = addMonthsClamped(sourceEnd, 1);
+  }
+
+  return { sourceStart, sourceEnd, targetStart, targetEnd };
+}
+
 type ExpenseCalendarItem = {
   id: number;
   category: string;
@@ -161,6 +205,9 @@ export default function TimeTracking() {
   const [isBulkCopyDialogOpen, setIsBulkCopyDialogOpen] = useState(false);
   const [bulkCopySourceId, setBulkCopySourceId] = useState<number | null>(null);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [isScopeCopyDialogOpen, setIsScopeCopyDialogOpen] = useState(false);
+  const [copyScope, setCopyScope] = useState<CopyScope>("day");
+  const [copyAnchorDate, setCopyAnchorDate] = useState(formatLocalDate(new Date()));
   const [isExpensesDialogOpen, setIsExpensesDialogOpen] = useState(false);
   const [selectedExpenseDate, setSelectedExpenseDate] = useState<Date | null>(null);
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
@@ -261,6 +308,22 @@ export default function TimeTracking() {
     },
     onError: (error) => {
       toast.error(`Fehler: ${error.message}`);
+    },
+  });
+
+  const copyRangeMutation = trpc.timeEntries.copyRangeToNext.useMutation({
+    onSuccess: (result) => {
+      utils.timeEntries.list.invalidate();
+      utils.expenses.list.invalidate();
+      const skipSuffix =
+        result.skippedExpenses > 0 ? `, ${result.skippedExpenses} Reisekosten übersprungen` : "";
+      toast.success(
+        `Kopiert: ${result.copiedTimeEntries} Zeiteinträge, ${result.copiedExpenses} Reisekosten${skipSuffix}`
+      );
+      setIsScopeCopyDialogOpen(false);
+    },
+    onError: (error) => {
+      toast.error(`Kopiervorgang fehlgeschlagen: ${error.message}`);
     },
   });
 
@@ -435,6 +498,17 @@ export default function TimeTracking() {
     setIsBulkCopyDialogOpen(false);
   };
 
+  const handleScopeCopySubmit = () => {
+    if (!copyAnchorDate) {
+      toast.error("Bitte ein Datum auswählen");
+      return;
+    }
+    copyRangeMutation.mutate({
+      scope: copyScope,
+      anchorDate: copyAnchorDate,
+    });
+  };
+
   const getEntriesForDate = (date: Date) => {
     if (!timeEntries) return [];
     const dateStr = formatLocalDate(date);
@@ -533,6 +607,7 @@ export default function TimeTracking() {
 
   const days = getDaysInMonth();
   const monthTotal = calculateMonthTotal();
+  const copyRanges = getScopeRanges(copyAnchorDate, copyScope);
   const computedHotelCheckOutDate =
     tempHotelCheckInDate && Number(tempHotelNights) >= 0
       ? addDays(tempHotelCheckInDate, Number(tempHotelNights))
@@ -546,6 +621,16 @@ export default function TimeTracking() {
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Zeiterfassung</h1>
             <p className="text-muted-foreground mt-2">Erfassen Sie Ihre Arbeitszeiten</p>
           </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCopyAnchorDate(formatLocalDate(expandedDay || new Date()));
+              setIsScopeCopyDialogOpen(true);
+            }}
+          >
+            <Copy className="h-4 w-4 mr-2" />
+            Copy & Paste
+          </Button>
         </div>
 
         <Card>
@@ -947,6 +1032,73 @@ export default function TimeTracking() {
                 </Button>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isScopeCopyDialogOpen} onOpenChange={setIsScopeCopyDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Copy & Paste für Tag/Woche/Monat</DialogTitle>
+              <DialogDescription>
+                Überträgt alle Zeiteinträge und Reisekosten auf den nächsten Zeitraum.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="copy-scope">Bereich</Label>
+                <Select value={copyScope} onValueChange={(value) => setCopyScope(value as CopyScope)}>
+                  <SelectTrigger id="copy-scope">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="day">Tag → nächster Tag</SelectItem>
+                    <SelectItem value="week">Woche → nächste Woche</SelectItem>
+                    <SelectItem value="month">Monat → nächster Monat</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="copy-anchor-date">Referenzdatum</Label>
+                <Input
+                  id="copy-anchor-date"
+                  type="date"
+                  value={copyAnchorDate}
+                  onChange={(e) => setCopyAnchorDate(e.target.value)}
+                />
+              </div>
+
+              <div className="rounded-md border p-3 text-sm">
+                <div>
+                  <span className="font-medium">Quelle:</span>{" "}
+                  {new Date(`${copyRanges.sourceStart}T00:00:00`).toLocaleDateString("de-DE")} –{" "}
+                  {new Date(`${copyRanges.sourceEnd}T00:00:00`).toLocaleDateString("de-DE")}
+                </div>
+                <div>
+                  <span className="font-medium">Ziel:</span>{" "}
+                  {new Date(`${copyRanges.targetStart}T00:00:00`).toLocaleDateString("de-DE")} –{" "}
+                  {new Date(`${copyRanges.targetEnd}T00:00:00`).toLocaleDateString("de-DE")}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsScopeCopyDialogOpen(false)}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                type="button"
+                onClick={handleScopeCopySubmit}
+                disabled={copyRangeMutation.isPending}
+              >
+                {copyRangeMutation.isPending ? "Kopiere..." : "Jetzt kopieren"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

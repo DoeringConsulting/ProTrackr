@@ -23,10 +23,16 @@ type BookkeepingEntry = {
 type BookkeepingExpense = {
   date: string | Date;
   category: string;
+  block: string;
   amount: number;
   currency: string;
   amountEur: number | null;
   amountPln: number | null;
+  checkInDate?: string | Date | null;
+  checkOutDate?: string | Date | null;
+  departureTime?: string | null;
+  arrivalTime?: string | null;
+  flightRouteType?: string | null;
   comment?: string | null;
   provider?: string | null;
   projectName?: string | null;
@@ -37,11 +43,6 @@ type BookkeepingSummary = {
   totalManDays: number;
   revenueEur: number;
   travelEur: number;
-  fixedCostsEur: number;
-  zusEur: number;
-  healthEur: number;
-  taxEur: number;
-  netEur: number;
 };
 
 function formatDateDe(value: string | Date) {
@@ -56,6 +57,30 @@ function formatHours(minutes: number) {
 
 function formatManDays(value: number) {
   return (value / 1000).toFixed(3);
+}
+
+function getPolishWeekday(weekdayValue: string | null | undefined) {
+  if (!weekdayValue) return "-";
+  const value = String(weekdayValue).trim();
+  if (!value) return "-";
+  const parts = value.split("/");
+  if (parts.length > 1) return (parts[1] || "-").trim();
+  return value;
+}
+
+function getExpenseDetailLabel(expense: BookkeepingExpense) {
+  if (expense.category === "hotel") {
+    const checkIn = expense.checkInDate ? formatDateDe(expense.checkInDate) : "-";
+    const checkOut = expense.checkOutDate ? formatDateDe(expense.checkOutDate) : "-";
+    return `Check-in: ${checkIn} | Check-out: ${checkOut}`;
+  }
+  if (expense.category === "flight") {
+    const route = expense.flightRouteType === "international" ? "International" : "Inland";
+    const departure = expense.departureTime || "-";
+    const arrival = expense.arrivalTime || "-";
+    return `Typ: ${route} | Abflug: ${departure} | Ankunft: ${arrival}`;
+  }
+  return "-";
 }
 
 async function savePdfWithFallback(doc: jsPDF, filename: string) {
@@ -105,7 +130,7 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     ]],
     body: input.entries.map((entry) => [
       formatDateDe(entry.date),
-      entry.weekday || "-",
+      getPolishWeekday(entry.weekday),
       entry.projectName || "-",
       entry.provider || "-",
       entry.location || "-",
@@ -124,8 +149,10 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     startY: detailStartY,
     head: [[
       "Data",
+      "Blok",
       "Kategoria",
       "Projekt/Klient",
+      "Szczegoly",
       "Kwota oryginalna",
       "Kwota EUR",
       "Kwota PLN",
@@ -133,8 +160,10 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     ]],
     body: input.expenses.map((exp) => [
       formatDateDe(exp.date),
+      exp.block,
       exp.category,
       `${exp.projectName || "-"} / ${exp.provider || "-"}`,
+      getExpenseDetailLabel(exp),
       formatMoney(exp.amount, exp.currency),
       exp.amountEur === null ? "Brak kursu" : formatMoney(exp.amountEur, "EUR"),
       exp.amountPln === null ? "Brak kursu" : formatMoney(exp.amountPln, "PLN"),
@@ -151,13 +180,12 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     body: [
       ["Suma godzin", formatHours(input.summary.totalHoursMinutes)],
       ["Suma man-days", formatManDays(input.summary.totalManDays)],
-      ["Przychod (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
+      ["Umsatz (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
       ["Koszty podrozy (EUR)", formatMoney(input.summary.travelEur, "EUR")],
-      ["Koszty stale (EUR)", formatMoney(input.summary.fixedCostsEur, "EUR")],
-      ["ZUS (EUR)", formatMoney(input.summary.zusEur, "EUR")],
-      ["Zdrowotne (EUR)", formatMoney(input.summary.healthEur, "EUR")],
-      ["Podatek (EUR)", formatMoney(input.summary.taxEur, "EUR")],
-      ["Wynik netto (EUR)", formatMoney(input.summary.netEur, "EUR")],
+      [
+        "Ergebnis (Umsatz - Reisekosten) (EUR)",
+        formatMoney(input.summary.revenueEur - input.summary.travelEur, "EUR"),
+      ],
     ],
     styles: { fontSize: 9 },
     headStyles: { fillColor: [3, 109, 121] },

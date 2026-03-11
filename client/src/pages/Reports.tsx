@@ -46,13 +46,29 @@ const EXPENSE_CATEGORY_LABELS: Record<
 };
 
 export default function Reports() {
-  const [startDate, setStartDate] = useState(() => {
+  const getTodayLocalDate = () => {
     const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date(getTodayLocalDate());
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const y = first.getFullYear();
+    const m = String(first.getMonth() + 1).padStart(2, "0");
+    const d = String(first.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   });
   const [endDate, setEndDate] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+    const now = new Date(getTodayLocalDate());
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const y = last.getFullYear();
+    const m = String(last.getMonth() + 1).padStart(2, "0");
+    const d = String(last.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   });
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
@@ -313,8 +329,35 @@ export default function Reports() {
   const customerData = calculateCustomerReport();
 
   const handleExportPolishBookkeepingReport = async () => {
+    const dateKeyOf = (value: string | Date) => {
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed.includes("T")) return trimmed.split("T")[0] || trimmed;
+        if (trimmed.includes(" ")) return trimmed.split(" ")[0] || trimmed;
+        return trimmed;
+      }
+      const y = value.getFullYear();
+      const m = String(value.getMonth() + 1).padStart(2, "0");
+      const d = String(value.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+
+    const projectByDate = new Map<string, { projectName: string; provider: string }>();
+
     const bookkeepingEntries = timeEntriesDetailed.map((entry) => {
       const customer = customersById.get(entry.customerId);
+      const dateKey = dateKeyOf(entry.date as any);
+      const fallbackRecord = {
+        projectName: entry.projectName || "-",
+        provider: customer?.provider || "-",
+      };
+      if (!projectByDate.has(dateKey)) {
+        projectByDate.set(dateKey, fallbackRecord);
+      }
+      if (entry.entryType === "onsite") {
+        projectByDate.set(dateKey, fallbackRecord);
+      }
+
       return {
         date: entry.date,
         weekday: entry.weekday,
@@ -332,17 +375,41 @@ export default function Reports() {
       };
     });
 
-    const bookkeepingExpenses = expensesDetailedAll.map((expense) => ({
-      date: expense.date,
-      category: expense.category,
-      amount: expense.amount,
-      currency: expense.sourceCurrency,
-      amountEur: expense.amountEur ?? null,
-      amountPln: expense.amountPln ?? null,
-      comment: expense.comment || "",
-      provider: expense.relatedCustomer?.provider || "",
-      projectName: expense.relatedEntry?.projectName || "",
-    }));
+    const getExpenseBlock = (category: string) => {
+      if (category === "hotel") return "Hotel";
+      if (category === "flight") return "Przelot";
+      if (category === "taxi" || category === "train" || category === "car" || category === "transport") {
+        return "Transport";
+      }
+      if (category === "meal" || category === "food") return "Gastronomia";
+      if (category === "fuel") return "Paliwo";
+      return "Inne";
+    };
+
+    const bookkeepingExpenses = expensesDetailedAll.map((expense) => {
+      const dateKey = dateKeyOf(expense.date as any);
+      const dateProject = projectByDate.get(dateKey);
+      return {
+        date: expense.date,
+        block: getExpenseBlock(expense.category),
+        category: expense.category,
+        amount: expense.amount,
+        currency: expense.sourceCurrency,
+        amountEur: expense.amountEur ?? null,
+        amountPln: expense.amountPln ?? null,
+        checkInDate: expense.checkInDate || null,
+        checkOutDate: expense.checkOutDate || null,
+        departureTime: expense.departureTime || null,
+        arrivalTime: expense.arrivalTime || null,
+        flightRouteType: expense.flightRouteType || null,
+        comment: expense.comment || "",
+        provider: expense.relatedCustomer?.provider || dateProject?.provider || "-",
+        projectName: expense.relatedEntry?.projectName || dateProject?.projectName || "-",
+      };
+    });
+
+    const revenueEur = timeEntriesDetailed.reduce((sum, entry) => sum + (entry.amountEur ?? 0), 0);
+    const travelEur = expensesDetailedAll.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0);
 
     await exportPolishBookkeepingReportToPDF({
       startDate,
@@ -353,13 +420,8 @@ export default function Reports() {
       summary: {
         totalHoursMinutes: timeEntries.reduce((sum, entry) => sum + entry.hours, 0),
         totalManDays: timeEntries.reduce((sum, entry) => sum + entry.manDays, 0),
-        revenueEur: accountingData.grossRevenue,
-        travelEur: accountingData.variableCosts,
-        fixedCostsEur: accountingData.totalFixedCosts,
-        zusEur: accountingData.zus,
-        healthEur: accountingData.healthInsurance,
-        taxEur: accountingData.tax,
-        netEur: accountingData.netProfit,
+        revenueEur,
+        travelEur,
       },
     });
     toast.success("Polnischer Buchhaltungsbericht wurde erstellt");
