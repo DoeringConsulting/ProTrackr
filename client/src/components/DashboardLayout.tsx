@@ -39,8 +39,8 @@ const menuItems = [
   { icon: FileText, label: "Berichte", path: "/reports" },
   { icon: Settings, label: "Einstellungen", path: "/settings" },
 ];
-const BRAND_LOGO_PATH = "/assets/doering-consulting-logo.png";
-const BRAND_ICON_PATH = "/assets/doering-consulting-icon.png";
+const BRAND_LOGO_PATH = "/assets/doering-consulting-logo.svg";
+const BRAND_ICON_PATH = "/assets/doering-consulting-icon.svg";
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -245,6 +245,34 @@ function DashboardLayoutContent({
                 );
               })}
             </SidebarMenu>
+            <div className="mt-auto px-3 pb-4 group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:pb-2">
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 group-data-[collapsible=icon]:p-2">
+                {!isCollapsed ? (
+                  logoAvailable ? (
+                    <img
+                      src={BRAND_LOGO_PATH}
+                      alt="Döring Consulting Logo"
+                      className="w-full max-h-40 object-contain mx-auto"
+                      onError={() => setLogoAvailable(false)}
+                    />
+                  ) : (
+                    <div className="text-center">
+                      <div className="text-sm font-semibold text-white">DÖRING Consulting</div>
+                      <div className="text-[10px] text-white/65 mt-1">CONSULTING · INTERIM · TRANSFORMATION</div>
+                    </div>
+                  )
+                ) : (
+                  iconAvailable && (
+                    <img
+                      src={BRAND_ICON_PATH}
+                      alt="Döring Icon"
+                      className="h-8 w-8 object-contain mx-auto"
+                      onError={() => setIconAvailable(false)}
+                    />
+                  )
+                )}
+              </div>
+            </div>
           </SidebarContent>
 
           <SidebarFooter className="p-3 border-t border-sidebar-border">

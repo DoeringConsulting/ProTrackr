@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Döring Consulting Icon">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b98847"/>
+      <stop offset="100%" stop-color="#e6d58a"/>
+    </linearGradient>
+  </defs>
+  <rect x="18" y="18" width="220" height="220" rx="16" fill="url(#gold)"/>
+  <rect x="73" y="73" width="110" height="110" fill="#0c8a99"/>
+  <circle cx="128" cy="128" r="30" fill="url(#gold)"/>
+  <circle cx="189" cy="67" r="30" fill="url(#gold)"/>
+  <circle cx="189" cy="189" r="30" fill="url(#gold)"/>
+  <circle cx="67" cy="189" r="30" fill="url(#gold)"/>
+</svg>

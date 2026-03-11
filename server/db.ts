@@ -381,31 +381,50 @@ export async function getExpensesByCustomer(userId: number, customerId: number, 
   return result;
 }
 
-// Document queries (placeholder - implement if needed)
 export async function deleteDocument(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  // Implement document deletion logic here
-  // TODO: Implement document deletion
+  const { documents } = await import("../drizzle/schema");
+  await db.delete(documents).where(eq(documents.id, id));
 }
 
 // ⚠️ User queries removed (auth disabled for development)
 
-// Document queries (placeholder - implement if needed)
 export async function createDocument(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  // Implement document creation logic here
-  // TODO: Implement document creation
-  return { id: 1 }; // Placeholder return
+  const { documents } = await import("../drizzle/schema");
+  const result = await db.insert(documents).values(data);
+  const insertId = Number((result as any)?.insertId ?? (result as any)?.[0]?.insertId ?? 0);
+  if (insertId > 0) {
+    return await getDocumentById(insertId);
+  }
+  const fallback = await db
+    .select()
+    .from(documents)
+    .where(and(eq(documents.userId, data.userId), eq(documents.fileKey, data.fileKey)))
+    .orderBy(desc(documents.id))
+    .limit(1);
+  return fallback[0] ?? null;
 }
 
 export async function getDocumentsByExpense(expenseId: number) {
   const db = await getDb();
   if (!db) return [];
-  // Implement document retrieval logic here
-  // TODO: Implement document retrieval
-  return []; // Placeholder return
+  const { documents } = await import("../drizzle/schema");
+  return await db
+    .select()
+    .from(documents)
+    .where(eq(documents.expenseId, expenseId))
+    .orderBy(desc(documents.createdAt));
+}
+
+export async function getDocumentById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { documents } = await import("../drizzle/schema");
+  const rows = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
+  return rows[0] ?? null;
 }
 
 // Exchange rate queries

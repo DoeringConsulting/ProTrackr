@@ -1394,8 +1394,15 @@ export const appRouter = router({
     }),
     delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
-    }).mutation(async ({ input }) => {
-      const { deleteDocument } = await import("./db");
+    }).mutation(async ({ ctx, input }) => {
+      const { deleteDocument, getDocumentById } = await import("./db");
+      const document = await getDocumentById(input.id);
+      if (!document) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Dokument nicht gefunden" });
+      }
+      if (!(await canAccessUserOwnedData(ctx.user, document.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf dieses Dokument" });
+      }
       await deleteDocument(input.id);
       return { success: true };
     }),

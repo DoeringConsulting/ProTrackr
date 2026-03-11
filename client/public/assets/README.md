@@ -1,9 +1,9 @@
 Place the original Doring Consulting brand assets here:
 
-- doering-consulting-logo.png (sidebar/logo lockup, recommended around 160x50)
-- doering-consulting-icon.png (favicon/icon only, 32x32 or larger square)
+- doering-consulting-logo.svg (sidebar/logo lockup)
+- doering-consulting-icon.svg (favicon/icon only)
 
 These files are referenced by:
 
-- /assets/doering-consulting-logo.png
-- /assets/doering-consulting-icon.png
+- /assets/doering-consulting-logo.svg
+- /assets/doering-consulting-icon.svg

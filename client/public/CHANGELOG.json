@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.54",
+      "date": "2026-03-11",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Sidebar-Logo im Navigationsbereich dauerhaft integriert",
+          "description": "Das Firmenlogo wird jetzt im freien Sidebar-Bereich angezeigt und ist auf allen Seiten mit Sidebar sichtbar, inklusive Fallback-Darstellung."
+        },
+        {
+          "type": "fix",
+          "title": "Dokumenten-API produktionsfaehig gemacht",
+          "description": "Platzhalter in create/list/delete wurden durch echte DB-Operationen ersetzt; Loeschen prueft jetzt zusaetzlich den Benutzerzugriff serverseitig."
+        },
+        {
+          "type": "improvement",
+          "title": "GoLive-Diagnose: Security-Haertung der Abhaengigkeiten",
+          "description": "Mehrere High/Critical Findings wurden durch Paketupdates und pnpm-Overrides beseitigt; verbleibendes Risiko betrifft aktuell nur xlsx (upstream ohne verfuegbaren Fix auf npm)."
+        }
+      ]
+    },
+    {
       "version": "1.0.53",
       "date": "2026-03-11",
       "changes": [

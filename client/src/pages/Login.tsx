@@ -43,7 +43,7 @@ export default function Login() {
         <CardHeader className="text-center">
           <div className="mx-auto mb-2">
             <img
-              src="/assets/doering-consulting-logo.png"
+              src="/assets/doering-consulting-logo.svg"
               alt="Döring Consulting"
               className="h-12 w-auto object-contain mx-auto"
             />
