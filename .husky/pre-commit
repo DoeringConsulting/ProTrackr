@@ -1,1 +1,22 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+HAS_NON_VERSION_CHANGES=""
+for FILE in $(git diff --cached --name-only); do
+  case "$FILE" in
+    package.json|CHANGELOG.json|client/public/CHANGELOG.json|client/src/hooks/useUpdateCheck.ts|client/src/components/VersionFooter.tsx|client/index.html)
+      ;;
+    *)
+      HAS_NON_VERSION_CHANGES="yes"
+      break
+      ;;
+  esac
+done
+
+if [ -n "$HAS_NON_VERSION_CHANGES" ]; then
+  echo "[pre-commit] Auto-Version: PATCH wird erhöht"
+  pnpm version:increment
+  git add package.json CHANGELOG.json client/public/CHANGELOG.json client/src/hooks/useUpdateCheck.ts client/src/components/VersionFooter.tsx client/index.html
+fi
+
 npm test

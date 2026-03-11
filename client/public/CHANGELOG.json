@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.51",
+      "date": "2026-03-11",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "PL-Buchhaltungsbericht: Steuerwerte korrekt in PLN-Basis",
+          "description": "ZUS, Zdrowotna, abzugsfaehige Zdrowotna, Steuerbasis und PIT werden jetzt fuer das PL-Regime aus PLN-Eingangswerten berechnet und in der UI korrekt in PLN bzw. optional in Zielwaehrung angezeigt."
+        },
+        {
+          "type": "improvement",
+          "title": "Automatische Patch-Versionierung im Pre-Commit-Hook",
+          "description": "Vor jedem Commit mit inhaltlichen Aenderungen wird die PATCH-Version automatisch erhoeht und alle Versionsdateien werden synchronisiert."
+        }
+      ]
+    },
+    {
       "version": "1.0.50",
       "date": "2026-03-06",
       "changes": [

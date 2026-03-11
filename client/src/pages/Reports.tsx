@@ -14,6 +14,7 @@ import { FileText, Download, Calculator } from "lucide-react";
 import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
 import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
 import { calculateAccountingUiData } from "@/lib/uiCalculations";
+import { calculatePolishTaxResult } from "@/lib/taxEnginePl";
 import {
   exportCustomerCostStatementToPDF,
   exportCustomerTimesheetToPDF,
@@ -93,6 +94,12 @@ export default function Reports() {
     return convertAmountCents(amountCents, source, "EUR", rateMap);
   };
 
+  const convertToPln = (amountCents: number, sourceCurrency?: string | null) => {
+    const source = (sourceCurrency || "EUR").toUpperCase();
+    if (source === "PLN") return amountCents;
+    return convertAmountCents(amountCents, source, "PLN", rateMap);
+  };
+
   const formatCalculatedCurrency = (amountInEurCents: number) => {
     if (!showUnifiedCurrency) return formatMoney(amountInEurCents, "EUR");
     const converted = convertAmountCents(amountInEurCents, "EUR", targetCurrency, rateMap);
@@ -104,6 +111,19 @@ export default function Reports() {
 
   const formatCalculatedCurrencyNegative = (amountInEurCents: number) => {
     const formatted = formatCalculatedCurrency(amountInEurCents);
+    return formatted.startsWith("Kurs fehlt") ? formatted : `-${formatted}`;
+  };
+
+  // Steuerwerte (PL-Regime) stammen aus PLN-Basiswerten.
+  const formatPlnBasedCurrency = (amountInPlnCents: number) => {
+    if (!showUnifiedCurrency) return formatMoney(amountInPlnCents, "PLN");
+    const converted = convertAmountCents(amountInPlnCents, "PLN", targetCurrency, rateMap);
+    if (converted === null) return `Kurs fehlt (PLN → ${targetCurrency})`;
+    return formatMoney(converted, targetCurrency);
+  };
+
+  const formatPlnBasedCurrencyNegative = (amountInPlnCents: number) => {
+    const formatted = formatPlnBasedCurrency(amountInPlnCents);
     return formatted.startsWith("Kurs fehlt") ? formatted : `-${formatted}`;
   };
 
@@ -205,6 +225,32 @@ export default function Reports() {
     const totalFixedCosts = fixedCostsDetailed.reduce((sum, cost) => sum + (cost.amountEur ?? 0), 0);
     const variableCosts = expensesDetailed.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0);
 
+    const mappedTaxProfile = taxProfile
+      ? {
+          taxCalculationMode: taxProfile.taxCalculationMode,
+          taxForm: taxProfile.taxForm,
+          zusRegime: taxProfile.zusRegime,
+          choroboweEnabled: taxProfile.choroboweEnabled,
+          fpFsEnabled: taxProfile.fpFsEnabled,
+          wypadkowaRateBp: taxProfile.wypadkowaRateBp,
+          zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
+          pitRateBp: taxProfile.pitRateBp,
+        }
+      : null;
+
+    const mappedTaxConfig = taxConfig
+      ? {
+          year: taxConfig.year,
+          socialMinBaseCents: taxConfig.socialMinBaseCents,
+          zdrowotnaMinBaseCents: taxConfig.zdrowotnaMinBaseCents,
+          zdrowotnaMinAmountCents: taxConfig.zdrowotnaMinAmountCents,
+          zdrowotnaDeductionLimitYearlyCents: taxConfig.zdrowotnaDeductionLimitYearlyCents,
+          socialContributionRateBp: taxConfig.socialContributionRateBp,
+          choroboweRateBp: taxConfig.choroboweRateBp,
+          fpFsRateBp: taxConfig.fpFsRateBp,
+        }
+      : null;
+
     const taxResult = calculateAccountingUiData({
       customers,
       timeEntries: timeEntriesDetailed.map((entry) => ({
@@ -221,30 +267,51 @@ export default function Reports() {
       })),
       startDate,
       endDate,
-      taxProfile: taxProfile
-        ? {
-            taxCalculationMode: taxProfile.taxCalculationMode,
-            taxForm: taxProfile.taxForm,
-            zusRegime: taxProfile.zusRegime,
-            choroboweEnabled: taxProfile.choroboweEnabled,
-            fpFsEnabled: taxProfile.fpFsEnabled,
-            wypadkowaRateBp: taxProfile.wypadkowaRateBp,
-            zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
-            pitRateBp: taxProfile.pitRateBp,
-          }
-        : null,
-      taxConfig: taxConfig
-        ? {
-            year: taxConfig.year,
-            socialMinBaseCents: taxConfig.socialMinBaseCents,
-            zdrowotnaMinBaseCents: taxConfig.zdrowotnaMinBaseCents,
-            zdrowotnaMinAmountCents: taxConfig.zdrowotnaMinAmountCents,
-            zdrowotnaDeductionLimitYearlyCents: taxConfig.zdrowotnaDeductionLimitYearlyCents,
-            socialContributionRateBp: taxConfig.socialContributionRateBp,
-            choroboweRateBp: taxConfig.choroboweRateBp,
-            fpFsRateBp: taxConfig.fpFsRateBp,
-          }
-        : null,
+      taxProfile: mappedTaxProfile,
+      taxConfig: mappedTaxConfig,
+      legacySettings: taxSettings,
+    });
+
+    let missingTaxPlnConversionCount = 0;
+    const convertAmountToPlnForTax = (amountCents: number, sourceCurrency?: string | null) => {
+      const converted = convertToPln(amountCents, sourceCurrency);
+      if (converted === null) {
+        missingTaxPlnConversionCount += 1;
+        return 0;
+      }
+      return converted;
+    };
+
+    const timeRevenuePln = timeEntriesDetailed.reduce(
+      (sum, entry) => sum + convertAmountToPlnForTax(entry.calculatedAmount, entry.sourceCurrency),
+      0
+    );
+    const travelRevenueInGrossPln = expensesDetailed.reduce((sum, expense) => {
+      if (!expense.timeEntryId) return sum;
+      const relatedEntry = entriesById.get(expense.timeEntryId);
+      if (!relatedEntry) return sum;
+      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      if (relatedCustomer?.costModel !== "exclusive") return sum;
+      return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
+    }, 0);
+    const grossRevenuePln = timeRevenuePln + travelRevenueInGrossPln;
+    const totalFixedCostsPln = fixedCostsDetailed.reduce(
+      (sum, cost) => sum + convertAmountToPlnForTax(cost.amount, cost.sourceCurrency),
+      0
+    );
+    const variableCostsPln = expensesDetailed.reduce(
+      (sum, expense) => sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency),
+      0
+    );
+
+    const taxResultPln = calculatePolishTaxResult({
+      revenueCents: grossRevenuePln,
+      fixedCostsCents: totalFixedCostsPln,
+      variableCostsCents: variableCostsPln,
+      startDate,
+      endDate,
+      profile: mappedTaxProfile,
+      config: mappedTaxConfig,
       legacySettings: taxSettings,
     });
 
@@ -263,7 +330,8 @@ export default function Reports() {
 
     const missingConversionCount =
       fixedCostsDetailed.filter((cost) => cost.amountEur === null).length +
-      expensesDetailed.filter((expense) => expense.amountEur === null).length;
+      expensesDetailed.filter((expense) => expense.amountEur === null).length +
+      missingTaxPlnConversionCount;
 
     return {
       ...taxResult,
@@ -277,6 +345,7 @@ export default function Reports() {
       expensesDetailed,
       fixedCostsByCurrency,
       variableCostsByCurrency,
+      taxResultPln,
       missingConversionCount,
     };
   };
@@ -758,13 +827,13 @@ export default function Reports() {
                     <TableRow className="border-t-2">
                       <TableCell className="font-semibold">ZUS (Sozialversicherung)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        {formatCalculatedCurrencyNegative(accountingData.zus)}
+                        {formatPlnBasedCurrencyNegative(accountingData.taxResultPln.zus)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-semibold">Krankenversicherung (Zdrowotna)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        {formatCalculatedCurrencyNegative(accountingData.healthInsurance)}
+                        {formatPlnBasedCurrencyNegative(accountingData.taxResultPln.healthInsurance)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
@@ -772,19 +841,19 @@ export default function Reports() {
                         Abzugsfähige Zdrowotna (Steuerbasis)
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatCalculatedCurrency(accountingData.deductibleHealth)}
+                        {formatPlnBasedCurrency(accountingData.taxResultPln.deductibleHealth)}
                       </TableCell>
                     </TableRow>
                     <TableRow className="border-t-2">
                       <TableCell className="font-medium">Steuerbasis</TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCalculatedCurrency(accountingData.taxBase)}
+                        {formatPlnBasedCurrency(accountingData.taxResultPln.taxBase)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-semibold">Einkommensteuer (PIT)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        {formatCalculatedCurrencyNegative(accountingData.tax)}
+                        {formatPlnBasedCurrencyNegative(accountingData.taxResultPln.tax)}
                       </TableCell>
                     </TableRow>
                     <TableRow>
