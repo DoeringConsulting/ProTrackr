@@ -54,7 +54,7 @@ const initialFormData: TimeEntryFormData = {
 };
 
 const WEEKDAYS_DE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-const WEEKDAYS_PL = ["Nd", "Pn", "Wt", "Śr", "Cz", "Pt", "Sb"];
+const WEEKDAYS_PL = ["Nd", "Pn", "Wt", "Sr", "Cz", "Pt", "Sb"];
 const MONTHS_DE = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
   "Juli", "August", "September", "Oktober", "November", "Dezember"

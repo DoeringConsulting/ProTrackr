@@ -111,59 +111,30 @@ export default function Expenses() {
     return categoryData.reduce((sum, item) => sum + item.amount, 0);
   }, [categoryData]);
 
-  const averagePerDay = useMemo(() => {
-    if (expenseRows.length === 0) return 0;
-
-    const parseDayKey = (value: string | Date) => {
-      const date = typeof value === "string" ? new Date(value) : value;
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    };
-    const countCalendarDays = (from: Date, to: Date) => {
-      const ms = to.getTime() - from.getTime();
-      return Math.max(1, Math.floor(ms / (1000 * 60 * 60 * 24)) + 1);
-    };
-
-    let calendarDays = 1;
-    if (startDate && endDate) {
-      calendarDays = countCalendarDays(parseDayKey(startDate), parseDayKey(endDate));
-    } else {
-      const dateCandidates = expenseRows
-        .map((row: any) => parseDayKey(row.date))
-        .sort((a: Date, b: Date) => a.getTime() - b.getTime());
-      const minDate = dateCandidates[0];
-      const maxDate = dateCandidates[dateCandidates.length - 1];
-      if (minDate && maxDate) {
-        calendarDays = countCalendarDays(minDate, maxDate);
-      }
-    }
-
-    const manDays = timeEntries.reduce((sum: number, entry: any) => sum + Number(entry.manDays || 0), 0) / 1000;
-    const divisor = Math.max(1, calendarDays, Math.ceil(manDays));
-    return totalAmount / divisor;
-  }, [expenseRows, totalAmount, timeEntries, startDate, endDate]);
-
-  const averageBaseLabel = useMemo(() => {
-    const parseDayKey = (value: string | Date) => {
-      const date = typeof value === "string" ? new Date(value) : value;
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    };
-    const countCalendarDays = (from: Date, to: Date) => {
-      const ms = to.getTime() - from.getTime();
-      return Math.max(1, Math.floor(ms / (1000 * 60 * 60 * 24)) + 1);
-    };
-    let calendarDays = 1;
-    if (startDate && endDate) {
-      calendarDays = countCalendarDays(parseDayKey(startDate), parseDayKey(endDate));
-    } else if (expenseRows.length > 0) {
-      const sorted = expenseRows
-        .map((row: any) => parseDayKey(row.date))
-        .sort((a: Date, b: Date) => a.getTime() - b.getTime());
-      calendarDays = countCalendarDays(sorted[0], sorted[sorted.length - 1]);
-    }
+  const averageStats = useMemo(() => {
+    const entryDayKeys = new Set(
+      timeEntries
+        .filter((entry: any) => Number(entry.hours || 0) > 0)
+        .map((entry: any) => {
+          const date = new Date(entry.date);
+          const y = date.getFullYear();
+          const m = String(date.getMonth() + 1).padStart(2, "0");
+          const d = String(date.getDate()).padStart(2, "0");
+          return `${y}-${m}-${d}`;
+        })
+    );
+    const calendarEntryDays = Math.max(1, entryDayKeys.size || expenseRows.length || 1);
     const manDays =
       timeEntries.reduce((sum: number, entry: any) => sum + Number(entry.manDays || 0), 0) / 1000;
-    return `Kalendertage: ${calendarDays} | kalk. Manntage: ${manDays.toFixed(3)}`;
-  }, [expenseRows, timeEntries, startDate, endDate]);
+    const safeManDays = Math.max(0.001, manDays);
+
+    return {
+      calendarEntryDays,
+      manDays,
+      averagePerCalendarDay: totalAmount / calendarEntryDays,
+      averagePerManDay: totalAmount / safeManDays,
+    };
+  }, [timeEntries, expenseRows, totalAmount]);
 
   const missingConversionCount = useMemo(
     () =>
@@ -312,15 +283,21 @@ export default function Expenses() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Durchschnitt pro Tag</CardTitle>
+              <CardTitle className="text-sm font-medium">Durchschnitt</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {formatMoney(Math.round(averagePerDay * 100), chartCurrency)}
+              <div className="text-lg font-semibold">
+                Pro Kalendertag:{" "}
+                {formatMoney(Math.round(averageStats.averagePerCalendarDay * 100), chartCurrency)}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Basierend auf {averageBaseLabel}
+              <div className="text-lg font-semibold">
+                Pro Manntag:{" "}
+                {formatMoney(Math.round(averageStats.averagePerManDay * 100), chartCurrency)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Basierend auf Kalendertage mit Projekteinträgen: {averageStats.calendarEntryDays} | kalk.
+                Manntage: {averageStats.manDays.toFixed(3)}
               </p>
             </CardContent>
           </Card>

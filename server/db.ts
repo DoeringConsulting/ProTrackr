@@ -113,6 +113,38 @@ export async function updateCustomer(id: number, data: any) {
   return result;
 }
 
+export async function recalculateTimeEntriesForCustomer(customerId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { customers, timeEntries } = await import("../drizzle/schema");
+  const customerResult = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+  const customer = customerResult[0];
+  if (!customer) return { updated: 0 };
+
+  const dayHours = Math.max(1, Number(customer.standardDayHours ?? 800) / 100);
+  const baseMinutesPerManDay = dayHours * 60;
+  const entries = await db.select().from(timeEntries).where(eq(timeEntries.customerId, customerId));
+
+  let updated = 0;
+  for (const entry of entries) {
+    const manDaysThousandths = Math.round((entry.hours / baseMinutesPerManDay) * 1000);
+    const manDays = manDaysThousandths / 1000;
+    const rate = entry.entryType === "onsite" ? customer.onsiteRate : customer.remoteRate;
+    const calculatedAmount = Math.round(manDays * rate);
+    await db
+      .update(timeEntries)
+      .set({
+        rate,
+        manDays: manDaysThousandths,
+        calculatedAmount,
+      })
+      .where(eq(timeEntries.id, entry.id));
+    updated += 1;
+  }
+
+  return { updated };
+}
+
 export async function deleteCustomer(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

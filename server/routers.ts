@@ -316,6 +316,35 @@ function calculateTimeEntryFinancials(input: {
   };
 }
 
+async function normalizeTimeEntryFinancialsWithCustomer(
+  entry: any,
+  customerCache?: Map<number, any | null>
+) {
+  const { getCustomerById } = await import("./db");
+  let customer: any | null | undefined;
+  if (customerCache) {
+    customer = customerCache.get(entry.customerId);
+  }
+  if (customer === undefined) {
+    customer = await getCustomerById(entry.customerId);
+    if (customerCache) {
+      customerCache.set(entry.customerId, customer ?? null);
+    }
+  }
+  if (!customer) return entry;
+  const financials = calculateTimeEntryFinancials({
+    hoursMinutes: entry.hours,
+    entryType: entry.entryType,
+    customer,
+  });
+  return {
+    ...entry,
+    rate: financials.rate,
+    manDays: financials.manDaysThousandths,
+    calculatedAmount: financials.calculatedAmount,
+  };
+}
+
 export const appRouter = router({
   invoiceNumbers: router({
     generate: protectedProcedure
@@ -472,7 +501,12 @@ export const appRouter = router({
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      const { getCustomerById, getCustomersByMandatenNr, updateCustomer } = await import("./db");
+      const {
+        getCustomerById,
+        getCustomersByMandatenNr,
+        recalculateTimeEntriesForCustomer,
+        updateCustomer,
+      } = await import("./db");
       const customer = await getCustomerById(id);
       if (!customer) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
@@ -495,6 +529,13 @@ export const appRouter = router({
       }
 
       await updateCustomer(id, data);
+      if (
+        data.standardDayHours !== undefined ||
+        data.onsiteRate !== undefined ||
+        data.remoteRate !== undefined
+      ) {
+        await recalculateTimeEntriesForCustomer(id);
+      }
       return { success: true };
     }),
     delete: mandantAdminProcedure.input((val: unknown) => {
@@ -552,7 +593,12 @@ export const appRouter = router({
       const { getTimeEntries } = await import("./db");
       const startDate = input.startDate ? new Date(input.startDate) : undefined;
       const endDate = input.endDate ? new Date(input.endDate) : undefined;
-      return await getTimeEntries(ctx.user.id, startDate, endDate);
+      const entries = await getTimeEntries(ctx.user.id, startDate, endDate);
+      const customerCache = new Map<number, any | null>();
+      const normalized = await Promise.all(
+        entries.map((entry) => normalizeTimeEntryFinancialsWithCustomer(entry, customerCache))
+      );
+      return normalized;
     }),
     getById: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
@@ -565,7 +611,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
       }
 
-      return entry;
+      return await normalizeTimeEntryFinancialsWithCustomer(entry);
     }),
     create: protectedProcedure.input((val: unknown) => {
       return z.object({
@@ -679,7 +725,7 @@ export const appRouter = router({
         targetDates: z.array(z.string()),
       }).parse(val);
     }).mutation(async ({ input, ctx }) => {
-      const { getTimeEntryById, createTimeEntry } = await import("./db");
+      const { getTimeEntryById, createTimeEntry, getCustomerById } = await import("./db");
       const sourceEntry = await getTimeEntryById(input.sourceId);
       
       if (!sourceEntry) {
@@ -688,9 +734,19 @@ export const appRouter = router({
       if (!(await canAccessUserOwnedData(ctx.user, sourceEntry.userId))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Quell-Zeiteintrag" });
       }
+
+      const customer = await getCustomerById(sourceEntry.customerId);
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+      }
       
       const createdEntries = [];
       for (const targetDate of input.targetDates) {
+        const financials = calculateTimeEntryFinancials({
+          hoursMinutes: sourceEntry.hours,
+          entryType: sourceEntry.entryType,
+          customer,
+        });
         const newEntry = await createTimeEntry({
           userId: ctx.user.id,
           customerId: sourceEntry.customerId,
@@ -700,9 +756,9 @@ export const appRouter = router({
           entryType: sourceEntry.entryType,
           description: sourceEntry.description,
           hours: sourceEntry.hours,
-          rate: sourceEntry.rate,
-          calculatedAmount: sourceEntry.calculatedAmount,
-          manDays: sourceEntry.manDays,
+          rate: financials.rate,
+          calculatedAmount: financials.calculatedAmount,
+          manDays: financials.manDaysThousandths,
         });
         createdEntries.push(newEntry);
       }
@@ -715,7 +771,8 @@ export const appRouter = router({
         anchorDate: z.string(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { getTimeEntries, getAllExpenses, createTimeEntry, createExpense } = await import("./db");
+      const { getTimeEntries, getAllExpenses, createTimeEntry, createExpense, getCustomerById } =
+        await import("./db");
 
       const anchor = parseDateKeyInput(input.anchorDate);
       if (Number.isNaN(anchor.getTime())) {
@@ -743,16 +800,29 @@ export const appRouter = router({
       const weekdayDe = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
       const weekdayPl = ["Nd", "Pn", "Wt", "Sr", "Cz", "Pt", "Sb"];
       const entryIdMap = new Map<number, number>();
+      const customerCache = new Map<number, any>();
       let copiedTimeEntries = 0;
       let copiedExpenses = 0;
       let skippedExpenses = 0;
 
       for (const entry of sourceEntries) {
+        let customer = customerCache.get(entry.customerId);
+        if (!customer) {
+          customer = await getCustomerById(entry.customerId);
+          if (customer) customerCache.set(entry.customerId, customer);
+        }
+        if (!customer) continue;
+
         const sourceDate = new Date(entry.date as any);
         if (Number.isNaN(sourceDate.getTime())) continue;
         const shiftedDate = shiftDateByScope(sourceDate, input.scope);
         const shiftedDateKey = formatDateKeyLocal(shiftedDate);
         const weekday = `${weekdayDe[shiftedDate.getDay()]}/${weekdayPl[shiftedDate.getDay()]}`;
+        const financials = calculateTimeEntryFinancials({
+          hoursMinutes: entry.hours,
+          entryType: entry.entryType,
+          customer,
+        });
 
         const created = await createTimeEntry({
           userId: entry.userId,
@@ -763,9 +833,9 @@ export const appRouter = router({
           entryType: entry.entryType,
           description: entry.description,
           hours: entry.hours,
-          rate: entry.rate,
-          calculatedAmount: entry.calculatedAmount,
-          manDays: entry.manDays,
+          rate: financials.rate,
+          calculatedAmount: financials.calculatedAmount,
+          manDays: financials.manDaysThousandths,
         });
         if (created && typeof created === "object" && "id" in created) {
           entryIdMap.set(Number(entry.id), Number((created as any).id));

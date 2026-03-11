@@ -64,8 +64,47 @@ function getPolishWeekday(weekdayValue: string | null | undefined) {
   const value = String(weekdayValue).trim();
   if (!value) return "-";
   const parts = value.split("/");
-  if (parts.length > 1) return (parts[1] || "-").trim();
-  return value;
+  if (parts.length > 1) return toPlainAscii((parts[1] || "-").trim());
+  return toPlainAscii(value);
+}
+
+function toPlainAscii(value: string) {
+  return value
+    .replace(/[Ąą]/g, "A")
+    .replace(/[Ćć]/g, "C")
+    .replace(/[Ęę]/g, "E")
+    .replace(/[Łł]/g, "L")
+    .replace(/[Ńń]/g, "N")
+    .replace(/[Óó]/g, "O")
+    .replace(/[Śś]/g, "S")
+    .replace(/[Źź]/g, "Z")
+    .replace(/[Żż]/g, "Z");
+}
+
+function getWeekdayByLanguage(
+  weekdayValue: string | null | undefined,
+  language: ReportLanguage
+) {
+  if (!weekdayValue) return "-";
+  const value = String(weekdayValue).trim();
+  if (!value) return "-";
+  const [dePartRaw, plPartRaw] = value.split("/");
+  const dePart = (dePartRaw || "").trim();
+  const plPart = toPlainAscii((plPartRaw || "").trim());
+
+  if (language === "pl") return plPart || toPlainAscii(value);
+  if (language === "de") return dePart || value;
+
+  const mapDeToEn: Record<string, string> = {
+    Mo: "Mon",
+    Di: "Tue",
+    Mi: "Wed",
+    Do: "Thu",
+    Fr: "Fri",
+    Sa: "Sat",
+    So: "Sun",
+  };
+  return mapDeToEn[dePart] || dePart || plPart || value;
 }
 
 function getExpenseDetailLabel(expense: BookkeepingExpense) {
@@ -311,7 +350,7 @@ export async function exportCustomerTimesheetToPDF(input: {
     head: [[t.date, t.weekday, t.type, t.hours, t.md, t.desc]],
     body: input.entries.map((entry) => [
       formatDateDe(entry.date),
-      entry.weekday || "-",
+      getWeekdayByLanguage(entry.weekday, input.language),
       entry.entryType,
       formatHours(entry.hours),
       formatManDays(entry.manDays),
