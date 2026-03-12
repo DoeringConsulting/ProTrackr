@@ -39,8 +39,10 @@ const menuItems = [
   { icon: FileText, label: "Berichte", path: "/reports" },
   { icon: Settings, label: "Einstellungen", path: "/settings" },
 ];
-const BRAND_LOGO_PATH = "/assets/doering-consulting-logo.svg";
-const BRAND_ICON_PATH = "/assets/doering-consulting-icon.svg";
+const BRAND_LOGO_PRIMARY_PATH = "/assets/doering-consulting-logo.png";
+const BRAND_LOGO_FALLBACK_PATH = "/assets/doering-consulting-logo.svg";
+const BRAND_ICON_PRIMARY_PATH = "/assets/doering-consulting-icon.png";
+const BRAND_ICON_FALLBACK_PATH = "/assets/doering-consulting-icon.svg";
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -132,6 +134,8 @@ function DashboardLayoutContent({
   const isMobile = useIsMobile();
   const [logoAvailable, setLogoAvailable] = useState(true);
   const [iconAvailable, setIconAvailable] = useState(true);
+  const [logoSource, setLogoSource] = useState(BRAND_LOGO_PRIMARY_PATH);
+  const [iconSource, setIconSource] = useState(BRAND_ICON_PRIMARY_PATH);
 
   useKeyboardShortcut({
     key: "k",
@@ -202,10 +206,16 @@ function DashboardLayoutContent({
                 <div className="flex items-center min-w-0">
                   {logoAvailable ? (
                     <img
-                      src={BRAND_LOGO_PATH}
+                      src={logoSource}
                       alt="Döring Consulting"
                       className="h-11 w-auto object-contain"
-                      onError={() => setLogoAvailable(false)}
+                      onError={() => {
+                        if (logoSource !== BRAND_LOGO_FALLBACK_PATH) {
+                          setLogoSource(BRAND_LOGO_FALLBACK_PATH);
+                          return;
+                        }
+                        setLogoAvailable(false);
+                      }}
                     />
                   ) : (
                     <span className="font-semibold tracking-tight truncate text-white">
@@ -216,10 +226,16 @@ function DashboardLayoutContent({
               ) : (
                 iconAvailable && (
                   <img
-                    src={BRAND_ICON_PATH}
+                    src={iconSource}
                     alt="Döring Icon"
                     className="h-7 w-7 object-contain"
-                    onError={() => setIconAvailable(false)}
+                    onError={() => {
+                      if (iconSource !== BRAND_ICON_FALLBACK_PATH) {
+                        setIconSource(BRAND_ICON_FALLBACK_PATH);
+                        return;
+                      }
+                      setIconAvailable(false);
+                    }}
                   />
                 )
               )}
@@ -250,10 +266,16 @@ function DashboardLayoutContent({
                 {!isCollapsed ? (
                   logoAvailable ? (
                     <img
-                      src={BRAND_LOGO_PATH}
+                      src={logoSource}
                       alt="Döring Consulting Logo"
                       className="w-full max-h-40 object-contain mx-auto"
-                      onError={() => setLogoAvailable(false)}
+                      onError={() => {
+                        if (logoSource !== BRAND_LOGO_FALLBACK_PATH) {
+                          setLogoSource(BRAND_LOGO_FALLBACK_PATH);
+                          return;
+                        }
+                        setLogoAvailable(false);
+                      }}
                     />
                   ) : (
                     <div className="text-center">
@@ -264,10 +286,16 @@ function DashboardLayoutContent({
                 ) : (
                   iconAvailable && (
                     <img
-                      src={BRAND_ICON_PATH}
+                      src={iconSource}
                       alt="Döring Icon"
                       className="h-8 w-8 object-contain mx-auto"
-                      onError={() => setIconAvailable(false)}
+                      onError={() => {
+                        if (iconSource !== BRAND_ICON_FALLBACK_PATH) {
+                          setIconSource(BRAND_ICON_FALLBACK_PATH);
+                          return;
+                        }
+                        setIconAvailable(false);
+                      }}
                     />
                   )
                 )}

@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.56",
+      "date": "2026-03-12",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Logo-Einbindung: PNG zuerst, SVG als Fallback",
+          "description": "Sidebar und Login laden nun priorisiert /assets/doering-consulting-logo.png bzw. Icon-PNG und fallen nur bei Fehler auf SVG zurueck."
+        }
+      ]
+    },
+    {
       "version": "1.0.55",
       "date": "2026-03-11",
       "changes": [

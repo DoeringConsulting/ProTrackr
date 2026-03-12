@@ -11,6 +11,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [logoSource, setLogoSource] = useState("/assets/doering-consulting-logo.png");
   const [, navigate] = useLocation();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -43,9 +44,14 @@ export default function Login() {
         <CardHeader className="text-center">
           <div className="mx-auto mb-2">
             <img
-              src="/assets/doering-consulting-logo.svg"
+              src={logoSource}
               alt="Döring Consulting"
               className="h-12 w-auto object-contain mx-auto"
+              onError={() => {
+                if (logoSource !== "/assets/doering-consulting-logo.svg") {
+                  setLogoSource("/assets/doering-consulting-logo.svg");
+                }
+              }}
             />
           </div>
           <CardTitle className="text-2xl">Döring Consulting</CardTitle>
