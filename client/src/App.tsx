@@ -22,6 +22,7 @@ import ExchangeRates from "@/pages/ExchangeRates";
 import Backup from "./pages/Backup";
 import Settings from "./pages/Settings";
 import TaxSettings from "./pages/TaxSettings";
+import Faq from "./pages/Faq";
 
 import ProjectDetail from "./pages/ProjectDetail";
 import Login from "./pages/Login";
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/backup" component={Backup} />
       <Route path="/settings" component={Settings} />
       <Route path="/tax-settings" component={TaxSettings} />
+      <Route path="/faq" component={Faq} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

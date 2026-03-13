@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Clock, Receipt, FileText, Settings, Upload, Database, DollarSign, Calculator, Search } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Clock, Receipt, FileText, Settings, Upload, Database, DollarSign, Calculator, Search, CircleHelp } from "lucide-react";
 import NavigationButtons from "@/components/NavigationButtons";
 import Omnibox from "@/components/Omnibox";
 import { SearchBar } from "@/components/SearchBar";
@@ -37,6 +37,7 @@ const menuItems = [
   { icon: Clock, label: "Zeiterfassung", path: "/time-tracking" },
   { icon: Receipt, label: "Reisekosten", path: "/expenses" },
   { icon: FileText, label: "Berichte", path: "/reports" },
+  { icon: CircleHelp, label: "FAQ", path: "/faq" },
   { icon: Settings, label: "Einstellungen", path: "/settings" },
 ];
 const BRAND_LOGO_PRIMARY_PATH = "/assets/doering-consulting-logo.png";

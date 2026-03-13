@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.60",
+      "date": "2026-03-13",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Neue FAQ-Seite in der WebApp",
+          "description": "Neue Seite /faq mit Schritt-fuer-Schritt-Anleitungen zur Nutzung der Funktionen, inklusive Import v1 und KI-Belegauslese."
+        },
+        {
+          "type": "feature",
+          "title": "FAQ direkt in der Sidebar verlinkt",
+          "description": "Der neue Menüpunkt FAQ ist in allen Seiten mit DashboardLayout erreichbar."
+        },
+        {
+          "type": "improvement",
+          "title": "FAQ aktualisiert sich automatisch mit Changelog",
+          "description": "Der Bereich 'Neueste Änderungen' lädt CHANGELOG.json dynamisch und zeigt neue Versionseinträge ohne zusätzliche manuelle Pflege."
+        }
+      ]
+    },
+    {
       "version": "1.0.59",
       "date": "2026-03-13",
       "changes": [
