@@ -1631,7 +1631,9 @@ export const appRouter = router({
         hintProjectName: input.projectName,
       });
 
-      const customers = await getCustomers(ownerUserId);
+      const customers = (await getCustomers()).filter(
+        (customer: any) => Number(customer.userId ?? 0) === Number(ownerUserId)
+      );
       const customersById = new Map<number, any>();
       for (const customer of customers) {
         customersById.set(customer.id, customer);

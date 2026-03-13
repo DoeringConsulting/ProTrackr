@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.59",
+      "date": "2026-03-13",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "GoLive-Fix: TypeScript-Fehler in receiptAi-Matching behoben",
+          "description": "Die Kundenzuordnung in server/routers.ts nutzt jetzt die korrekte getCustomers()-Signatur und filtert auf ownerUserId, wodurch tsc --noEmit wieder ohne Fehler durchläuft."
+        },
+        {
+          "type": "improvement",
+          "title": "GoLive-Diagnose erneut ausgeführt",
+          "description": "Typecheck und Build erfolgreich; bekannte Testfehler bleiben umgebungsbedingt (Rollen-/DB-/Secrets-Kontext), Security-Audit meldet weiterhin nur das bereits bekannte xlsx-Upstream-Risiko."
+        }
+      ]
+    },
+    {
       "version": "1.0.58",
       "date": "2026-03-13",
       "changes": [
