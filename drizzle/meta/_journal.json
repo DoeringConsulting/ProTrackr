@@ -113,6 +113,13 @@
       "when": 1773800000000,
       "tag": "0015_customers_standard_day_hours",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1774200000000,
+      "tag": "0016_expense_ai_analyses",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,6 @@
+expense_external_id;time_entry_external_id;customer_external_id;mandanten_nr;project_name;date;category;amount;currency;full_day;comment;flight_route_type;departure_time;arrival_time;return_date;ticket_number;flight_number;check_in_date;check_out_date;nights;distance_km;rate_per_km;liters;price_per_liter;receipt_no;vendor_name
+EXP-2026-03-01;TE-2026-03-01-01;CUST-003;003;Corpuls Rollout;2026-03-01;taxi;185;PLN;0;Flughafen zum Hotel;;;;;;;;;;;;;;TX-88421;iTaxi
+EXP-2026-03-02;TE-2026-03-02-01;CUST-003;003;Corpuls Rollout;2026-03-02;flight;420;EUR;0;Hinflug MUC-WAW;domestic;08:30;10:05;;LH2040;LH2040;;;;;;;;FL-2201;Lufthansa
+EXP-2026-03-03;TE-2026-03-02-01;CUST-003;003;Corpuls Rollout;2026-03-03;hotel;1450;PLN;0;Hotel Warszawa 3 Nächte;;;;;;;2026-03-03;2026-03-06;3;;;;;HT-7712;Hotel Centrum
+EXP-2026-03-11;TE-2026-03-11-01;CUST-003;003;Corpuls Rollout;2026-03-11;fuel;320.5;PLN;0;Tankfüllung Dienstwagen;;;;;;;;;;;;42.3;7.58;FU-1190;Orlen
+EXP-2026-03-12;;CUST-003;003;Corpuls Rollout;2026-03-12;meal;96;PLN;1;Verpflegung ganzer Tag;;;;;;;;;;;;;;ME-1102;Bistro WAW

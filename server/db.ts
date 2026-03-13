@@ -427,6 +427,51 @@ export async function getDocumentById(id: number) {
   return rows[0] ?? null;
 }
 
+export async function createExpenseAiAnalysis(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { expenseAiAnalyses } = await import("../drizzle/schema");
+  const result = await db.insert(expenseAiAnalyses).values(data);
+  const insertId = Number((result as any)?.insertId ?? (result as any)?.[0]?.insertId ?? 0);
+  if (insertId > 0) {
+    return await getExpenseAiAnalysisById(insertId);
+  }
+  const fallback = await db
+    .select()
+    .from(expenseAiAnalyses)
+    .where(eq(expenseAiAnalyses.userId, data.userId))
+    .orderBy(desc(expenseAiAnalyses.id))
+    .limit(1);
+  return fallback[0] ?? null;
+}
+
+export async function getExpenseAiAnalysisById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { expenseAiAnalyses } = await import("../drizzle/schema");
+  const rows = await db.select().from(expenseAiAnalyses).where(eq(expenseAiAnalyses.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listExpenseAiAnalysesByUser(userId: number, limit: number = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  const { expenseAiAnalyses } = await import("../drizzle/schema");
+  return await db
+    .select()
+    .from(expenseAiAnalyses)
+    .where(eq(expenseAiAnalyses.userId, userId))
+    .orderBy(desc(expenseAiAnalyses.createdAt))
+    .limit(limit);
+}
+
+export async function updateExpenseAiAnalysis(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { expenseAiAnalyses } = await import("../drizzle/schema");
+  await db.update(expenseAiAnalyses).set(data).where(eq(expenseAiAnalyses.id, id));
+}
+
 // Exchange rate queries
 export async function createExchangeRate(data: any) {
   const db = await getDb();
@@ -785,6 +830,7 @@ export async function exportDatabase() {
     timeEntries,
     expenses,
     documents,
+    expenseAiAnalyses,
     exchangeRates,
     fixedCosts,
     taxSettings,
@@ -803,6 +849,7 @@ export async function exportDatabase() {
       timeEntries: await db.select().from(timeEntries),
       expenses: await db.select().from(expenses),
       documents: await db.select().from(documents),
+      expenseAiAnalyses: await db.select().from(expenseAiAnalyses),
       exchangeRates: await db.select().from(exchangeRates),
       fixedCosts: await db.select().from(fixedCosts),
       taxSettings: await db.select().from(taxSettings),
@@ -1086,6 +1133,7 @@ export async function importDatabase(backup: any) {
     timeEntries,
     expenses,
     documents,
+    expenseAiAnalyses,
     exchangeRates,
     fixedCosts,
     taxSettings,
@@ -1113,6 +1161,18 @@ export async function importDatabase(backup: any) {
   if (backup.data.expenses && backup.data.expenses.length > 0) {
     for (const expense of backup.data.expenses) {
       await db.insert(expenses).values(expense).onDuplicateKeyUpdate({ set: expense });
+    }
+  }
+
+  if (backup.data.documents && backup.data.documents.length > 0) {
+    for (const document of backup.data.documents) {
+      await db.insert(documents).values(document).onDuplicateKeyUpdate({ set: document });
+    }
+  }
+
+  if (backup.data.expenseAiAnalyses && backup.data.expenseAiAnalyses.length > 0) {
+    for (const analysis of backup.data.expenseAiAnalyses) {
+      await db.insert(expenseAiAnalyses).values(analysis).onDuplicateKeyUpdate({ set: analysis });
     }
   }
   

@@ -15,6 +15,13 @@ import bcrypt from "bcrypt";
 import { generateInvoiceNumber, getInvoiceNumbers, getDb } from "./db";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { expenses } from "../drizzle/schema";
+import {
+  analyzeReceipt,
+  buildReceiptDedupeHash,
+  toExpenseMutationPayload,
+  validateReceiptCandidate,
+  type ReceiptExpenseCandidate,
+} from "./receiptAi";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
   if (!actorMandantId) return false;
@@ -342,6 +349,148 @@ async function normalizeTimeEntryFinancialsWithCustomer(
     rate: financials.rate,
     manDays: financials.manDaysThousandths,
     calculatedAmount: financials.calculatedAmount,
+  };
+}
+
+type ReceiptMatchSuggestion = {
+  strategy: "time_entry_hint" | "customer_project_date" | "customer_date" | "date_only" | "unmatched";
+  confidence: number;
+  customerId: number | null;
+  timeEntryId: number | null;
+  projectName: string | null;
+  reason: string;
+};
+
+function parseJsonSafely(value: unknown): any {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function toDateKey(value: unknown): string | null {
+  if (!value) return null;
+  const stringValue = String(value).trim();
+  if (!stringValue) return null;
+  const onlyDate = stringValue.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(onlyDate)) return onlyDate;
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(stringValue)) {
+    const [dd, mm, yyyy] = stringValue.split(".");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const date = new Date(stringValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function buildReceiptMatchSuggestion(input: {
+  candidate: ReceiptExpenseCandidate;
+  timeEntryHintId?: number;
+  customerHintId?: number;
+  projectHintName?: string;
+  timeEntries: any[];
+  customersById: Map<number, any>;
+}): ReceiptMatchSuggestion {
+  const dateKey = toDateKey(input.candidate.date);
+  const normalizedProject = (input.projectHintName || input.candidate.projectName || "").trim().toLowerCase();
+
+  if (input.timeEntryHintId) {
+    const byHint = input.timeEntries.find(entry => entry.id === input.timeEntryHintId);
+    if (byHint) {
+      return {
+        strategy: "time_entry_hint",
+        confidence: 9900,
+        customerId: byHint.customerId ?? null,
+        timeEntryId: byHint.id,
+        projectName: byHint.projectName ?? null,
+        reason: "Zeit-Eintrag wurde explizit als Hinweis übergeben.",
+      };
+    }
+  }
+
+  const filteredByDate = dateKey
+    ? input.timeEntries.filter(entry => toDateKey(entry.date) === dateKey)
+    : input.timeEntries;
+
+  if (input.customerHintId && normalizedProject) {
+    const exact = filteredByDate.find(
+      entry => entry.customerId === input.customerHintId && String(entry.projectName || "").trim().toLowerCase() === normalizedProject
+    );
+    if (exact) {
+      return {
+        strategy: "customer_project_date",
+        confidence: 9600,
+        customerId: exact.customerId ?? null,
+        timeEntryId: exact.id,
+        projectName: exact.projectName ?? null,
+        reason: "Match über Kunde + Projektname + Datum.",
+      };
+    }
+  }
+
+  if (input.customerHintId) {
+    const byCustomerDate = filteredByDate.find(entry => entry.customerId === input.customerHintId);
+    if (byCustomerDate) {
+      return {
+        strategy: "customer_date",
+        confidence: 9000,
+        customerId: byCustomerDate.customerId ?? null,
+        timeEntryId: byCustomerDate.id,
+        projectName: byCustomerDate.projectName ?? null,
+        reason: "Match über Kunde + Datum.",
+      };
+    }
+
+    const customer = input.customersById.get(input.customerHintId);
+    if (customer) {
+      return {
+        strategy: "customer_date",
+        confidence: 6500,
+        customerId: customer.id,
+        timeEntryId: null,
+        projectName: customer.projectName ?? null,
+        reason: "Kunde gefunden, aber kein passender Zeit-Eintrag am Datum.",
+      };
+    }
+  }
+
+  if (normalizedProject && filteredByDate.length > 0) {
+    const byProject = filteredByDate.find(
+      entry => String(entry.projectName || "").trim().toLowerCase() === normalizedProject
+    );
+    if (byProject) {
+      return {
+        strategy: "date_only",
+        confidence: 7800,
+        customerId: byProject.customerId ?? null,
+        timeEntryId: byProject.id,
+        projectName: byProject.projectName ?? null,
+        reason: "Match über Datum + Projektname.",
+      };
+    }
+  }
+
+  if (filteredByDate.length === 1) {
+    const only = filteredByDate[0];
+    return {
+      strategy: "date_only",
+      confidence: 6800,
+      customerId: only.customerId ?? null,
+      timeEntryId: only.id ?? null,
+      projectName: only.projectName ?? null,
+      reason: "Genau ein Zeit-Eintrag am Datum gefunden.",
+    };
+  }
+
+  return {
+    strategy: "unmatched",
+    confidence: 0,
+    customerId: input.customerHintId ?? null,
+    timeEntryId: null,
+    projectName: input.projectHintName ?? null,
+    reason: "Kein eindeutiger Match gefunden.",
   };
 }
 
@@ -1408,6 +1557,312 @@ export const appRouter = router({
     }),
   }),
 
+  receiptAi: router({
+    analyze: protectedProcedure.input((val: unknown) => {
+      return z
+        .object({
+          documentId: z.number().optional(),
+          ocrText: z.string().optional(),
+          customerId: z.number().optional(),
+          timeEntryId: z.number().optional(),
+          projectName: z.string().optional(),
+          hintCategory: z.string().optional(),
+        })
+        .refine(input => Boolean(input.documentId || input.ocrText?.trim()), {
+          message: "Bitte OCR-Text oder documentId angeben",
+        })
+        .parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const {
+        getDocumentById,
+        getTimeEntryById,
+        getTimeEntries,
+        getCustomerById,
+        getCustomers,
+        createExpenseAiAnalysis,
+      } = await import("./db");
+
+      let ownerUserId = ctx.user.id;
+      let documentUrl: string | null = null;
+      let mimeType: string | null = null;
+
+      if (input.documentId) {
+        const document = await getDocumentById(input.documentId);
+        if (!document) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Dokument nicht gefunden" });
+        }
+        if (!(await canAccessUserOwnedData(ctx.user, document.userId))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf dieses Dokument" });
+        }
+        ownerUserId = document.userId;
+        documentUrl = document.fileUrl ?? null;
+        mimeType = document.mimeType ?? null;
+      }
+
+      if (input.timeEntryId) {
+        const timeEntry = await getTimeEntryById(input.timeEntryId);
+        if (!timeEntry) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Zeiteintrag nicht gefunden" });
+        }
+        if (!(await canAccessUserOwnedData(ctx.user, timeEntry.userId))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
+        }
+        ownerUserId = timeEntry.userId;
+      }
+
+      if (input.customerId) {
+        const customer = await getCustomerById(input.customerId);
+        if (!customer) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+        }
+        if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+        }
+        if (customer.userId) {
+          ownerUserId = customer.userId;
+        }
+      }
+
+      const analysis = await analyzeReceipt({
+        ocrText: input.ocrText,
+        documentUrl,
+        mimeType,
+        hintCategory: input.hintCategory,
+        hintProjectName: input.projectName,
+      });
+
+      const customers = await getCustomers(ownerUserId);
+      const customersById = new Map<number, any>();
+      for (const customer of customers) {
+        customersById.set(customer.id, customer);
+      }
+
+      const timeEntries = await getTimeEntries(ownerUserId);
+      const enrichedCandidates = analysis.candidates.map((candidate, index) => {
+        const match = buildReceiptMatchSuggestion({
+          candidate,
+          customerHintId: input.customerId,
+          timeEntryHintId: input.timeEntryId,
+          projectHintName: input.projectName,
+          timeEntries,
+          customersById,
+        });
+        const baseIssues = Array.isArray(candidate.issues) ? candidate.issues : validateReceiptCandidate(candidate);
+        const issues =
+          match.strategy === "unmatched"
+            ? [
+                ...baseIssues,
+                {
+                  code: "REF-003",
+                  severity: "warning" as const,
+                  message: "Kein eindeutiger Projekt-/Zeiteintrags-Match gefunden. Manuelle Prüfung erforderlich.",
+                  field: "timeEntryId",
+                },
+              ]
+            : baseIssues;
+        const candidateConfidence = Math.max(0, Math.min(10000, Number(candidate.confidence ?? 0)));
+        const overallConfidence = Math.round(candidateConfidence * 0.7 + match.confidence * 0.3);
+        return {
+          ...candidate,
+          confidence: overallConfidence,
+          issues,
+          match,
+          index,
+        };
+      });
+
+      const highestConfidence = enrichedCandidates.reduce(
+        (max, candidate) => Math.max(max, Number(candidate.confidence ?? 0)),
+        0
+      );
+      const primary = enrichedCandidates[0] as ReceiptExpenseCandidate | undefined;
+      const dedupeHash = primary ? buildReceiptDedupeHash(primary) : null;
+      const validationPayload = enrichedCandidates.map(candidate => ({
+        index: candidate.index,
+        issues: candidate.issues ?? [],
+      }));
+      const matchingPayload = enrichedCandidates.map(candidate => ({
+        index: candidate.index,
+        match: candidate.match,
+      }));
+
+      const persisted = await createExpenseAiAnalysis({
+        userId: ownerUserId,
+        documentId: input.documentId ?? null,
+        source: analysis.source,
+        modelName: analysis.model,
+        ocrText: input.ocrText ?? null,
+        extractionPayload: JSON.stringify(analysis.rawExtraction ?? null),
+        normalizedPayload: JSON.stringify(enrichedCandidates),
+        validationPayload: JSON.stringify(validationPayload),
+        matchingPayload: JSON.stringify(matchingPayload),
+        dedupeHash,
+        status: enrichedCandidates.length > 0 ? "needs_review" : "error",
+        confidence: highestConfidence,
+      });
+
+      return {
+        analysisId: persisted?.id ?? null,
+        status: persisted?.status ?? "needs_review",
+        source: analysis.source,
+        engine: analysis.engine,
+        model: analysis.model,
+        candidates: enrichedCandidates,
+      };
+    }),
+
+    list: protectedProcedure.input((val: unknown) => {
+      return z.object({ limit: z.number().min(1).max(200).optional() }).parse(val);
+    }).query(async ({ ctx, input }) => {
+      const { listExpenseAiAnalysesByUser } = await import("./db");
+      const rows = await listExpenseAiAnalysesByUser(ctx.user.id, input.limit ?? 50);
+      return rows.map(row => ({
+        ...row,
+        normalizedPayload: parseJsonSafely(row.normalizedPayload),
+        validationPayload: parseJsonSafely(row.validationPayload),
+        matchingPayload: parseJsonSafely(row.matchingPayload),
+      }));
+    }),
+
+    approve: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        analysisId: z.number(),
+        candidateIndex: z.number().min(0).optional(),
+        overrides: z.object({
+          customerId: z.number().optional(),
+          timeEntryId: z.number().optional(),
+          projectName: z.string().optional(),
+          category: expenseCategorySchema.optional(),
+          date: z.string().optional(),
+          amount: z.number().optional(), // major currency unit
+          currency: z.string().length(3).optional(),
+          comment: z.string().optional(),
+        }).optional(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const {
+        getExpenseAiAnalysisById,
+        updateExpenseAiAnalysis,
+        getTimeEntryById,
+        getCustomerById,
+        createExpense,
+      } = await import("./db");
+      const analysis = await getExpenseAiAnalysisById(input.analysisId);
+      if (!analysis) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Analyse nicht gefunden" });
+      }
+      if (!(await canAccessUserOwnedData(ctx.user, analysis.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diese Analyse" });
+      }
+
+      const candidates = parseJsonSafely(analysis.normalizedPayload);
+      if (!Array.isArray(candidates) || candidates.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Analyse enthält keine Kandidaten" });
+      }
+      const candidateIndex = input.candidateIndex ?? 0;
+      const selected = candidates[candidateIndex];
+      if (!selected) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Ungültiger candidateIndex" });
+      }
+
+      const mutableCandidate: ReceiptExpenseCandidate = {
+        ...selected,
+        ...(input.overrides?.category ? { category: input.overrides.category } : {}),
+        ...(input.overrides?.date ? { date: input.overrides.date } : {}),
+        ...(typeof input.overrides?.amount === "number" ? { amount: input.overrides.amount } : {}),
+        ...(input.overrides?.currency ? { currency: input.overrides.currency.toUpperCase() } : {}),
+        ...(input.overrides?.comment !== undefined ? { comment: input.overrides.comment } : {}),
+        ...(input.overrides?.projectName ? { projectName: input.overrides.projectName } : {}),
+      };
+
+      const issues = validateReceiptCandidate(mutableCandidate);
+      const hardErrors = issues.filter(issue => issue.severity === "error");
+      if (hardErrors.length > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: hardErrors.map(issue => issue.message).join(" | "),
+        });
+      }
+
+      let ownerUserId = analysis.userId;
+      const matchingPayload = parseJsonSafely(analysis.matchingPayload);
+      const defaultMatch = Array.isArray(matchingPayload)
+        ? matchingPayload.find(item => Number(item?.index) === candidateIndex)?.match
+        : null;
+
+      const targetTimeEntryId = input.overrides?.timeEntryId ?? defaultMatch?.timeEntryId ?? null;
+      const targetCustomerId = input.overrides?.customerId ?? defaultMatch?.customerId ?? null;
+
+      if (targetTimeEntryId) {
+        const timeEntry = await getTimeEntryById(Number(targetTimeEntryId));
+        if (!timeEntry) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Zeit-Eintrag für Freigabe nicht gefunden" });
+        }
+        if (!(await canAccessUserOwnedData(ctx.user, timeEntry.userId))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf den Ziel-Zeiteintrag" });
+        }
+        ownerUserId = timeEntry.userId;
+      } else if (targetCustomerId) {
+        const customer = await getCustomerById(Number(targetCustomerId));
+        if (!customer) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Kunde für Freigabe nicht gefunden" });
+        }
+        if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf den Ziel-Kunden" });
+        }
+        if (customer.userId) ownerUserId = customer.userId;
+      }
+
+      const payload = toExpenseMutationPayload(mutableCandidate);
+      const basePayload: Record<string, unknown> = {
+        ...payload,
+        userId: ownerUserId,
+      };
+      if (targetTimeEntryId) {
+        basePayload.timeEntryId = Number(targetTimeEntryId);
+      }
+
+      const created = await createExpense(basePayload);
+      const approvedExpenseId = Number((created as any)?.insertId ?? (created as any)?.[0]?.insertId ?? 0) || null;
+      await updateExpenseAiAnalysis(input.analysisId, {
+        status: "approved",
+        approvedExpenseId,
+        normalizedPayload: JSON.stringify(candidates),
+        validationPayload: JSON.stringify([{ index: candidateIndex, issues }]),
+      });
+
+      return {
+        success: true,
+        approvedExpenseId,
+        issues,
+      };
+    }),
+
+    reject: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        analysisId: z.number(),
+        reason: z.string().optional(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { getExpenseAiAnalysisById, updateExpenseAiAnalysis } = await import("./db");
+      const analysis = await getExpenseAiAnalysisById(input.analysisId);
+      if (!analysis) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Analyse nicht gefunden" });
+      }
+      if (!(await canAccessUserOwnedData(ctx.user, analysis.userId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diese Analyse" });
+      }
+      await updateExpenseAiAnalysis(input.analysisId, {
+        status: "rejected",
+        validationPayload: JSON.stringify({
+          rejectedAt: new Date().toISOString(),
+          reason: input.reason ?? "Keine Begründung angegeben",
+        }),
+      });
+      return { success: true };
+    }),
+  }),
+
   // Fixed costs
   fixedCosts: router({
     list: protectedProcedure.query(async ({ ctx }) => {
@@ -2258,6 +2713,7 @@ export const appRouter = router({
         accountSettings,
         customers,
         documents,
+        expenseAiAnalyses,
         exchangeRates,
         fixedCosts,
         invoiceNumbers,
@@ -2305,6 +2761,10 @@ export const appRouter = router({
         userIds.length > 0
           ? await db.select().from(documents).where(inArray(documents.userId, userIds))
           : [];
+      const expenseAiAnalysesData =
+        userIds.length > 0
+          ? await db.select().from(expenseAiAnalyses).where(inArray(expenseAiAnalyses.userId, userIds))
+          : [];
       const accountSettingsData =
         userIds.length > 0
           ? await db.select().from(accountSettings).where(inArray(accountSettings.userId, userIds))
@@ -2347,6 +2807,7 @@ export const appRouter = router({
           timeEntries: timeEntriesData,
           expenses: expensesData,
           documents: documentsData,
+          expenseAiAnalyses: expenseAiAnalysesData,
           exchangeRates: exchangeRatesData,
           fixedCosts: fixedCostsData,
           taxSettings: taxSettingsData,
@@ -2405,6 +2866,9 @@ export const appRouter = router({
               : [],
             documents: Array.isArray(rawData.documents)
               ? rawData.documents.filter((doc: any) => allowedUserIds.has(doc.userId))
+              : [],
+            expenseAiAnalyses: Array.isArray(rawData.expenseAiAnalyses)
+              ? rawData.expenseAiAnalyses.filter((analysis: any) => allowedUserIds.has(analysis.userId))
               : [],
             exchangeRates: Array.isArray(rawData.exchangeRates)
               ? rawData.exchangeRates.filter(

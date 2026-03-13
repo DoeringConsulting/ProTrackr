@@ -1,0 +1,4 @@
+time_entry_external_id;customer_external_id;date;project_name;entry_type;minutes;description
+TE-2026-03-01-01;CUST-003;2026-03-01;Corpuls Rollout;onsite;480;Kickoff Workshop
+TE-2026-03-02-01;CUST-003;2026-03-02;Corpuls Rollout;business_trip;600;Onsite + Reise
+TE-2026-03-11-01;CUST-003;2026-03-11;Corpuls Rollout;onsite;540;GoLive Support

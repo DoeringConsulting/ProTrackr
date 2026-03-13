@@ -1,0 +1,1 @@
+expense_external_id;time_entry_external_id;customer_external_id;mandanten_nr;project_name;date;category;amount;currency;full_day;comment;flight_route_type;departure_time;arrival_time;return_date;ticket_number;flight_number;check_in_date;check_out_date;nights;distance_km;rate_per_km;liters;price_per_liter;receipt_no;vendor_name

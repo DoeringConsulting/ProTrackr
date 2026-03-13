@@ -194,6 +194,31 @@ export type Document = typeof documents.$inferSelect;
 export type InsertDocument = typeof documents.$inferInsert;
 
 /**
+ * AI receipt analyses table - audit trail for receipt-to-expense extraction
+ */
+export const expenseAiAnalyses = mysqlTable("expenseAiAnalyses", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  documentId: int("documentId"),
+  source: varchar("source", { length: 30 }).notNull().default("manual_text"), // ocr_text|document_url|hybrid
+  modelName: varchar("modelName", { length: 120 }).notNull().default("heuristic-v1"),
+  ocrText: text("ocrText"),
+  extractionPayload: text("extractionPayload"), // raw JSON from engine
+  normalizedPayload: text("normalizedPayload"), // canonical candidates JSON
+  validationPayload: text("validationPayload"), // issue list JSON
+  matchingPayload: text("matchingPayload"), // match suggestions JSON
+  dedupeHash: varchar("dedupeHash", { length: 80 }),
+  status: varchar("status", { length: 30 }).notNull().default("needs_review"), // needs_review|approved|rejected|error
+  approvedExpenseId: int("approvedExpenseId"),
+  confidence: int("confidence").notNull().default(0), // 0..10000
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ExpenseAiAnalysis = typeof expenseAiAnalyses.$inferSelect;
+export type InsertExpenseAiAnalysis = typeof expenseAiAnalyses.$inferInsert;
+
+/**
  * Exchange rates table - EUR/PLN rates from NBP
  */
 export const exchangeRates = mysqlTable("exchangeRates", {

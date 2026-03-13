@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.58",
+      "date": "2026-03-13",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "KI-Belegauslese mit Review-Queue und Freigabe in Reisekosten",
+          "description": "Neue receiptAi-API mit Extraktion (LLM/Heuristik), Confidence, Regelpruefung, Projekt-/Zeit-Matching, Audit-Trail sowie Freigabe/Ablehnung von KI-Kandidaten."
+        },
+        {
+          "type": "feature",
+          "title": "Import v1 fuer Kunden, Zeiteintraege und Reisekosten",
+          "description": "Importseite erweitert um strukturierte Validierung, Fehlercodes/Klartextkatalog, zeilenweise Pruefung und Importablauf fuer die drei Tabellenstrukturen."
+        },
+        {
+          "type": "improvement",
+          "title": "Downloadbare Importvorlagen und Testdaten",
+          "description": "Bereitstellung von Excel-Templates (v1) und Beispieltestdateien inkl. CSV-Varianten unter client/public/import-templates."
+        }
+      ]
+    },
+    {
       "version": "1.0.56",
       "date": "2026-03-12",
       "changes": [
