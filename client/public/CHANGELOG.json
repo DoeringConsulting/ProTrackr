@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.0.61",
+      "date": "2026-03-13",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Sidebar: Import-Menüpunkt wieder sichtbar",
+          "description": "Der Eintrag 'Import' wurde in der linken Navigation ergänzt. Damit ist die Import-Seite inklusive Template-Downloads wieder direkt über das Menü erreichbar."
+        }
+      ]
+    },
+    {
       "version": "1.0.60",
       "date": "2026-03-13",
       "changes": [

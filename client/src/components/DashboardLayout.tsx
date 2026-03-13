@@ -36,6 +36,7 @@ const menuItems = [
   { icon: Users, label: "Kunden", path: "/customers" },
   { icon: Clock, label: "Zeiterfassung", path: "/time-tracking" },
   { icon: Receipt, label: "Reisekosten", path: "/expenses" },
+  { icon: Upload, label: "Import", path: "/import" },
   { icon: FileText, label: "Berichte", path: "/reports" },
   { icon: CircleHelp, label: "FAQ", path: "/faq" },
   { icon: Settings, label: "Einstellungen", path: "/settings" },
