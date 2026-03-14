@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.64",
+      "date": "2026-03-14",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Import-Ergebnisse als CSV exportierbar",
+          "description": "Im Bereich „Import-Ergebnisse“ steht jetzt ein eigener CSV-Export bereit, inklusive Summen (erstellt/wiederverwendet/übersprungen) und Laufzeitfehlern."
+        },
+        {
+          "type": "improvement",
+          "title": "CSV-Exportstruktur für Nachbearbeitung optimiert",
+          "description": "Die Exportdatei enthält getrennte Abschnitte für Summary-Metriken und einzelne Laufzeitfehler, damit Buchhaltung/Support sie direkt weiterverarbeiten können."
+        }
+      ]
+    },
+    {
       "version": "1.0.63",
       "date": "2026-03-14",
       "changes": [

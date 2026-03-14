@@ -129,6 +129,41 @@ export default function Import() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadImportResultCsv = () => {
+    if (!result) {
+      toast.error("Keine Import-Ergebnisse zum Download vorhanden");
+      return;
+    }
+
+    const header = ["section", "metric", "value"];
+    const lines = [header.join(";")];
+    lines.push(["summary", "customers_created", escapeCsv(result.customersCreated)].join(";"));
+    lines.push(["summary", "customers_reused", escapeCsv(result.customersReused)].join(";"));
+    lines.push(["summary", "time_entries_created", escapeCsv(result.timeEntriesCreated)].join(";"));
+    lines.push(["summary", "time_entries_reused", escapeCsv(result.timeEntriesReused)].join(";"));
+    lines.push(["summary", "expenses_created", escapeCsv(result.expensesCreated)].join(";"));
+    lines.push(["summary", "expenses_skipped", escapeCsv(result.expensesSkipped)].join(";"));
+    lines.push(["summary", "runtime_errors_count", escapeCsv(result.runtimeErrors.length)].join(";"));
+
+    if (result.runtimeErrors.length > 0) {
+      result.runtimeErrors.forEach((error, index) => {
+        lines.push(["runtime_error", `error_${index + 1}`, escapeCsv(error)].join(";"));
+      });
+    }
+
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const dateTag = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `import-ergebnisse-${dateTag}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
@@ -686,6 +721,12 @@ export default function Import() {
               <CardDescription>Zusammenfassung des Import-Vorgangs</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={handleDownloadImportResultCsv}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Import-Ergebnisse als CSV
+                </Button>
+              </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-primary" />
