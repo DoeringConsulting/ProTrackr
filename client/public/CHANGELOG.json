@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.62",
+      "date": "2026-03-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Import-Validierung erlaubt Teilimporte",
+          "description": "Nicht mehr alle Sheets müssen gleichzeitig befüllt sein. Es reicht jetzt eine gültige Tabelle mit Daten (z. B. nur Kunden oder nur Reisekosten)."
+        },
+        {
+          "type": "feature",
+          "title": "Validierungsfehler als CSV downloadbar",
+          "description": "Im Bereich 'Validierungsergebnis' steht jetzt ein CSV-Export für die Fehler-/Warnliste zur Verfügung."
+        },
+        {
+          "type": "improvement",
+          "title": "KI-Belegauslese: Eingabehinweise präzisiert",
+          "description": "UI-Hinweise erklären jetzt klar, dass OCR-Text direkt unterstützt wird und documentId für bereits hochgeladene Belege genutzt werden kann."
+        }
+      ]
+    },
+    {
       "version": "1.0.61",
       "date": "2026-03-13",
       "changes": [

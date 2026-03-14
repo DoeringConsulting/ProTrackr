@@ -78,7 +78,7 @@ export type ParsedImportWorkbook = {
 
 export const IMPORT_CHECKLIST: Record<string, string[]> = {
   Datei: [
-    "Pflichttabellen vorhanden: Kunden, Zeiteintraege, Reisekosten",
+    "Mindestens eine erkannte Tabelle mit Daten vorhanden",
     "Pflichtspalten je Tabelle vorhanden",
     "Keine doppelten Headernamen",
   ],
@@ -111,13 +111,18 @@ export const IMPORT_ERROR_CATALOG: Record<
 > = {
   "FMT-001": {
     severity: "error",
-    template: 'Datei-Fehler: Tabelle "{sheet}" fehlt.',
-    explanation: "Die Importdatei muss alle Pflichttabellen enthalten.",
+    template: 'Datei-Fehler: Keine gültige Import-Tabelle erkannt ("{sheet}").',
+    explanation: "Die Datei muss mindestens eine gültige Tabelle (Kunden, Zeiteintraege, Reisekosten) enthalten.",
   },
   "FMT-002": {
     severity: "error",
     template: '[{sheet}] Pflichtspalte "{column}" fehlt.',
     explanation: "Ohne Pflichtspalte ist kein valider Import möglich.",
+  },
+  "FMT-003": {
+    severity: "error",
+    template: "[Datei] Keine Datenzeilen gefunden.",
+    explanation: "Mindestens eine Tabelle muss neben dem Header mindestens eine Datenzeile enthalten.",
   },
   "CUS-001": {
     severity: "error",
@@ -349,9 +354,32 @@ function getSheetRows(workbook: XLSX.WorkBook, sheetName: string): Record<string
   });
 }
 
-function detectSingleSheetType(rows: Record<string, unknown>[]): "Kunden" | "Zeiteintraege" | "Reisekosten" | null {
-  const first = rows[0] ?? {};
-  const available = new Set(Object.keys(first));
+function getSheetHeaders(workbook: XLSX.WorkBook, sheetName: string): string[] {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }) as unknown[][];
+  const firstRow = Array.isArray(matrix[0]) ? matrix[0] : [];
+  return firstRow
+    .map(cell => normalizeHeader(cell))
+    .filter(Boolean);
+}
+
+function sheetHasDataRows(workbook: XLSX.WorkBook, sheetName: string): boolean {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return false;
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }) as unknown[][];
+  if (matrix.length < 2) return false;
+  for (const row of matrix.slice(1)) {
+    if (!Array.isArray(row)) continue;
+    if (row.some(cell => String(cell ?? "").trim().length > 0)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function detectSheetTypeByHeaders(headers: string[]): "Kunden" | "Zeiteintraege" | "Reisekosten" | null {
+  const available = new Set(headers);
   const hasAll = (columns: readonly string[]) => columns.every(col => available.has(col));
   if (hasAll(REQUIRED_CUSTOMER_COLUMNS)) return "Kunden";
   if (hasAll(REQUIRED_TIME_COLUMNS)) return "Zeiteintraege";
@@ -371,7 +399,7 @@ export function parseWorkbookV1(workbook: XLSX.WorkBook): ParsedImportWorkbook {
     workbook.SheetNames.length === 1
   ) {
     const fallbackRows = getSheetRows(workbook, workbook.SheetNames[0]);
-    const detected = detectSingleSheetType(fallbackRows);
+    const detected = detectSheetTypeByHeaders(getSheetHeaders(workbook, workbook.SheetNames[0]));
     if (detected === "Kunden") customerRows = fallbackRows;
     if (detected === "Zeiteintraege") timeRows = fallbackRows;
     if (detected === "Reisekosten") expenseRows = fallbackRows;
@@ -442,11 +470,10 @@ export function parseWorkbookV1(workbook: XLSX.WorkBook): ParsedImportWorkbook {
 export function validateWorkbookStructure(workbook: XLSX.WorkBook): ImportIssue[] {
   const issues: ImportIssue[] = [];
   const requiredSheets = ["Kunden", "Zeiteintraege", "Reisekosten"] as const;
-  const hasAllRequiredSheets = requiredSheets.every(sheet => workbook.SheetNames.includes(sheet));
+  const existingRequiredSheets = requiredSheets.filter(sheet => workbook.SheetNames.includes(sheet));
 
-  if (!hasAllRequiredSheets && workbook.SheetNames.length === 1) {
-    const firstRows = getSheetRows(workbook, workbook.SheetNames[0]);
-    const detected = detectSingleSheetType(firstRows);
+  if (existingRequiredSheets.length === 0 && workbook.SheetNames.length === 1) {
+    const detected = detectSheetTypeByHeaders(getSheetHeaders(workbook, workbook.SheetNames[0]));
     if (!detected) {
       addIssue(issues, {
         code: "FMT-001",
@@ -462,9 +489,9 @@ export function validateWorkbookStructure(workbook: XLSX.WorkBook): ImportIssue[
       Zeiteintraege: REQUIRED_TIME_COLUMNS as readonly string[],
       Reisekosten: REQUIRED_EXPENSE_COLUMNS as readonly string[],
     };
-    const available = new Set(Object.keys(firstRows[0] ?? {}));
+    const headers = new Set(getSheetHeaders(workbook, workbook.SheetNames[0]));
     for (const col of requiredColumnsByType[detected]) {
-      if (!available.has(col)) {
+      if (!headers.has(col)) {
         addIssue(issues, {
           code: "FMT-002",
           table: "Datei",
@@ -477,26 +504,25 @@ export function validateWorkbookStructure(workbook: XLSX.WorkBook): ImportIssue[
     return issues;
   }
 
-  for (const sheet of requiredSheets) {
-    if (!workbook.SheetNames.includes(sheet)) {
-      addIssue(issues, {
-        code: "FMT-001",
-        table: "Datei",
-        row: 1,
-        field: "sheet",
-        message: `Datei-Fehler: Tabelle "${sheet}" fehlt.`,
-      });
-    }
+  if (existingRequiredSheets.length === 0) {
+    addIssue(issues, {
+      code: "FMT-001",
+      table: "Datei",
+      row: 1,
+      field: "sheet",
+      message: `Datei-Fehler: Keine der Tabellen Kunden, Zeiteintraege, Reisekosten gefunden.`,
+    });
+    return issues;
   }
-  if (issues.length > 0) return issues;
 
-  const checkRequiredColumns = (
+  let hasAnyDataRows = false;
+
+  const checkRequiredColumnsForSheet = (
     sheet: "Kunden" | "Zeiteintraege" | "Reisekosten",
     requiredColumns: readonly string[]
   ) => {
-    const rows = getSheetRows(workbook, sheet);
-    const first = rows[0] ?? {};
-    const available = new Set(Object.keys(first));
+    const headers = getSheetHeaders(workbook, sheet);
+    const available = new Set(headers);
     for (const col of requiredColumns) {
       if (!available.has(col)) {
         addIssue(issues, {
@@ -508,16 +534,34 @@ export function validateWorkbookStructure(workbook: XLSX.WorkBook): ImportIssue[
         });
       }
     }
+    if (sheetHasDataRows(workbook, sheet)) {
+      hasAnyDataRows = true;
+    }
   };
 
-  checkRequiredColumns("Kunden", REQUIRED_CUSTOMER_COLUMNS);
-  checkRequiredColumns("Zeiteintraege", REQUIRED_TIME_COLUMNS);
-  checkRequiredColumns("Reisekosten", REQUIRED_EXPENSE_COLUMNS);
+  for (const sheet of existingRequiredSheets) {
+    if (sheet === "Kunden") checkRequiredColumnsForSheet("Kunden", REQUIRED_CUSTOMER_COLUMNS);
+    if (sheet === "Zeiteintraege") checkRequiredColumnsForSheet("Zeiteintraege", REQUIRED_TIME_COLUMNS);
+    if (sheet === "Reisekosten") checkRequiredColumnsForSheet("Reisekosten", REQUIRED_EXPENSE_COLUMNS);
+  }
+
+  if (!hasAnyDataRows) {
+    addIssue(issues, {
+      code: "FMT-003",
+      table: "Datei",
+      row: 1,
+      field: "rows",
+      message: "[Datei] Keine Datenzeilen gefunden.",
+    });
+  }
+
   return issues;
 }
 
 export function validateParsedWorkbook(parsed: ParsedImportWorkbook): ImportIssue[] {
   const issues: ImportIssue[] = [];
+  const hasCustomerRows = parsed.customers.length > 0;
+  const hasTimeEntryRows = parsed.timeEntries.length > 0;
 
   const customerIds = new Set<string>();
   const mandantenNumbers = new Set<string>();
@@ -610,10 +654,13 @@ export function validateParsedWorkbook(parsed: ParsedImportWorkbook): ImportIssu
     if (!customerIds.has(row.customerExternalId)) {
       addIssue(issues, {
         code: "TIM-001",
+        severity: hasCustomerRows ? "error" : "warning",
         table: "Zeiteintraege",
         row: row.rowNumber,
         field: "customer_external_id",
-        message: `[Zeiteintraege | Zeile ${row.rowNumber}] customer_external_id nicht gefunden.`,
+        message: hasCustomerRows
+          ? `[Zeiteintraege | Zeile ${row.rowNumber}] customer_external_id nicht gefunden.`
+          : `[Zeiteintraege | Zeile ${row.rowNumber}] customer_external_id nicht in Importdatei gefunden (wird gegen Bestand aufgelöst).`,
       });
     }
     if (!isIsoDate(row.date)) {
@@ -671,10 +718,13 @@ export function validateParsedWorkbook(parsed: ParsedImportWorkbook): ImportIssu
     if (!customerIds.has(row.customerExternalId)) {
       addIssue(issues, {
         code: "EXP-006",
+        severity: hasCustomerRows ? "error" : "warning",
         table: "Reisekosten",
         row: row.rowNumber,
         field: "customer_external_id",
-        message: `[Reisekosten | Zeile ${row.rowNumber}] customer_external_id nicht gefunden.`,
+        message: hasCustomerRows
+          ? `[Reisekosten | Zeile ${row.rowNumber}] customer_external_id nicht gefunden.`
+          : `[Reisekosten | Zeile ${row.rowNumber}] customer_external_id nicht in Importdatei gefunden (wird gegen Bestand aufgelöst).`,
       });
     }
     if (!isIsoDate(row.date)) {
@@ -727,10 +777,13 @@ export function validateParsedWorkbook(parsed: ParsedImportWorkbook): ImportIssu
       if (!timeEntryIds.has(row.timeEntryExternalId)) {
         addIssue(issues, {
           code: "REF-001",
+          severity: hasTimeEntryRows ? "error" : "warning",
           table: "Reisekosten",
           row: row.rowNumber,
           field: "time_entry_external_id",
-          message: `[Reisekosten | Zeile ${row.rowNumber}] time_entry_external_id nicht gefunden.`,
+          message: hasTimeEntryRows
+            ? `[Reisekosten | Zeile ${row.rowNumber}] time_entry_external_id nicht gefunden.`
+            : `[Reisekosten | Zeile ${row.rowNumber}] time_entry_external_id nicht in Importdatei gefunden (wird gegen Bestand aufgelöst).`,
         });
       } else {
         const mappedCustomerExternalId = timeEntryCustomerById.get(row.timeEntryExternalId);

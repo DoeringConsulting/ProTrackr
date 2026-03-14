@@ -88,6 +88,47 @@ export default function Import() {
     return { errors, warnings };
   }, [issues]);
 
+  const escapeCsv = (value: unknown): string => {
+    const text = String(value ?? "");
+    if (text.includes(";") || text.includes('"') || text.includes("\n")) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  };
+
+  const handleDownloadIssuesCsv = () => {
+    const rows = filteredIssues.length > 0 ? filteredIssues : issues;
+    if (rows.length === 0) {
+      toast.error("Keine Validierungsmeldungen zum Download vorhanden");
+      return;
+    }
+    const header = ["code", "severity", "table", "row", "field", "message"];
+    const lines = [header.join(";")];
+    for (const issue of rows) {
+      lines.push(
+        [
+          escapeCsv(issue.code),
+          escapeCsv(issue.severity),
+          escapeCsv(issue.table),
+          escapeCsv(issue.row),
+          escapeCsv(issue.field ?? ""),
+          escapeCsv(issue.message),
+        ].join(";")
+      );
+    }
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const dateTag = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `import-validierung-${issueFilter}-${dateTag}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
@@ -190,9 +231,38 @@ export default function Import() {
 
       const existingCustomers = await utils.customers.list.fetch();
       const existingCustomersByMandantenNr = new Map<string, any>();
+      const existingCustomersById = new Map<string, any>();
       for (const customer of existingCustomers) {
         existingCustomersByMandantenNr.set(String(customer.mandatenNr), customer);
+        existingCustomersById.set(String(customer.id), customer);
       }
+
+      const resolveCustomerId = (customerExternalId: string, mandantenNr?: string): number | null => {
+        const direct = customerExternalToId.get(customerExternalId);
+        if (typeof direct === "number") return direct;
+
+        if (mandantenNr) {
+          const byMandanten = existingCustomersByMandantenNr.get(mandantenNr);
+          if (byMandanten?.id) {
+            customerExternalToId.set(customerExternalId, Number(byMandanten.id));
+            return Number(byMandanten.id);
+          }
+        }
+
+        const byExternalAsMandanten = existingCustomersByMandantenNr.get(customerExternalId);
+        if (byExternalAsMandanten?.id) {
+          customerExternalToId.set(customerExternalId, Number(byExternalAsMandanten.id));
+          return Number(byExternalAsMandanten.id);
+        }
+
+        const byId = existingCustomersById.get(customerExternalId);
+        if (byId?.id) {
+          customerExternalToId.set(customerExternalId, Number(byId.id));
+          return Number(byId.id);
+        }
+
+        return null;
+      };
 
       for (const row of parsedWorkbook.customers) {
         try {
@@ -240,7 +310,7 @@ export default function Import() {
 
       for (const row of parsedWorkbook.timeEntries) {
         try {
-          const customerId = customerExternalToId.get(row.customerExternalId);
+          const customerId = resolveCustomerId(row.customerExternalId);
           if (!customerId) {
             runtimeErrors.push(`Zeiteinträge-Zeile ${row.rowNumber}: Kunde nicht aufgelöst`);
             continue;
@@ -287,11 +357,20 @@ export default function Import() {
 
       for (const row of parsedWorkbook.expenses) {
         try {
-          const customerId = customerExternalToId.get(row.customerExternalId) ?? null;
+          const customerId = resolveCustomerId(row.customerExternalId, row.mandantenNr) ?? null;
           let timeEntryId: number | null = null;
 
           if (row.timeEntryExternalId) {
             timeEntryId = timeEntryExternalToId.get(row.timeEntryExternalId) ?? null;
+            if (!timeEntryId && /^\d+$/.test(row.timeEntryExternalId)) {
+              const numericId = Number(row.timeEntryExternalId);
+              const existing = [...existingTimeEntries, ...createdTimeEntries].find(
+                (entry: any) => Number(entry.id) === numericId
+              );
+              if (existing?.id) {
+                timeEntryId = Number(existing.id);
+              }
+            }
             if (!timeEntryId) {
               runtimeErrors.push(
                 `Reisekosten-Zeile ${row.rowNumber}: time_entry_external_id nicht aufgelöst`
@@ -418,7 +497,7 @@ export default function Import() {
           <CardHeader>
             <CardTitle>Importdatei hochladen (v1)</CardTitle>
             <CardDescription>
-              Unterstützt: Excel (.xlsx/.xls) mit Kunden, Zeiteintraege, Reisekosten
+              Unterstützt: Excel (.xlsx/.xls) oder CSV. Teilimporte sind erlaubt (z. B. nur Kunden oder nur Reisekosten).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -545,6 +624,10 @@ export default function Import() {
                   <SelectItem value="warning">Nur Warnungen</SelectItem>
                 </SelectContent>
               </Select>
+              <Button variant="outline" size="sm" onClick={handleDownloadIssuesCsv}>
+                <Download className="mr-2 h-4 w-4" />
+                Fehler als CSV
+              </Button>
               {hasBlockingIssues(issues) ? (
                 <div className="text-sm text-red-600 flex items-center gap-1">
                   <CircleX className="h-4 w-4" />
@@ -657,6 +740,9 @@ export default function Import() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>OCR/Textinhalt</Label>
+                <p className="text-xs text-muted-foreground">
+                  Hier reinen OCR-/Belegtext einfügen. Alternativ documentId nutzen (Dokument muss bereits als Beleg hochgeladen sein).
+                </p>
                 <Textarea
                   rows={8}
                   placeholder="Belegtext einfügen (oder documentId verwenden)"
@@ -666,6 +752,9 @@ export default function Import() {
               </div>
               <div className="space-y-2">
                 <Label>Optionale Hinweise</Label>
+                <p className="text-xs text-muted-foreground">
+                  Direkter Datei-Upload ist in diesem Bereich nicht vorgesehen. Für Datei-Analyse zuerst Beleg hochladen und documentId eintragen.
+                </p>
                 <Input
                   placeholder="documentId (optional)"
                   value={aiDocumentId}
