@@ -99,7 +99,8 @@ export const IMPORT_CHECKLIST: Record<string, string[]> = {
   Reisekosten: [
     "expense_external_id vorhanden und eindeutig",
     "customer_external_id referenziert Kundenzeile",
-    "date YYYY-MM-DD, amount > 0, currency ISO-3",
+    "date ist immer Pflicht (YYYY-MM-DD), auch mit time_entry_external_id",
+    "amount > 0, currency ISO-3",
     "Kategorie-spezifische Pflichtfelder (flight/hotel/fuel)",
     "Referenzen auf time_entry_external_id sind konsistent",
   ],
@@ -173,6 +174,11 @@ export const IMPORT_ERROR_CATALOG: Record<
     severity: "error",
     template: '[Reisekosten | Zeile {row}] currency ungültig.',
     explanation: "Währung muss ISO-3 (z. B. EUR, PLN) sein.",
+  },
+  "EXP-004": {
+    severity: "error",
+    template: '[Reisekosten | Zeile {row}] date fehlt oder ist ungültig.',
+    explanation: "date ist Pflicht und muss im ISO-Format YYYY-MM-DD vorliegen (auch bei time_entry_external_id).",
   },
   "EXP-FLT-001": {
     severity: "error",
@@ -727,7 +733,15 @@ export function validateParsedWorkbook(parsed: ParsedImportWorkbook): ImportIssu
           : `[Reisekosten | Zeile ${row.rowNumber}] customer_external_id nicht in Importdatei gefunden (wird gegen Bestand aufgelöst).`,
       });
     }
-    if (!isIsoDate(row.date)) {
+    if (!row.date) {
+      addIssue(issues, {
+        code: "EXP-004",
+        table: "Reisekosten",
+        row: row.rowNumber,
+        field: "date",
+        message: `[Reisekosten | Zeile ${row.rowNumber}] date fehlt (Pflichtfeld, auch mit time_entry_external_id).`,
+      });
+    } else if (!isIsoDate(row.date)) {
       addIssue(issues, {
         code: "EXP-004",
         table: "Reisekosten",

@@ -223,6 +223,27 @@ function toComparableDate(value: unknown): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function toIsoDateOnly(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return undefined;
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    if (/^\d{4}-\d{2}-\d{2}[T ]/.test(trimmed)) return trimmed.slice(0, 10);
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) {
+      const [dd, mm, yyyy] = trimmed.split(".");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  }
+  return undefined;
+}
+
 function validateFlightAndHotelExpenseRules(input: {
   category?: string;
   date?: string;
@@ -1110,6 +1131,7 @@ export const appRouter = router({
     }).mutation(async ({ ctx, input }) => {
       const { createExpense, getTimeEntryById } = await import("./db");
       let ownerUserId = ctx.user.id;
+      let linkedTimeEntryDate: string | undefined;
 
       if (input.timeEntryId) {
         const timeEntry = await getTimeEntryById(input.timeEntryId);
@@ -1120,10 +1142,12 @@ export const appRouter = router({
           throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
         }
         ownerUserId = timeEntry.userId;
+        linkedTimeEntryDate = toIsoDateOnly(timeEntry.date);
       }
 
       const normalizedInput = {
         ...input,
+        date: input.date ?? linkedTimeEntryDate,
         ...(input.category === "flight"
           ? { flightRouteType: input.flightRouteType ?? "domestic" }
           : {}),
@@ -1141,6 +1165,7 @@ export const appRouter = router({
       return z.object({
         timeEntryId: z.number(),
         expenses: z.array(z.object({
+          date: z.string().optional(),
           category: expenseCategorySchema,
           distance: z.number().optional(),
           rate: z.number().optional(),
@@ -1170,10 +1195,12 @@ export const appRouter = router({
       if (!(await canAccessUserOwnedData(ctx.user, timeEntry.userId))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
       }
+      const linkedTimeEntryDate = toIsoDateOnly(timeEntry.date);
       const results = [];
       for (const expense of input.expenses) {
         const normalizedExpense = {
           ...expense,
+          date: expense.date ?? linkedTimeEntryDate,
           ...(expense.category === "flight"
             ? { flightRouteType: expense.flightRouteType ?? "domestic" }
             : {}),

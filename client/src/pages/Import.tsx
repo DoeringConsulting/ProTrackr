@@ -164,6 +164,14 @@ export default function Import() {
     URL.revokeObjectURL(url);
   };
 
+  const formatImportErrorMessage = (error: unknown): string => {
+    const message = String((error as any)?.message ?? "Unbekannter Fehler");
+    if (message.startsWith("Failed query:")) {
+      return "Datenbankfehler beim Speichern (bitte Pflichtfelder/Datumsformat prüfen).";
+    }
+    return message;
+  };
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
@@ -428,6 +436,7 @@ export default function Import() {
           }
 
           const payload: any = {
+            date: row.date,
             category: row.category,
             amount: Math.round(row.amount * 100),
             currency: row.currency,
@@ -438,7 +447,6 @@ export default function Import() {
           };
 
           if (timeEntryId) payload.timeEntryId = timeEntryId;
-          else payload.date = row.date;
 
           if (row.category === "flight") {
             payload.flightRouteType = row.flightRouteType || "domestic";
@@ -472,7 +480,7 @@ export default function Import() {
           await createExpenseMutation.mutateAsync(payload);
           expensesCreated++;
         } catch (error: any) {
-          runtimeErrors.push(`Reisekosten-Zeile ${row.rowNumber}: ${error.message}`);
+          runtimeErrors.push(`Reisekosten-Zeile ${row.rowNumber}: ${formatImportErrorMessage(error)}`);
           expensesSkipped++;
         }
         opIndex++;

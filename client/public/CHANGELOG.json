@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.65",
+      "date": "2026-03-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Import-Reisekosten: date wird immer korrekt mitgegeben",
+          "description": "Beim Reisekosten-Import wird `date` nun unabhängig von `time_entry_external_id` immer in die API-Payload übernommen; dadurch entfallen DB-Insertfehler mit `date=default`."
+        },
+        {
+          "type": "fix",
+          "title": "Expenses-API setzt Datum automatisch aus Zeiteintrag",
+          "description": "Wenn bei verknüpften Reisekosten kein Datum übergeben wird, übernimmt der Server jetzt automatisch das Datum des referenzierten Zeiteintrags."
+        },
+        {
+          "type": "improvement",
+          "title": "Import-Templates/Formate präzisiert",
+          "description": "Checkliste, Validierung und Template-README wurden ergänzt: `date` ist als Pflichtfeld klar dokumentiert (auch bei `time_entry_external_id`)."
+        }
+      ]
+    },
+    {
       "version": "1.0.64",
       "date": "2026-03-14",
       "changes": [
