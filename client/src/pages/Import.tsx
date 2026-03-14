@@ -330,12 +330,15 @@ export default function Import() {
             timeEntriesReused++;
           } else {
             const dateObj = new Date(`${row.date}T00:00:00`);
-            const weekdayDe = dateObj.toLocaleDateString("de-DE", { weekday: "long" });
-            const weekdayPl = dateObj.toLocaleDateString("pl-PL", { weekday: "short" });
+            // DB-Spalte weekday ist auf 10 Zeichen begrenzt -> kurze Form verwenden.
+            const weekdayShort = dateObj
+              .toLocaleDateString("de-DE", { weekday: "short" })
+              .replace(".", "")
+              .slice(0, 10);
             const created = await createTimeEntryMutation.mutateAsync({
               customerId,
               date: row.date,
-              weekday: `${weekdayDe}/${weekdayPl}`,
+              weekday: weekdayShort || "Mo",
               projectName: row.projectName,
               entryType: row.entryType,
               description: row.description || undefined,

@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.63",
+      "date": "2026-03-14",
+      "changes": [
+        {
+          "type": "fix",
+          "title": "Import: Zeiteintrag-Insertfehler durch zu langen Wochentag behoben",
+          "description": "Beim Import werden Wochentage nun in Kurzform gespeichert (z. B. Di/Mi), damit die DB-Längenbegrenzung eingehalten wird und Zeiteinträge wieder sauber importieren."
+        },
+        {
+          "type": "improvement",
+          "title": "Import-Fehleranalyse über CSV unterstützt",
+          "description": "Die Validierungsmeldungen bleiben als CSV exportierbar, um Laufzeit-/Datenprobleme mit Buchhaltung oder Support auszutauschen."
+        }
+      ]
+    },
+    {
       "version": "1.0.62",
       "date": "2026-03-14",
       "changes": [
