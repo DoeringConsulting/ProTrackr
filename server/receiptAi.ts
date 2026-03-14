@@ -375,7 +375,7 @@ async function extractByLlm(input: ReceiptAnalysisInput): Promise<{ model: strin
     }));
 
     return {
-      model: response.model || "gemini-2.5-flash",
+      model: response.model || "llm-default",
       raw: rawParsed,
       candidates,
     };

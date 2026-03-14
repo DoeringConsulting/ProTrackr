@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.66",
+      "date": "2026-03-14",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Zeiterfassung: Projekt-/Kostenfarben mit Tagesnuancen",
+          "description": "Projekteinträge werden nun immer in Grüntönen und Reisekosten immer in Goldtönen dargestellt; pro Tag wird der 2./3. Eintrag jeweils dunkler (max. zwei Nuancen)."
+        },
+        {
+          "type": "feature",
+          "title": "Backup/Restore um Mandant-, Benutzer- und Reset-Token-Daten erweitert",
+          "description": "Der Export/Import im Einstellungen-Flow enthält nun zusätzlich Mandanten, Benutzer und Passwort-Reset-Tokens, damit Wiederherstellungen vollständiger erfolgen."
+        },
+        {
+          "type": "feature",
+          "title": "ChatGPT-Integration über API-Key möglich",
+          "description": "LLM-Aufrufe unterstützen jetzt OpenAI direkt per `OPENAI_API_KEY`/`LLM_PROVIDER=openai` sowie frei konfigurierbares Modell via `LLM_MODEL`."
+        }
+      ]
+    },
+    {
       "version": "1.0.65",
       "date": "2026-03-14",
       "changes": [

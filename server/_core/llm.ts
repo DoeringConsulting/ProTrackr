@@ -57,6 +57,7 @@ export type ToolChoice =
 
 export type InvokeParams = {
   messages: Message[];
+  model?: string;
   tools?: Tool[];
   toolChoice?: ToolChoice;
   tool_choice?: ToolChoice;
@@ -115,7 +116,8 @@ const ensureArray = (
 ): MessageContent[] => (Array.isArray(value) ? value : [value]);
 
 const normalizeContentPart = (
-  part: MessageContent
+  part: MessageContent,
+  options: { supportsFileUrl: boolean }
 ): TextContent | ImageContent | FileContent => {
   if (typeof part === "string") {
     return { type: "text", text: part };
@@ -130,13 +132,22 @@ const normalizeContentPart = (
   }
 
   if (part.type === "file_url") {
+    if (!options.supportsFileUrl) {
+      return {
+        type: "text",
+        text: `Datei-URL: ${part.file_url.url}`,
+      };
+    }
     return part;
   }
 
   throw new Error("Unsupported message content part");
 };
 
-const normalizeMessage = (message: Message) => {
+const normalizeMessage = (
+  message: Message,
+  options: { supportsFileUrl: boolean }
+) => {
   const { role, name, tool_call_id } = message;
 
   if (role === "tool" || role === "function") {
@@ -152,7 +163,9 @@ const normalizeMessage = (message: Message) => {
     };
   }
 
-  const contentParts = ensureArray(message.content).map(normalizeContentPart);
+  const contentParts = ensureArray(message.content).map(part =>
+    normalizeContentPart(part, options)
+  );
 
   // If there's only text content, collapse to a single string for compatibility
   if (contentParts.length === 1 && contentParts[0].type === "text") {
@@ -209,15 +222,54 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+type ResolvedLlmConfig = {
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  supportsThinking: boolean;
+  supportsFileUrl: boolean;
+};
 
-const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+const resolveLlmConfig = (): ResolvedLlmConfig => {
+  const providerRaw = (ENV.llmProvider ?? "").trim().toLowerCase();
+  const useOpenAi =
+    providerRaw === "openai" || (!!ENV.openaiApiKey && providerRaw !== "forge");
+
+  if (useOpenAi) {
+    const apiKey = ENV.openaiApiKey || ENV.forgeApiKey;
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY is not configured");
+    }
+    const apiUrl =
+      ENV.openaiApiUrl && ENV.openaiApiUrl.trim().length > 0
+        ? ENV.openaiApiUrl.replace(/\/$/, "")
+        : "https://api.openai.com/v1/chat/completions";
+    const model = (ENV.llmModel || "gpt-4o-mini").trim();
+    return {
+      apiUrl,
+      apiKey,
+      model,
+      supportsThinking: false,
+      supportsFileUrl: false,
+    };
   }
+
+  if (!ENV.forgeApiKey) {
+    throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
+  }
+
+  const apiUrl =
+    ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+      ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
+      : "https://forge.manus.im/v1/chat/completions";
+  const model = (ENV.llmModel || "gemini-2.5-flash").trim();
+  return {
+    apiUrl,
+    apiKey: ENV.forgeApiKey,
+    model,
+    supportsThinking: model.toLowerCase().includes("gemini"),
+    supportsFileUrl: true,
+  };
 };
 
 const normalizeResponseFormat = ({
@@ -266,10 +318,11 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
+  const llmConfig = resolveLlmConfig();
 
   const {
     messages,
+    model,
     tools,
     toolChoice,
     tool_choice,
@@ -280,8 +333,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
-    messages: messages.map(normalizeMessage),
+    model: (model || llmConfig.model).trim(),
+    messages: messages.map(message =>
+      normalizeMessage(message, { supportsFileUrl: llmConfig.supportsFileUrl })
+    ),
   };
 
   if (tools && tools.length > 0) {
@@ -296,9 +351,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768
-  payload.thinking = {
-    "budget_tokens": 128
+  payload.max_tokens = 32768;
+  if (llmConfig.supportsThinking) {
+    payload.thinking = {
+      budget_tokens: 128,
+    };
   }
 
   const normalizedResponseFormat = normalizeResponseFormat({
@@ -312,11 +369,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
-  const response = await fetch(resolveApiUrl(), {
+  const response = await fetch(llmConfig.apiUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${llmConfig.apiKey}`,
     },
     body: JSON.stringify(payload),
   });

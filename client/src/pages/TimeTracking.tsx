@@ -67,13 +67,6 @@ const WORK_TYPE_LABELS = {
   business_trip: "Business Trip",
 };
 
-const WORK_TYPE_COLORS = {
-  onsite: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
-  remote: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
-  off_duty: "bg-gray-100 text-gray-800 border-gray-200",
-  business_trip: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
-};
-
 const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   car: "Auto",
   train: "ÖPNV",
@@ -87,18 +80,23 @@ const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   other: "Sonstiges",
 };
 
-const EXPENSE_CATEGORY_COLORS = {
-  car: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
-  train: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
-  flight: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
-  taxi: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
-  transport: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
-  meal: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
-  hotel: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
-  food: "bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] border-[var(--badge-inclusive-text)]/30",
-  fuel: "bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] border-[var(--badge-exclusive-text)]/30",
-  other: "bg-gray-100 text-gray-800 border-gray-200",
-};
+// Tages-Nuancen: 1. Eintrag Basisfarbe, 2./3. Eintrag dunkler (max. 2 Nuancen).
+const PROJECT_ENTRY_TONE_CLASSES = [
+  "bg-[#048998] text-white border-[#048998]",
+  "bg-[#037d8a] text-white border-[#037d8a]",
+  "bg-[#02717d] text-white border-[#02717d]",
+] as const;
+
+const EXPENSE_ENTRY_TONE_CLASSES = [
+  "bg-[#b98847] text-white border-[#b98847]",
+  "bg-[#aa7e42] text-white border-[#aa7e42]",
+  "bg-[#9b733d] text-white border-[#9b733d]",
+] as const;
+
+function getToneClass(toneClasses: readonly string[], index: number): string {
+  const clampedIndex = Math.max(0, Math.min(index, toneClasses.length - 1));
+  return toneClasses[clampedIndex] ?? toneClasses[0];
+}
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
@@ -812,13 +810,18 @@ export default function TimeTracking() {
                       
                       {/* Mobile: Verstecke Details wenn nicht expanded, Desktop: zeige immer mit Scroll */}
                       <div className={`space-y-1 ${isExpanded ? "max-h-[180px] md:max-h-[180px] max-h-[240px] overflow-y-auto pr-2" : "md:block hidden md:max-h-[180px] md:overflow-y-auto md:pr-2"}`}>
-                        {displayItems.map((item, itemIdx) => {
+                        {(() => {
+                          let projectEntryIndex = 0;
+                          let expenseEntryIndex = 0;
+                          return displayItems.map((item, itemIdx) => {
                           if (item.type === 'time') {
                             const entry = item.data as any;
+                            const toneClass = getToneClass(PROJECT_ENTRY_TONE_CLASSES, projectEntryIndex);
+                            projectEntryIndex += 1;
                             return (
                               <div
                                 key={`time-${entry.id}`}
-                                className={`text-xs p-1 rounded border group ${WORK_TYPE_COLORS[entry.entryType as keyof typeof WORK_TYPE_COLORS]}`}
+                                className={`text-xs p-1 rounded border group ${toneClass}`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <div className="flex items-start justify-between gap-1">
@@ -845,7 +848,8 @@ export default function TimeTracking() {
                             );
                           } else {
                             const expense = item.data as any;
-                            const categoryColor = EXPENSE_CATEGORY_COLORS[expense.category as keyof typeof EXPENSE_CATEGORY_COLORS] || EXPENSE_CATEGORY_COLORS.other;
+                            const toneClass = getToneClass(EXPENSE_ENTRY_TONE_CLASSES, expenseEntryIndex);
+                            expenseEntryIndex += 1;
                             const showOutboundDeparture =
                               expense.category === "flight" &&
                               expense._flightLeg !== "return" &&
@@ -857,7 +861,7 @@ export default function TimeTracking() {
                             return (
                               <div
                                 key={`expense-${expense.id}`}
-                                className={`text-xs p-1 rounded border cursor-pointer ${categoryColor}`}
+                                className={`text-xs p-1 rounded border cursor-pointer ${toneClass}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   // Open edit dialog for expense
@@ -909,7 +913,8 @@ export default function TimeTracking() {
                               </div>
                             );
                           }
-                        })}
+                          });
+                        })()}
                         {!isExpanded && hasMore && (
                           <div className="text-[10px] text-muted-foreground text-center pt-1">
                             +{allItems.length - 2} weitere

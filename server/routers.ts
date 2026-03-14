@@ -2746,6 +2746,8 @@ export const appRouter = router({
         exchangeRates,
         fixedCosts,
         invoiceNumbers,
+        mandanten,
+        passwordResetTokens,
         taxConfigPl,
         taxProfiles,
         taxSettings,
@@ -2755,7 +2757,7 @@ export const appRouter = router({
       } = await import("../drizzle/schema");
 
       const mandantUsers = await db
-        .select({ id: users.id })
+        .select()
         .from(users)
         .where(eq(users.mandantId, ctx.user.mandantId));
       const userIds = mandantUsers.map((u) => u.id);
@@ -2827,11 +2829,19 @@ export const appRouter = router({
           )
         );
       const taxConfigData = await db.select().from(taxConfigPl);
+      const mandantenData = await db.select().from(mandanten).where(eq(mandanten.id, ctx.user.mandantId));
+      const passwordResetTokensData =
+        userIds.length > 0
+          ? await db.select().from(passwordResetTokens).where(inArray(passwordResetTokens.userId, userIds))
+          : [];
 
       return {
         version: "1.0",
         exportDate: new Date().toISOString(),
         data: {
+          mandanten: mandantenData,
+          users: mandantUsers,
+          passwordResetTokens: passwordResetTokensData,
           customers: customersData,
           timeEntries: timeEntriesData,
           expenses: expensesData,
@@ -2870,22 +2880,41 @@ export const appRouter = router({
           .select({ id: users.id })
           .from(users)
           .where(eq(users.mandantId, ctx.user.mandantId));
-        const allowedUserIds = new Set(mandantUsers.map((u) => u.id));
+        const existingMandantUserIds = new Set<number>(mandantUsers.map((u) => Number(u.id)));
 
         const rawData = input.backup?.data ?? {};
+        const scopedUsers = Array.isArray(rawData.users)
+          ? rawData.users.filter((user: any) => Number(user?.mandantId) === Number(ctx.user.mandantId))
+          : [];
+        const scopedUserIds = new Set<number>(
+          scopedUsers
+            .map((user: any) => Number(user?.id))
+            .filter((id: number) => Number.isFinite(id))
+        );
+        const effectiveUserIds = new Set(
+          Array.from(existingMandantUserIds).concat(Array.from(scopedUserIds))
+        );
+        const hasEffectiveUserId = (value: unknown) => effectiveUserIds.has(Number(value));
         const scopedTimeEntries = Array.isArray(rawData.timeEntries)
-          ? rawData.timeEntries.filter((entry: any) => allowedUserIds.has(entry.userId))
+          ? rawData.timeEntries.filter((entry: any) => hasEffectiveUserId(entry?.userId))
           : [];
         const scopedTimeEntryIds = new Set(scopedTimeEntries.map((entry: any) => entry.id));
         const scopedCustomerIds = new Set(scopedTimeEntries.map((entry: any) => entry.customerId));
 
         const isAllowedExpense = (expense: any) =>
-          allowedUserIds.has(expense?.userId) ||
+          hasEffectiveUserId(expense?.userId) ||
           (expense?.timeEntryId != null && scopedTimeEntryIds.has(expense.timeEntryId));
 
         backupToImport = {
           ...input.backup,
           data: {
+            mandanten: Array.isArray(rawData.mandanten)
+              ? rawData.mandanten.filter((mandant: any) => Number(mandant?.id) === Number(ctx.user.mandantId))
+              : [],
+            users: scopedUsers.map((user: any) => ({ ...user, mandantId: ctx.user.mandantId })),
+            passwordResetTokens: Array.isArray(rawData.passwordResetTokens)
+              ? rawData.passwordResetTokens.filter((token: any) => scopedUserIds.has(Number(token?.userId)))
+              : [],
             customers: Array.isArray(rawData.customers)
               ? rawData.customers.filter((customer: any) => scopedCustomerIds.has(customer.id))
               : [],
@@ -2894,28 +2923,28 @@ export const appRouter = router({
               ? rawData.expenses.filter(isAllowedExpense)
               : [],
             documents: Array.isArray(rawData.documents)
-              ? rawData.documents.filter((doc: any) => allowedUserIds.has(doc.userId))
+              ? rawData.documents.filter((doc: any) => hasEffectiveUserId(doc?.userId))
               : [],
             expenseAiAnalyses: Array.isArray(rawData.expenseAiAnalyses)
-              ? rawData.expenseAiAnalyses.filter((analysis: any) => allowedUserIds.has(analysis.userId))
+              ? rawData.expenseAiAnalyses.filter((analysis: any) => hasEffectiveUserId(analysis?.userId))
               : [],
             exchangeRates: Array.isArray(rawData.exchangeRates)
               ? rawData.exchangeRates.filter(
-                  (rate: any) => Number(rate.userId ?? 0) === 0 || allowedUserIds.has(Number(rate.userId))
+                  (rate: any) => Number(rate.userId ?? 0) === 0 || hasEffectiveUserId(rate?.userId)
                 )
               : [],
             fixedCosts: Array.isArray(rawData.fixedCosts)
-              ? rawData.fixedCosts.filter((cost: any) => allowedUserIds.has(cost.userId))
+              ? rawData.fixedCosts.filter((cost: any) => hasEffectiveUserId(cost?.userId))
               : [],
             taxSettings: Array.isArray(rawData.taxSettings)
-              ? rawData.taxSettings.filter((setting: any) => allowedUserIds.has(setting.userId))
+              ? rawData.taxSettings.filter((setting: any) => hasEffectiveUserId(setting?.userId))
               : [],
             taxProfiles: Array.isArray(rawData.taxProfiles)
-              ? rawData.taxProfiles.filter((profile: any) => allowedUserIds.has(profile.userId))
+              ? rawData.taxProfiles.filter((profile: any) => hasEffectiveUserId(profile?.userId))
               : [],
             taxConfigPl: Array.isArray(rawData.taxConfigPl) ? rawData.taxConfigPl : [],
             accountSettings: Array.isArray(rawData.accountSettings)
-              ? rawData.accountSettings.filter((setting: any) => allowedUserIds.has(setting.userId))
+              ? rawData.accountSettings.filter((setting: any) => hasEffectiveUserId(setting?.userId))
               : [],
             invoiceNumbers: Array.isArray(rawData.invoiceNumbers)
               ? rawData.invoiceNumbers.filter((invoice: any) => scopedCustomerIds.has(invoice.customerId))

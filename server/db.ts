@@ -826,6 +826,9 @@ export async function exportDatabase() {
   if (!db) throw new Error("Database not available");
   
   const {
+    mandanten,
+    users,
+    passwordResetTokens,
     customers,
     timeEntries,
     expenses,
@@ -845,6 +848,9 @@ export async function exportDatabase() {
     version: "1.0",
     exportDate: new Date().toISOString(),
     data: {
+      mandanten: await db.select().from(mandanten),
+      users: await db.select().from(users),
+      passwordResetTokens: await db.select().from(passwordResetTokens),
       customers: await db.select().from(customers),
       timeEntries: await db.select().from(timeEntries),
       expenses: await db.select().from(expenses),
@@ -1129,6 +1135,9 @@ export async function importDatabase(backup: any) {
   }
   
   const {
+    mandanten,
+    users,
+    passwordResetTokens,
     customers,
     timeEntries,
     expenses,
@@ -1145,6 +1154,23 @@ export async function importDatabase(backup: any) {
   
   // Import data (this will overwrite existing data)
   // In production, you might want to add more sophisticated merge logic
+  if (backup.data.mandanten && backup.data.mandanten.length > 0) {
+    for (const mandant of backup.data.mandanten) {
+      await db.insert(mandanten).values(mandant).onDuplicateKeyUpdate({ set: mandant });
+    }
+  }
+
+  if (backup.data.users && backup.data.users.length > 0) {
+    for (const user of backup.data.users) {
+      await db.insert(users).values(user).onDuplicateKeyUpdate({ set: user });
+    }
+  }
+
+  if (backup.data.passwordResetTokens && backup.data.passwordResetTokens.length > 0) {
+    for (const token of backup.data.passwordResetTokens) {
+      await db.insert(passwordResetTokens).values(token).onDuplicateKeyUpdate({ set: token });
+    }
+  }
   
   if (backup.data.customers && backup.data.customers.length > 0) {
     for (const customer of backup.data.customers) {
