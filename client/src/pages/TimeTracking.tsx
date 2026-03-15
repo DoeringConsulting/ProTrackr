@@ -82,15 +82,15 @@ const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
 
 // Tages-Nuancen: 1. Eintrag Basisfarbe, 2./3. Eintrag dunkler (max. 2 Nuancen).
 const PROJECT_ENTRY_TONE_CLASSES = [
-  "bg-[#048998] text-white border-[#048998]",
-  "bg-[#037d8a] text-white border-[#037d8a]",
-  "bg-[#02717d] text-white border-[#02717d]",
+  "bg-[#dcefe4] text-[#2f4a3c] border-[#c3decf]",
+  "bg-[#cfe7d9] text-[#2a4336] border-[#b6d6c3]",
+  "bg-[#c2e0ce] text-[#243b2f] border-[#a7cdb6]",
 ] as const;
 
 const EXPENSE_ENTRY_TONE_CLASSES = [
-  "bg-[#b98847] text-white border-[#b98847]",
-  "bg-[#aa7e42] text-white border-[#aa7e42]",
-  "bg-[#9b733d] text-white border-[#9b733d]",
+  "bg-[#f6ead6] text-[#5b4830] border-[#ead6b8]",
+  "bg-[#f1e0c8] text-[#4f3f2b] border-[#dfc7a6]",
+  "bg-[#ebd6b9] text-[#433623] border-[#d3b992]",
 ] as const;
 
 function getToneClass(toneClasses: readonly string[], index: number): string {
@@ -749,10 +749,10 @@ export default function TimeTracking() {
                               <div 
                                 className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
                                 style={{ 
-                                  backgroundColor: '#048998',
-                                  color: '#ffffff',
+                                  backgroundColor: '#dcefe4',
+                                  color: '#2f4a3c',
                                   opacity: 1,
-                                  border: '2px solid #048998'
+                                  border: '2px solid #c3decf'
                                 } as React.CSSProperties}
                                   title={`${entries.length} Zeiteinträge`}
                                 >
@@ -763,10 +763,10 @@ export default function TimeTracking() {
                               <div 
                                 className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
                                 style={{ 
-                                  backgroundColor: '#b98847',
-                                  color: '#ffffff',
+                                  backgroundColor: '#f6ead6',
+                                  color: '#5b4830',
                                   opacity: 1,
-                                  border: '2px solid #b98847'
+                                  border: '2px solid #ead6b8'
                                 } as React.CSSProperties}
                                   title={`${dayExpenses.length} Reisekosten`}
                                 >

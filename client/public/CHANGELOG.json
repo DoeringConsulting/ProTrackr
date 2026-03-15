@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.69",
+      "date": "2026-03-15",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "OpenAI-Primärmodell auf GPT-5.4 gesetzt",
+          "description": "Die KI-Kette startet für OpenAI nun standardmäßig mit GPT-5.4 und nutzt bei Fehlschlag automatisch ein niedrigeres OpenAI-Fallbackmodell."
+        },
+        {
+          "type": "feature",
+          "title": "Gemini bleibt als Fallback-Provider aktiv",
+          "description": "Nach OpenAI-Fallbacks wird weiterhin Forge/Gemini als zweiter Provider versucht, damit die Analyse bei Provider-Ausfällen robust bleibt."
+        },
+        {
+          "type": "improvement",
+          "title": "Zeit- und Reisekosten-Einträge auf Pastellfarbtöne umgestellt",
+          "description": "Die grünen (Projekt/Zeit) und goldenen (Reisekosten) Tagesnuancen werden nun in Pastelltönen dargestellt, inklusive mobiler Kachelzähler."
+        }
+      ]
+    },
+    {
       "version": "1.0.68",
       "date": "2026-03-15",
       "changes": [

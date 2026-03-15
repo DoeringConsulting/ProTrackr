@@ -240,7 +240,7 @@ const createOpenAiConfig = (modelOverride?: string): ResolvedLlmConfig | null =>
     ENV.openaiApiUrl && ENV.openaiApiUrl.trim().length > 0
       ? ENV.openaiApiUrl.replace(/\/$/, "")
       : "https://api.openai.com/v1/chat/completions";
-  const model = (modelOverride || ENV.openaiModel || ENV.llmModel || "gpt-4o-mini").trim();
+  const model = (modelOverride || ENV.openaiModel || ENV.llmModel || "gpt-5.4").trim();
   return {
     provider: "openai",
     apiUrl,
@@ -272,29 +272,51 @@ const createForgeConfig = (modelOverride?: string): ResolvedLlmConfig | null => 
 const resolveLlmAttemptChain = (requestedModel?: string): ResolvedLlmConfig[] => {
   const providerRaw = (ENV.llmProvider ?? "").trim().toLowerCase();
   const openaiPrimary = createOpenAiConfig(requestedModel);
-  const openaiFallback = createOpenAiConfig();
+  const openaiDefaultPrimary = createOpenAiConfig("gpt-5.4");
+  const openaiFallback = createOpenAiConfig("gpt-4o-mini");
   const forgePrimary = createForgeConfig(requestedModel);
-  const forgeFallback = createForgeConfig();
+  const forgeDefaultPrimary = createForgeConfig("gemini-2.5-flash");
+  const forgeFallback = createForgeConfig("gemini-2.5-flash");
 
-  const uniqueByProvider = (items: Array<ResolvedLlmConfig | null>) => {
-    const byProvider = new Map<LlmProvider, ResolvedLlmConfig>();
+  const uniqueByProviderAndModel = (items: Array<ResolvedLlmConfig | null>) => {
+    const byKey = new Map<string, ResolvedLlmConfig>();
     for (const item of items) {
       if (!item) continue;
-      if (!byProvider.has(item.provider)) {
-        byProvider.set(item.provider, item);
+      const key = `${item.provider}:${item.model}`;
+      if (!byKey.has(key)) {
+        byKey.set(key, item);
       }
     }
-    return Array.from(byProvider.values());
+    return Array.from(byKey.values());
   };
 
   if (providerRaw === "openai") {
-    return uniqueByProvider([openaiPrimary, forgeFallback]);
+    return uniqueByProviderAndModel([
+      openaiPrimary,
+      openaiDefaultPrimary,
+      openaiFallback,
+      forgeDefaultPrimary,
+      forgeFallback,
+    ]);
   }
   if (providerRaw === "forge") {
-    return uniqueByProvider([forgePrimary, openaiFallback]);
+    return uniqueByProviderAndModel([
+      forgePrimary,
+      forgeDefaultPrimary,
+      forgeFallback,
+      openaiDefaultPrimary,
+      openaiFallback,
+    ]);
   }
 
-  return uniqueByProvider([openaiPrimary, forgePrimary, openaiFallback, forgeFallback]);
+  return uniqueByProviderAndModel([
+    openaiPrimary,
+    openaiDefaultPrimary,
+    openaiFallback,
+    forgePrimary,
+    forgeDefaultPrimary,
+    forgeFallback,
+  ]);
 };
 
 const normalizeResponseFormat = ({
