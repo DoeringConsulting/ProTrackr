@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.70",
+      "date": "2026-03-15",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "DocumentID-Übernahme nach Einzel-/Bulk-Upload",
+          "description": "Nach Upload von Belegen fragt ein Zwischenprompt, ob die erzeugten documentIds automatisch in die KI-Eingabefelder übernommen werden sollen."
+        },
+        {
+          "type": "improvement",
+          "title": "Zusätzlicher Upload-Only-Flow im KI-Import",
+          "description": "Neue Aktion „Dateien nur hochladen“ ermöglicht den reinen Upload mit optionaler ID-Übernahme, ohne sofortige Batch-Analyse."
+        }
+      ]
+    },
+    {
       "version": "1.0.69",
       "date": "2026-03-15",
       "changes": [

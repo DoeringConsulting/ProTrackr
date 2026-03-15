@@ -589,6 +589,31 @@ export default function Import() {
     });
   };
 
+  const mergeDocumentIdsIntoInputs = (documentIds: number[], withPrompt = true) => {
+    if (documentIds.length === 0) return;
+    let shouldInsert = true;
+    if (withPrompt) {
+      const label = documentIds.join(", ");
+      shouldInsert = window.confirm(
+        `Es wurden ${documentIds.length} Dokument(e) hochgeladen (${label}).\nSollen die documentIds automatisch in die Eingabefelder übernommen werden?`
+      );
+    }
+    if (!shouldInsert) return;
+
+    setAiDocumentIdsBatch(prev => {
+      const existing = prev
+        .split(/[\n,; ]+/)
+        .map(value => Number(value.trim()))
+        .filter(value => Number.isInteger(value) && value > 0);
+      const merged = Array.from(new Set([...existing, ...documentIds]));
+      return merged.join(",");
+    });
+
+    if (documentIds.length > 0) {
+      setAiDocumentId(String(documentIds[0]));
+    }
+  };
+
   const parseBatchWizardItems = () => {
     const tokens = aiWizardItemsInput
       .split(/[\n,;]+/)
@@ -674,13 +699,36 @@ export default function Import() {
       toast.error("Keine Dokumente hochgeladen – Batch-Analyse wurde nicht gestartet");
       return;
     }
-    setAiDocumentIdsBatch(documentIds.join(","));
+    mergeDocumentIdsIntoInputs(documentIds, true);
     await analyzeReceiptBatchMutation.mutateAsync({
       documentIds,
       customerId: aiCustomerId.trim() ? Number(aiCustomerId) : undefined,
       timeEntryId: aiTimeEntryId.trim() ? Number(aiTimeEntryId) : undefined,
       projectName: aiProjectName.trim() || undefined,
     });
+  };
+
+  const handleUploadOnly = async () => {
+    if (aiBatchFiles.length === 0) {
+      toast.error("Bitte zuerst Dateien für den Upload auswählen");
+      return;
+    }
+    const filesPayload = await Promise.all(
+      aiBatchFiles.map(async file => ({
+        fileName: file.name,
+        mimeType: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream"),
+        fileSize: file.size,
+        base64Data: await toBase64Payload(file),
+      }))
+    );
+    const uploadResult = await uploadAiBatchMutation.mutateAsync({ files: filesPayload });
+    const uploadedDocs = Array.isArray(uploadResult.uploaded) ? uploadResult.uploaded : [];
+    const documentIds = uploadedDocs
+      .map((doc: any) => Number(doc?.id))
+      .filter((id: number) => Number.isInteger(id) && id > 0);
+    if (documentIds.length > 0) {
+      mergeDocumentIdsIntoInputs(documentIds, true);
+    }
   };
 
   const handleDryRunBatchApprove = async () => {
@@ -1017,6 +1065,14 @@ export default function Import() {
                       ))}
                     </div>
                   )}
+                  <Button
+                    variant="outline"
+                    onClick={handleUploadOnly}
+                    disabled={uploadAiBatchMutation.isPending || analyzeReceiptBatchMutation.isPending}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploadAiBatchMutation.isPending ? "Upload läuft..." : "Dateien nur hochladen"}
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={handleUploadAndAnalyzeBatch}
