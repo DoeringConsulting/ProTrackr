@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.68",
+      "date": "2026-03-15",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Phase 2: echter Multi-File-Upload im Import-Reiter",
+          "description": "Belegdateien (Bilder/PDF) können jetzt direkt im KI-Importbereich gesammelt hochgeladen und anschließend als KI-Batch analysiert werden."
+        },
+        {
+          "type": "feature",
+          "title": "Phase 2: Batch-Validierung mit Fehlerklassen",
+          "description": "Der Dry-Run für Sammelfreigaben klassifiziert jede Analyse als ok, warning oder blocking inklusive Detailmeldungen."
+        },
+        {
+          "type": "feature",
+          "title": "Phase 2: Freigabe-Wizard mit Dry-Run und finalem Schreiben",
+          "description": "Neue Batch-Wizard-Schritte ermöglichen Massenprüfung und anschließende Übernahme von nicht-blockierenden Treffern in die Reisekosten."
+        }
+      ]
+    },
+    {
       "version": "1.0.67",
       "date": "2026-03-15",
       "changes": [

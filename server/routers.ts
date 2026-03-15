@@ -543,6 +543,13 @@ const receiptAnalyzeBatchInputSchema = z
   );
 
 type ReceiptAnalyzeInput = z.infer<typeof receiptAnalyzeInputSchema>;
+const receiptBatchItemSchema = z.object({
+  analysisId: z.number().int().positive(),
+  candidateIndex: z.number().int().min(0).optional(),
+});
+const receiptBatchWizardSchema = z.object({
+  items: z.array(receiptBatchItemSchema).min(1).max(500),
+});
 
 async function runReceiptAnalyzeForUser(
   user: { id: number; mandantId: number | null; role: string },
@@ -685,6 +692,125 @@ async function runReceiptAnalyzeForUser(
     engine: analysis.engine,
     model: analysis.model,
     candidates: enrichedCandidates,
+  };
+}
+
+type ReceiptBatchPreparedItem = {
+  analysisId: number;
+  candidateIndex: number;
+  ownerUserId: number;
+  issues: Array<{ code: string; severity: "error" | "warning"; message: string; field?: string }>;
+  hardErrors: Array<{ code: string; severity: "error" | "warning"; message: string; field?: string }>;
+  statusClass: "ok" | "warning" | "blocking";
+  summary: string;
+  basePayload: Record<string, unknown> | null;
+  modelName: string;
+  confidence: number;
+};
+
+async function prepareReceiptBatchItem(
+  user: { id: number; mandantId: number | null; role: string },
+  item: { analysisId: number; candidateIndex?: number }
+): Promise<ReceiptBatchPreparedItem> {
+  const { getExpenseAiAnalysisById, getTimeEntryById, getCustomerById } = await import("./db");
+  const analysis = await getExpenseAiAnalysisById(item.analysisId);
+  if (!analysis) {
+    throw new TRPCError({ code: "NOT_FOUND", message: `Analyse ${item.analysisId} nicht gefunden` });
+  }
+  if (!(await canAccessUserOwnedData(user, analysis.userId))) {
+    throw new TRPCError({ code: "FORBIDDEN", message: `Kein Zugriff auf Analyse ${item.analysisId}` });
+  }
+
+  const candidates = parseJsonSafely(analysis.normalizedPayload);
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Analyse ${item.analysisId} enthält keine Kandidaten` });
+  }
+
+  const candidateIndex = item.candidateIndex ?? 0;
+  const selected = candidates[candidateIndex];
+  if (!selected) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Ungültiger candidateIndex ${candidateIndex} für Analyse ${item.analysisId}`,
+    });
+  }
+
+  const mutableCandidate: ReceiptExpenseCandidate = { ...selected };
+  const issues = validateReceiptCandidate(mutableCandidate);
+  const hardErrors = issues.filter(issue => issue.severity === "error");
+
+  let ownerUserId = analysis.userId;
+  const matchingPayload = parseJsonSafely(analysis.matchingPayload);
+  const defaultMatch = Array.isArray(matchingPayload)
+    ? matchingPayload.find(entry => Number(entry?.index) === candidateIndex)?.match
+    : null;
+  const targetTimeEntryId = defaultMatch?.timeEntryId ?? null;
+  const targetCustomerId = defaultMatch?.customerId ?? null;
+
+  if (targetTimeEntryId) {
+    const timeEntry = await getTimeEntryById(Number(targetTimeEntryId));
+    if (!timeEntry) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: `Zeit-Eintrag ${targetTimeEntryId} (Analyse ${item.analysisId}) nicht gefunden`,
+      });
+    }
+    if (!(await canAccessUserOwnedData(user, timeEntry.userId))) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: `Kein Zugriff auf Zeit-Eintrag ${targetTimeEntryId} (Analyse ${item.analysisId})`,
+      });
+    }
+    ownerUserId = timeEntry.userId;
+  } else if (targetCustomerId) {
+    const customer = await getCustomerById(Number(targetCustomerId));
+    if (!customer) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: `Kunde ${targetCustomerId} (Analyse ${item.analysisId}) nicht gefunden`,
+      });
+    }
+    if (!(await canAccessCustomerOwnedData(user, { userId: customer.userId ?? null }))) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: `Kein Zugriff auf Kunde ${targetCustomerId} (Analyse ${item.analysisId})`,
+      });
+    }
+    if (customer.userId) ownerUserId = customer.userId;
+  }
+
+  const payload = toExpenseMutationPayload(mutableCandidate);
+  const basePayload: Record<string, unknown> = {
+    ...payload,
+    userId: ownerUserId,
+  };
+  if (targetTimeEntryId) {
+    basePayload.timeEntryId = Number(targetTimeEntryId);
+  }
+
+  const statusClass: "ok" | "warning" | "blocking" = hardErrors.length
+    ? "blocking"
+    : issues.length
+      ? "warning"
+      : "ok";
+  const summary =
+    statusClass === "blocking"
+      ? `${hardErrors.length} blockierende Fehler`
+      : statusClass === "warning"
+        ? `${issues.length} Warnungen`
+        : "Freigabefähig";
+
+  return {
+    analysisId: item.analysisId,
+    candidateIndex,
+    ownerUserId,
+    issues,
+    hardErrors,
+    statusClass,
+    summary,
+    basePayload: hardErrors.length ? null : basePayload,
+    modelName: String(analysis.modelName ?? ""),
+    confidence: Number(analysis.confidence ?? 0),
   };
 }
 
@@ -1741,6 +1867,63 @@ export const appRouter = router({
         userId: ctx.user.id,
       });
     }),
+    uploadForAiBatch: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        files: z.array(
+          z.object({
+            fileName: z.string().min(1).max(255),
+            mimeType: z.string().min(1).max(120),
+            fileSize: z.number().int().positive().max(20 * 1024 * 1024),
+            base64Data: z.string().min(1),
+          })
+        ).min(1).max(20),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { createDocument } = await import("./db");
+      const { storagePut } = await import("./storage");
+      const uploaded: any[] = [];
+      const failed: any[] = [];
+
+      const toSafeSegment = (name: string) =>
+        name
+          .toLowerCase()
+          .replace(/[^a-z0-9._-]+/g, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 120) || "file";
+
+      for (const file of input.files) {
+        try {
+          const bytes = Buffer.from(file.base64Data, "base64");
+          const uniquePrefix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const safeFileName = toSafeSegment(file.fileName);
+          const storageKey = `documents/${ctx.user.id}/ai-import/${uniquePrefix}-${safeFileName}`;
+          const storageResult = await storagePut(storageKey, bytes, file.mimeType);
+          const created = await createDocument({
+            userId: ctx.user.id,
+            fileName: file.fileName,
+            fileKey: storageResult.key,
+            fileUrl: storageResult.url,
+            mimeType: file.mimeType,
+            fileSize: file.fileSize,
+          });
+          uploaded.push(created);
+        } catch (error: any) {
+          failed.push({
+            fileName: file.fileName,
+            message: String(error?.message ?? "Upload fehlgeschlagen"),
+          });
+        }
+      }
+
+      return {
+        total: input.files.length,
+        uploadedCount: uploaded.length,
+        failedCount: failed.length,
+        uploaded,
+        failed,
+      };
+    }),
     delete: protectedProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ ctx, input }) => {
@@ -1831,6 +2014,144 @@ export const appRouter = router({
         total: jobs.length,
         succeeded,
         failed,
+        results,
+      };
+    }),
+
+    dryRunBatchApprove: protectedProcedure.input((val: unknown) => {
+      return receiptBatchWizardSchema.parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const items = input.items;
+      const results: any[] = [];
+      let blocking = 0;
+      let warnings = 0;
+      let ready = 0;
+
+      for (const item of items) {
+        try {
+          const prepared = await prepareReceiptBatchItem(ctx.user, item);
+          if (prepared.statusClass === "blocking") blocking += 1;
+          else if (prepared.statusClass === "warning") warnings += 1;
+          else ready += 1;
+
+          results.push({
+            analysisId: prepared.analysisId,
+            candidateIndex: prepared.candidateIndex,
+            statusClass: prepared.statusClass,
+            summary: prepared.summary,
+            issueCount: prepared.issues.length,
+            issues: prepared.issues,
+            confidence: prepared.confidence,
+            modelName: prepared.modelName,
+            preview: prepared.basePayload,
+          });
+        } catch (error: any) {
+          blocking += 1;
+          results.push({
+            analysisId: item.analysisId,
+            candidateIndex: item.candidateIndex ?? 0,
+            statusClass: "blocking",
+            summary: String(error?.message ?? "Unbekannter Fehler"),
+            issueCount: 1,
+            issues: [{ code: "BATCH-DRYRUN", severity: "error", message: String(error?.message ?? "Unbekannter Fehler") }],
+            preview: null,
+          });
+        }
+      }
+
+      return {
+        total: items.length,
+        blocking,
+        warnings,
+        ready,
+        canProceed: blocking === 0,
+        results,
+      };
+    }),
+
+    applyBatchApprove: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        items: receiptBatchWizardSchema.shape.items,
+        skipBlocking: z.boolean().optional().default(true),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const { createExpense, updateExpenseAiAnalysis } = await import("./db");
+      const dryRun = await Promise.all(
+        input.items.map(async item => {
+          try {
+            return await prepareReceiptBatchItem(ctx.user, item);
+          } catch (error: any) {
+            return {
+              analysisId: item.analysisId,
+              candidateIndex: item.candidateIndex ?? 0,
+              ownerUserId: ctx.user.id,
+              issues: [{ code: "BATCH-APPLY", severity: "error" as const, message: String(error?.message ?? "Unbekannter Fehler") }],
+              hardErrors: [{ code: "BATCH-APPLY", severity: "error" as const, message: String(error?.message ?? "Unbekannter Fehler") }],
+              statusClass: "blocking" as const,
+              summary: String(error?.message ?? "Unbekannter Fehler"),
+              basePayload: null,
+              modelName: "",
+              confidence: 0,
+            };
+          }
+        })
+      );
+
+      const blockingItems = dryRun.filter(item => item.statusClass === "blocking");
+      if (blockingItems.length > 0 && !input.skipBlocking) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Batch enthält ${blockingItems.length} blockierende Positionen`,
+        });
+      }
+
+      const results: any[] = [];
+      let approved = 0;
+      let skipped = 0;
+
+      for (const prepared of dryRun) {
+        if (!prepared.basePayload) {
+          skipped += 1;
+          results.push({
+            analysisId: prepared.analysisId,
+            candidateIndex: prepared.candidateIndex,
+            status: "skipped",
+            reason: prepared.summary,
+            issues: prepared.issues,
+          });
+          continue;
+        }
+        try {
+          const created = await createExpense(prepared.basePayload);
+          const approvedExpenseId = Number((created as any)?.insertId ?? (created as any)?.[0]?.insertId ?? 0) || null;
+          await updateExpenseAiAnalysis(prepared.analysisId, {
+            status: "approved",
+            approvedExpenseId,
+            validationPayload: JSON.stringify([{ index: prepared.candidateIndex, issues: prepared.issues }]),
+          });
+          approved += 1;
+          results.push({
+            analysisId: prepared.analysisId,
+            candidateIndex: prepared.candidateIndex,
+            status: "approved",
+            approvedExpenseId,
+            issueCount: prepared.issues.length,
+          });
+        } catch (error: any) {
+          skipped += 1;
+          results.push({
+            analysisId: prepared.analysisId,
+            candidateIndex: prepared.candidateIndex,
+            status: "error",
+            reason: String(error?.message ?? "Unbekannter Fehler"),
+          });
+        }
+      }
+
+      return {
+        total: input.items.length,
+        approved,
+        skipped,
         results,
       };
     }),

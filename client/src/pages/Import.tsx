@@ -48,8 +48,13 @@ export default function Import() {
   const [aiTimeEntryId, setAiTimeEntryId] = useState("");
   const [aiProjectName, setAiProjectName] = useState("");
   const [aiDocumentIdsBatch, setAiDocumentIdsBatch] = useState("");
+  const [aiBatchFiles, setAiBatchFiles] = useState<File[]>([]);
+  const [aiWizardItemsInput, setAiWizardItemsInput] = useState("");
   const [latestAiResult, setLatestAiResult] = useState<any>(null);
   const [latestAiBatchResult, setLatestAiBatchResult] = useState<any>(null);
+  const [latestAiUploadResult, setLatestAiUploadResult] = useState<any>(null);
+  const [latestAiDryRunResult, setLatestAiDryRunResult] = useState<any>(null);
+  const [latestAiApplyResult, setLatestAiApplyResult] = useState<any>(null);
 
   const utils = trpc.useUtils();
   const createCustomerMutation = trpc.customers.create.useMutation();
@@ -70,6 +75,30 @@ export default function Import() {
       toast.success(`Batch-Analyse abgeschlossen: ${data.succeeded}/${data.total} erfolgreich`);
     },
     onError: error => toast.error(`Batch-Analyse fehlgeschlagen: ${error.message}`),
+  });
+  const uploadAiBatchMutation = trpc.documents.uploadForAiBatch.useMutation({
+    onSuccess: data => {
+      setLatestAiUploadResult(data);
+      toast.success(`Upload abgeschlossen: ${data.uploadedCount}/${data.total}`);
+    },
+    onError: error => toast.error(`Upload fehlgeschlagen: ${error.message}`),
+  });
+  const dryRunBatchApproveMutation = trpc.receiptAi.dryRunBatchApprove.useMutation({
+    onSuccess: data => {
+      setLatestAiDryRunResult(data);
+      toast.success(
+        `Dry-Run abgeschlossen: ${data.ready} freigabefähig · ${data.warnings} Warnungen · ${data.blocking} blockierend`
+      );
+    },
+    onError: error => toast.error(`Dry-Run fehlgeschlagen: ${error.message}`),
+  });
+  const applyBatchApproveMutation = trpc.receiptAi.applyBatchApprove.useMutation({
+    onSuccess: data => {
+      setLatestAiApplyResult(data);
+      utils.receiptAi.list.invalidate();
+      toast.success(`Batch-Freigabe abgeschlossen: ${data.approved} übernommen, ${data.skipped} übersprungen`);
+    },
+    onError: error => toast.error(`Batch-Freigabe fehlgeschlagen: ${error.message}`),
   });
   const approveAiMutation = trpc.receiptAi.approve.useMutation({
     onSuccess: () => {
@@ -560,6 +589,118 @@ export default function Import() {
     });
   };
 
+  const parseBatchWizardItems = () => {
+    const tokens = aiWizardItemsInput
+      .split(/[\n,;]+/)
+      .map(token => token.trim())
+      .filter(Boolean);
+    const unique = new Map<string, { analysisId: number; candidateIndex?: number }>();
+    for (const token of tokens) {
+      const match = token.match(/^(\d+)(?::(\d+))?$/);
+      if (!match) continue;
+      const analysisId = Number(match[1]);
+      const candidateIndex = match[2] ? Number(match[2]) : undefined;
+      if (!Number.isInteger(analysisId) || analysisId <= 0) continue;
+      if (candidateIndex !== undefined && (!Number.isInteger(candidateIndex) || candidateIndex < 0)) continue;
+      unique.set(`${analysisId}:${candidateIndex ?? 0}`, { analysisId, candidateIndex });
+    }
+    return Array.from(unique.values());
+  };
+
+  const handleAiBatchFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+    const valid: File[] = [];
+    for (const file of files) {
+      const isAllowedType =
+        file.type.startsWith("image/") ||
+        file.type === "application/pdf" ||
+        file.name.toLowerCase().endsWith(".pdf");
+      if (!isAllowedType) {
+        toast.error(`Dateityp nicht unterstützt: ${file.name}`);
+        continue;
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`Datei zu groß (max. 20MB): ${file.name}`);
+        continue;
+      }
+      valid.push(file);
+    }
+    if (valid.length > 0) {
+      setAiBatchFiles(prev => [...prev, ...valid]);
+    }
+    event.target.value = "";
+  };
+
+  const removeAiBatchFile = (index: number) => {
+    setAiBatchFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const toBase64Payload = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result ?? "");
+        const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
+        if (!base64) {
+          reject(new Error(`Datei konnte nicht konvertiert werden: ${file.name}`));
+          return;
+        }
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error(`Datei konnte nicht gelesen werden: ${file.name}`));
+      reader.readAsDataURL(file);
+    });
+
+  const handleUploadAndAnalyzeBatch = async () => {
+    if (aiBatchFiles.length === 0) {
+      toast.error("Bitte zuerst Dateien für den Batch auswählen");
+      return;
+    }
+    const filesPayload = await Promise.all(
+      aiBatchFiles.map(async file => ({
+        fileName: file.name,
+        mimeType: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream"),
+        fileSize: file.size,
+        base64Data: await toBase64Payload(file),
+      }))
+    );
+    const uploadResult = await uploadAiBatchMutation.mutateAsync({ files: filesPayload });
+    const uploadedDocs = Array.isArray(uploadResult.uploaded) ? uploadResult.uploaded : [];
+    const documentIds = uploadedDocs
+      .map((doc: any) => Number(doc?.id))
+      .filter((id: number) => Number.isInteger(id) && id > 0);
+    if (documentIds.length === 0) {
+      toast.error("Keine Dokumente hochgeladen – Batch-Analyse wurde nicht gestartet");
+      return;
+    }
+    setAiDocumentIdsBatch(documentIds.join(","));
+    await analyzeReceiptBatchMutation.mutateAsync({
+      documentIds,
+      customerId: aiCustomerId.trim() ? Number(aiCustomerId) : undefined,
+      timeEntryId: aiTimeEntryId.trim() ? Number(aiTimeEntryId) : undefined,
+      projectName: aiProjectName.trim() || undefined,
+    });
+  };
+
+  const handleDryRunBatchApprove = async () => {
+    const items = parseBatchWizardItems();
+    if (items.length === 0) {
+      toast.error("Bitte Analyse-IDs eingeben (Format: 123 oder 123:0)");
+      return;
+    }
+    await dryRunBatchApproveMutation.mutateAsync({ items });
+  };
+
+  const handleApplyBatchApprove = async () => {
+    const items = parseBatchWizardItems();
+    if (items.length === 0) {
+      toast.error("Bitte Analyse-IDs eingeben (Format: 123 oder 123:0)");
+      return;
+    }
+    await applyBatchApproveMutation.mutateAsync({ items, skipBlocking: true });
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -836,7 +977,8 @@ export default function Import() {
               <div className="space-y-2">
                 <Label>Optionale Hinweise</Label>
                 <p className="text-xs text-muted-foreground">
-                  Direkter Datei-Upload ist in diesem Bereich nicht vorgesehen. Für Datei-Analyse zuerst Beleg hochladen und documentId eintragen.
+                  Für Batch können Dokumente jetzt direkt hochgeladen werden. Alternativ können bestehende documentIds
+                  genutzt werden.
                 </p>
                 <Input
                   placeholder="documentId (optional)"
@@ -858,6 +1000,34 @@ export default function Import() {
                   value={aiProjectName}
                   onChange={event => setAiProjectName(event.target.value)}
                 />
+                <div className="space-y-2 rounded border p-3">
+                  <Label>Multi-File-Upload (Batch)</Label>
+                  <Input type="file" multiple accept="image/*,.pdf,application/pdf" onChange={handleAiBatchFileChange} />
+                  {aiBatchFiles.length > 0 && (
+                    <div className="max-h-28 overflow-auto space-y-1 text-xs">
+                      {aiBatchFiles.map((file, index) => (
+                        <div key={`${file.name}-${index}`} className="flex items-center justify-between gap-2">
+                          <span className="truncate">
+                            {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                          </span>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeAiBatchFile(index)}>
+                            Entfernen
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={handleUploadAndAnalyzeBatch}
+                    disabled={uploadAiBatchMutation.isPending || analyzeReceiptBatchMutation.isPending}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploadAiBatchMutation.isPending || analyzeReceiptBatchMutation.isPending
+                      ? "Upload/Analyse läuft..."
+                      : "Dateien hochladen + KI-Batch starten"}
+                  </Button>
+                </div>
                 <Textarea
                   rows={4}
                   placeholder="Batch: documentId-Liste (komma-/zeilengetrennt), z. B. 101,102,103"
@@ -878,6 +1048,26 @@ export default function Import() {
                 </Button>
               </div>
             </div>
+
+            {latestAiUploadResult && (
+              <Card>
+                <CardContent className="pt-4 text-sm space-y-2">
+                  <p className="font-medium">
+                    Upload-Ergebnis: {latestAiUploadResult.uploadedCount}/{latestAiUploadResult.total} erfolgreich ·{" "}
+                    {latestAiUploadResult.failedCount} fehlgeschlagen
+                  </p>
+                  {(latestAiUploadResult.failed || []).length > 0 && (
+                    <div className="max-h-24 overflow-auto space-y-1 text-muted-foreground">
+                      {latestAiUploadResult.failed.map((f: any, idx: number) => (
+                        <p key={`${f.fileName}-${idx}`}>
+                          {f.fileName}: {f.message}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {latestAiBatchResult && (
               <Card>
@@ -903,6 +1093,72 @@ export default function Import() {
                 </CardContent>
               </Card>
             )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Batch-Freigabe-Wizard</CardTitle>
+                <CardDescription>
+                  Analyse-IDs eingeben (Format: <code>123</code> oder <code>123:1</code> für Kandidat 1) → Dry-Run
+                  prüfen → gesammelt freigeben.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  rows={3}
+                  placeholder="z. B. 901,902:0,903"
+                  value={aiWizardItemsInput}
+                  onChange={event => setAiWizardItemsInput(event.target.value)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleDryRunBatchApprove}
+                    disabled={dryRunBatchApproveMutation.isPending}
+                  >
+                    {dryRunBatchApproveMutation.isPending ? "Dry-Run läuft..." : "Dry-Run Validierung"}
+                  </Button>
+                  <Button
+                    onClick={handleApplyBatchApprove}
+                    disabled={
+                      applyBatchApproveMutation.isPending ||
+                      !latestAiDryRunResult ||
+                      Number(latestAiDryRunResult.blocking ?? 0) > 0
+                    }
+                  >
+                    {applyBatchApproveMutation.isPending ? "Übernehme..." : "Alles freigeben (nur nicht-blockierend)"}
+                  </Button>
+                </div>
+                {latestAiDryRunResult && (
+                  <div className="text-sm space-y-2">
+                    <p>
+                      Dry-Run: {latestAiDryRunResult.ready} OK · {latestAiDryRunResult.warnings} Warnung ·{" "}
+                      {latestAiDryRunResult.blocking} blockierend
+                    </p>
+                    <div className="max-h-44 overflow-auto space-y-1">
+                      {(latestAiDryRunResult.results || []).map((entry: any, idx: number) => (
+                        <p
+                          key={`${entry.analysisId}-${entry.candidateIndex}-${idx}`}
+                          className={
+                            entry.statusClass === "blocking"
+                              ? "text-red-600"
+                              : entry.statusClass === "warning"
+                                ? "text-amber-600"
+                                : "text-green-700"
+                          }
+                        >
+                          Analyse {entry.analysisId}:{entry.candidateIndex} · {entry.statusClass} · {entry.summary}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {latestAiApplyResult && (
+                  <p className="text-sm text-muted-foreground">
+                    Übernahme: {latestAiApplyResult.approved} freigegeben, {latestAiApplyResult.skipped} übersprungen.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
             {latestAiResult?.candidates?.length > 0 && (
               <div className="space-y-3">
