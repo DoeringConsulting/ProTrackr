@@ -515,6 +515,179 @@ function buildReceiptMatchSuggestion(input: {
   };
 }
 
+const receiptAnalyzeInputSchema = z
+  .object({
+    documentId: z.number().optional(),
+    ocrText: z.string().optional(),
+    customerId: z.number().optional(),
+    timeEntryId: z.number().optional(),
+    projectName: z.string().optional(),
+    hintCategory: z.string().optional(),
+  })
+  .refine(input => Boolean(input.documentId || input.ocrText?.trim()), {
+    message: "Bitte OCR-Text oder documentId angeben",
+  });
+
+const receiptAnalyzeBatchInputSchema = z
+  .object({
+    documentIds: z.array(z.number().int().positive()).optional(),
+    ocrTexts: z.array(z.string().min(1)).optional(),
+    customerId: z.number().optional(),
+    timeEntryId: z.number().optional(),
+    projectName: z.string().optional(),
+    hintCategory: z.string().optional(),
+  })
+  .refine(
+    input => Boolean((input.documentIds?.length ?? 0) > 0 || (input.ocrTexts?.length ?? 0) > 0),
+    { message: "Bitte mindestens eine documentId oder einen OCR-Text für den Batch angeben" }
+  );
+
+type ReceiptAnalyzeInput = z.infer<typeof receiptAnalyzeInputSchema>;
+
+async function runReceiptAnalyzeForUser(
+  user: { id: number; mandantId: number | null; role: string },
+  input: ReceiptAnalyzeInput
+) {
+  const {
+    getDocumentById,
+    getTimeEntryById,
+    getTimeEntries,
+    getCustomerById,
+    getCustomers,
+    createExpenseAiAnalysis,
+  } = await import("./db");
+
+  let ownerUserId = user.id;
+  let documentUrl: string | null = null;
+  let mimeType: string | null = null;
+
+  if (input.documentId) {
+    const document = await getDocumentById(input.documentId);
+    if (!document) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Dokument nicht gefunden" });
+    }
+    if (!(await canAccessUserOwnedData(user, document.userId))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf dieses Dokument" });
+    }
+    ownerUserId = document.userId;
+    documentUrl = document.fileUrl ?? null;
+    mimeType = document.mimeType ?? null;
+  }
+
+  if (input.timeEntryId) {
+    const timeEntry = await getTimeEntryById(input.timeEntryId);
+    if (!timeEntry) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Zeiteintrag nicht gefunden" });
+    }
+    if (!(await canAccessUserOwnedData(user, timeEntry.userId))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
+    }
+    ownerUserId = timeEntry.userId;
+  }
+
+  if (input.customerId) {
+    const customer = await getCustomerById(input.customerId);
+    if (!customer) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
+    }
+    if (!(await canAccessCustomerOwnedData(user, { userId: customer.userId ?? null }))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
+    }
+    if (customer.userId) {
+      ownerUserId = customer.userId;
+    }
+  }
+
+  const analysis = await analyzeReceipt({
+    ocrText: input.ocrText,
+    documentUrl,
+    mimeType,
+    hintCategory: input.hintCategory,
+    hintProjectName: input.projectName,
+  });
+
+  const customers = (await getCustomers()).filter(
+    (customer: any) => Number(customer.userId ?? 0) === Number(ownerUserId)
+  );
+  const customersById = new Map<number, any>();
+  for (const customer of customers) {
+    customersById.set(customer.id, customer);
+  }
+
+  const timeEntries = await getTimeEntries(ownerUserId);
+  const enrichedCandidates = analysis.candidates.map((candidate, index) => {
+    const match = buildReceiptMatchSuggestion({
+      candidate,
+      customerHintId: input.customerId,
+      timeEntryHintId: input.timeEntryId,
+      projectHintName: input.projectName,
+      timeEntries,
+      customersById,
+    });
+    const baseIssues = Array.isArray(candidate.issues) ? candidate.issues : validateReceiptCandidate(candidate);
+    const issues =
+      match.strategy === "unmatched"
+        ? [
+            ...baseIssues,
+            {
+              code: "REF-003",
+              severity: "warning" as const,
+              message: "Kein eindeutiger Projekt-/Zeiteintrags-Match gefunden. Manuelle Prüfung erforderlich.",
+              field: "timeEntryId",
+            },
+          ]
+        : baseIssues;
+    const candidateConfidence = Math.max(0, Math.min(10000, Number(candidate.confidence ?? 0)));
+    const overallConfidence = Math.round(candidateConfidence * 0.7 + match.confidence * 0.3);
+    return {
+      ...candidate,
+      confidence: overallConfidence,
+      issues,
+      match,
+      index,
+    };
+  });
+
+  const highestConfidence = enrichedCandidates.reduce(
+    (max, candidate) => Math.max(max, Number(candidate.confidence ?? 0)),
+    0
+  );
+  const primary = enrichedCandidates[0] as ReceiptExpenseCandidate | undefined;
+  const dedupeHash = primary ? buildReceiptDedupeHash(primary) : null;
+  const validationPayload = enrichedCandidates.map(candidate => ({
+    index: candidate.index,
+    issues: candidate.issues ?? [],
+  }));
+  const matchingPayload = enrichedCandidates.map(candidate => ({
+    index: candidate.index,
+    match: candidate.match,
+  }));
+
+  const persisted = await createExpenseAiAnalysis({
+    userId: ownerUserId,
+    documentId: input.documentId ?? null,
+    source: analysis.source,
+    modelName: analysis.model,
+    ocrText: input.ocrText ?? null,
+    extractionPayload: JSON.stringify(analysis.rawExtraction ?? null),
+    normalizedPayload: JSON.stringify(enrichedCandidates),
+    validationPayload: JSON.stringify(validationPayload),
+    matchingPayload: JSON.stringify(matchingPayload),
+    dedupeHash,
+    status: enrichedCandidates.length > 0 ? "needs_review" : "error",
+    confidence: highestConfidence,
+  });
+
+  return {
+    analysisId: persisted?.id ?? null,
+    status: persisted?.status ?? "needs_review",
+    source: analysis.source,
+    engine: analysis.engine,
+    model: analysis.model,
+    candidates: enrichedCandidates,
+  };
+}
+
 export const appRouter = router({
   invoiceNumbers: router({
     generate: protectedProcedure
@@ -1586,157 +1759,79 @@ export const appRouter = router({
 
   receiptAi: router({
     analyze: protectedProcedure.input((val: unknown) => {
-      return z
-        .object({
-          documentId: z.number().optional(),
-          ocrText: z.string().optional(),
-          customerId: z.number().optional(),
-          timeEntryId: z.number().optional(),
-          projectName: z.string().optional(),
-          hintCategory: z.string().optional(),
-        })
-        .refine(input => Boolean(input.documentId || input.ocrText?.trim()), {
-          message: "Bitte OCR-Text oder documentId angeben",
-        })
-        .parse(val);
+      return receiptAnalyzeInputSchema.parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const {
-        getDocumentById,
-        getTimeEntryById,
-        getTimeEntries,
-        getCustomerById,
-        getCustomers,
-        createExpenseAiAnalysis,
-      } = await import("./db");
+      return await runReceiptAnalyzeForUser(ctx.user, input);
+    }),
 
-      let ownerUserId = ctx.user.id;
-      let documentUrl: string | null = null;
-      let mimeType: string | null = null;
-
-      if (input.documentId) {
-        const document = await getDocumentById(input.documentId);
-        if (!document) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Dokument nicht gefunden" });
-        }
-        if (!(await canAccessUserOwnedData(ctx.user, document.userId))) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf dieses Dokument" });
-        }
-        ownerUserId = document.userId;
-        documentUrl = document.fileUrl ?? null;
-        mimeType = document.mimeType ?? null;
-      }
-
-      if (input.timeEntryId) {
-        const timeEntry = await getTimeEntryById(input.timeEntryId);
-        if (!timeEntry) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Zeiteintrag nicht gefunden" });
-        }
-        if (!(await canAccessUserOwnedData(ctx.user, timeEntry.userId))) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Zeiteintrag" });
-        }
-        ownerUserId = timeEntry.userId;
-      }
-
-      if (input.customerId) {
-        const customer = await getCustomerById(input.customerId);
-        if (!customer) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
-        }
-        if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
-        }
-        if (customer.userId) {
-          ownerUserId = customer.userId;
-        }
-      }
-
-      const analysis = await analyzeReceipt({
-        ocrText: input.ocrText,
-        documentUrl,
-        mimeType,
-        hintCategory: input.hintCategory,
-        hintProjectName: input.projectName,
-      });
-
-      const customers = (await getCustomers()).filter(
-        (customer: any) => Number(customer.userId ?? 0) === Number(ownerUserId)
+    analyzeBatch: protectedProcedure.input((val: unknown) => {
+      return receiptAnalyzeBatchInputSchema.parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const documentIds = Array.from(new Set((input.documentIds ?? []).map(Number))).filter(
+        id => Number.isInteger(id) && id > 0
       );
-      const customersById = new Map<number, any>();
-      for (const customer of customers) {
-        customersById.set(customer.id, customer);
+      const ocrTexts = (input.ocrTexts ?? [])
+        .map(text => String(text ?? "").trim())
+        .filter(Boolean);
+
+      const jobs: ReceiptAnalyzeInput[] = [
+        ...documentIds.map(documentId => ({
+          documentId,
+          customerId: input.customerId,
+          timeEntryId: input.timeEntryId,
+          projectName: input.projectName,
+          hintCategory: input.hintCategory,
+        })),
+        ...ocrTexts.map(ocrText => ({
+          ocrText,
+          customerId: input.customerId,
+          timeEntryId: input.timeEntryId,
+          projectName: input.projectName,
+          hintCategory: input.hintCategory,
+        })),
+      ];
+
+      const results: Array<Record<string, unknown>> = [];
+      let succeeded = 0;
+      let failed = 0;
+
+      for (let index = 0; index < jobs.length; index++) {
+        const job = jobs[index];
+        try {
+          const analysis = await runReceiptAnalyzeForUser(ctx.user, job);
+          const topConfidence = Array.isArray(analysis.candidates)
+            ? analysis.candidates.reduce(
+                (max: number, candidate: any) => Math.max(max, Number(candidate?.confidence ?? 0)),
+                0
+              )
+            : 0;
+          results.push({
+            index,
+            status: "ok",
+            documentId: job.documentId ?? null,
+            analysisId: analysis.analysisId,
+            engine: analysis.engine,
+            model: analysis.model,
+            candidateCount: Array.isArray(analysis.candidates) ? analysis.candidates.length : 0,
+            topConfidence,
+          });
+          succeeded += 1;
+        } catch (error: any) {
+          results.push({
+            index,
+            status: "error",
+            documentId: job.documentId ?? null,
+            error: String(error?.message ?? "Unbekannter Fehler"),
+          });
+          failed += 1;
+        }
       }
-
-      const timeEntries = await getTimeEntries(ownerUserId);
-      const enrichedCandidates = analysis.candidates.map((candidate, index) => {
-        const match = buildReceiptMatchSuggestion({
-          candidate,
-          customerHintId: input.customerId,
-          timeEntryHintId: input.timeEntryId,
-          projectHintName: input.projectName,
-          timeEntries,
-          customersById,
-        });
-        const baseIssues = Array.isArray(candidate.issues) ? candidate.issues : validateReceiptCandidate(candidate);
-        const issues =
-          match.strategy === "unmatched"
-            ? [
-                ...baseIssues,
-                {
-                  code: "REF-003",
-                  severity: "warning" as const,
-                  message: "Kein eindeutiger Projekt-/Zeiteintrags-Match gefunden. Manuelle Prüfung erforderlich.",
-                  field: "timeEntryId",
-                },
-              ]
-            : baseIssues;
-        const candidateConfidence = Math.max(0, Math.min(10000, Number(candidate.confidence ?? 0)));
-        const overallConfidence = Math.round(candidateConfidence * 0.7 + match.confidence * 0.3);
-        return {
-          ...candidate,
-          confidence: overallConfidence,
-          issues,
-          match,
-          index,
-        };
-      });
-
-      const highestConfidence = enrichedCandidates.reduce(
-        (max, candidate) => Math.max(max, Number(candidate.confidence ?? 0)),
-        0
-      );
-      const primary = enrichedCandidates[0] as ReceiptExpenseCandidate | undefined;
-      const dedupeHash = primary ? buildReceiptDedupeHash(primary) : null;
-      const validationPayload = enrichedCandidates.map(candidate => ({
-        index: candidate.index,
-        issues: candidate.issues ?? [],
-      }));
-      const matchingPayload = enrichedCandidates.map(candidate => ({
-        index: candidate.index,
-        match: candidate.match,
-      }));
-
-      const persisted = await createExpenseAiAnalysis({
-        userId: ownerUserId,
-        documentId: input.documentId ?? null,
-        source: analysis.source,
-        modelName: analysis.model,
-        ocrText: input.ocrText ?? null,
-        extractionPayload: JSON.stringify(analysis.rawExtraction ?? null),
-        normalizedPayload: JSON.stringify(enrichedCandidates),
-        validationPayload: JSON.stringify(validationPayload),
-        matchingPayload: JSON.stringify(matchingPayload),
-        dedupeHash,
-        status: enrichedCandidates.length > 0 ? "needs_review" : "error",
-        confidence: highestConfidence,
-      });
 
       return {
-        analysisId: persisted?.id ?? null,
-        status: persisted?.status ?? "needs_review",
-        source: analysis.source,
-        engine: analysis.engine,
-        model: analysis.model,
-        candidates: enrichedCandidates,
+        total: jobs.length,
+        succeeded,
+        failed,
+        results,
       };
     }),
 

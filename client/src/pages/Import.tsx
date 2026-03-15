@@ -47,7 +47,9 @@ export default function Import() {
   const [aiCustomerId, setAiCustomerId] = useState("");
   const [aiTimeEntryId, setAiTimeEntryId] = useState("");
   const [aiProjectName, setAiProjectName] = useState("");
+  const [aiDocumentIdsBatch, setAiDocumentIdsBatch] = useState("");
   const [latestAiResult, setLatestAiResult] = useState<any>(null);
+  const [latestAiBatchResult, setLatestAiBatchResult] = useState<any>(null);
 
   const utils = trpc.useUtils();
   const createCustomerMutation = trpc.customers.create.useMutation();
@@ -60,6 +62,14 @@ export default function Import() {
       toast.success("KI-Analyse abgeschlossen");
     },
     onError: error => toast.error(`KI-Analyse fehlgeschlagen: ${error.message}`),
+  });
+  const analyzeReceiptBatchMutation = trpc.receiptAi.analyzeBatch.useMutation({
+    onSuccess: data => {
+      setLatestAiBatchResult(data);
+      utils.receiptAi.list.invalidate();
+      toast.success(`Batch-Analyse abgeschlossen: ${data.succeeded}/${data.total} erfolgreich`);
+    },
+    onError: error => toast.error(`Batch-Analyse fehlgeschlagen: ${error.message}`),
   });
   const approveAiMutation = trpc.receiptAi.approve.useMutation({
     onSuccess: () => {
@@ -529,6 +539,27 @@ export default function Import() {
     });
   };
 
+  const handleAnalyzeReceiptBatch = async () => {
+    const documentIds = Array.from(
+      new Set(
+        aiDocumentIdsBatch
+          .split(/[\n,; ]+/)
+          .map(value => Number(value.trim()))
+          .filter(value => Number.isInteger(value) && value > 0)
+      )
+    );
+    if (documentIds.length === 0) {
+      toast.error("Bitte mindestens eine gültige documentId eingeben (z. B. 12,13,14)");
+      return;
+    }
+    await analyzeReceiptBatchMutation.mutateAsync({
+      documentIds,
+      customerId: aiCustomerId.trim() ? Number(aiCustomerId) : undefined,
+      timeEntryId: aiTimeEntryId.trim() ? Number(aiTimeEntryId) : undefined,
+      projectName: aiProjectName.trim() || undefined,
+    });
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -827,12 +858,51 @@ export default function Import() {
                   value={aiProjectName}
                   onChange={event => setAiProjectName(event.target.value)}
                 />
+                <Textarea
+                  rows={4}
+                  placeholder="Batch: documentId-Liste (komma-/zeilengetrennt), z. B. 101,102,103"
+                  value={aiDocumentIdsBatch}
+                  onChange={event => setAiDocumentIdsBatch(event.target.value)}
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleAnalyzeReceiptBatch}
+                  disabled={analyzeReceiptBatchMutation.isPending}
+                >
+                  <Bot className="mr-2 h-4 w-4" />
+                  {analyzeReceiptBatchMutation.isPending ? "Batch läuft..." : "KI-Batch-Analyse starten"}
+                </Button>
                 <Button onClick={handleAnalyzeReceipt} disabled={analyzeReceiptMutation.isPending}>
                   <Bot className="mr-2 h-4 w-4" />
                   {analyzeReceiptMutation.isPending ? "Analysiere..." : "KI-Analyse starten"}
                 </Button>
               </div>
             </div>
+
+            {latestAiBatchResult && (
+              <Card>
+                <CardContent className="pt-4 text-sm space-y-2">
+                  <p className="font-medium">
+                    Batch-Ergebnis: {latestAiBatchResult.succeeded}/{latestAiBatchResult.total} erfolgreich ·{" "}
+                    {latestAiBatchResult.failed} fehlgeschlagen
+                  </p>
+                  <div className="max-h-48 overflow-auto space-y-1">
+                    {(latestAiBatchResult.results || []).map((entry: any, idx: number) => (
+                      <p key={`${entry.index}-${idx}`} className="text-muted-foreground">
+                        #{entry.index + 1} · {entry.status === "ok" ? "OK" : "FEHLER"} · docId:{" "}
+                        {entry.documentId ?? "-"} · {entry.status === "ok"
+                          ? `Analyse ${entry.analysisId} (${entry.candidateCount} Kandidaten)`
+                          : entry.error}
+                      </p>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Erfolgreiche Batch-Treffer erscheinen in der Review Queue und können dort geprüft/freigegeben
+                    werden.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             {latestAiResult?.candidates?.length > 0 && (
               <div className="space-y-3">

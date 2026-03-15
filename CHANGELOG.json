@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.0.67",
+      "date": "2026-03-15",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Automatischer LLM-Fallback (OpenAI ↔ Forge/Gemini)",
+          "description": "Wenn der primäre KI-Provider fehlschlägt (z. B. ungültiger/abgelaufener Key), versucht die App automatisch den zweiten konfigurierten Provider."
+        },
+        {
+          "type": "feature",
+          "title": "KI-Belegauslese: Batch-Analyse mehrerer Dokumente",
+          "description": "Im Import-Reiter können jetzt mehrere documentIds gesammelt analysiert werden. Ergebnisse werden pro Job ausgewiesen und direkt in die Review-Queue geschrieben."
+        },
+        {
+          "type": "improvement",
+          "title": "LLM-Konfiguration erweitert",
+          "description": "Neue optionale Variablen OPENAI_MODEL und FORGE_MODEL ergänzen LLM_PROVIDER/LLM_MODEL für präzisere Provider-spezifische Modellsteuerung."
+        }
+      ]
+    },
+    {
       "version": "1.0.66",
       "date": "2026-03-14",
       "changes": [

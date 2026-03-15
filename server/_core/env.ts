@@ -11,4 +11,6 @@ export const ENV = {
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
   llmProvider: process.env.LLM_PROVIDER ?? "",
   llmModel: process.env.LLM_MODEL ?? "",
+  openaiModel: process.env.OPENAI_MODEL ?? "",
+  forgeModel: process.env.FORGE_MODEL ?? "",
 };

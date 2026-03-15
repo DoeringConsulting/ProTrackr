@@ -222,7 +222,10 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
+type LlmProvider = "openai" | "forge";
+
 type ResolvedLlmConfig = {
+  provider: LlmProvider;
   apiUrl: string;
   apiKey: string;
   model: string;
@@ -230,46 +233,68 @@ type ResolvedLlmConfig = {
   supportsFileUrl: boolean;
 };
 
-const resolveLlmConfig = (): ResolvedLlmConfig => {
-  const providerRaw = (ENV.llmProvider ?? "").trim().toLowerCase();
-  const useOpenAi =
-    providerRaw === "openai" || (!!ENV.openaiApiKey && providerRaw !== "forge");
+const createOpenAiConfig = (modelOverride?: string): ResolvedLlmConfig | null => {
+  const apiKey = (ENV.openaiApiKey ?? "").trim();
+  if (!apiKey) return null;
+  const apiUrl =
+    ENV.openaiApiUrl && ENV.openaiApiUrl.trim().length > 0
+      ? ENV.openaiApiUrl.replace(/\/$/, "")
+      : "https://api.openai.com/v1/chat/completions";
+  const model = (modelOverride || ENV.openaiModel || ENV.llmModel || "gpt-4o-mini").trim();
+  return {
+    provider: "openai",
+    apiUrl,
+    apiKey,
+    model,
+    supportsThinking: false,
+    supportsFileUrl: false,
+  };
+};
 
-  if (useOpenAi) {
-    const apiKey = ENV.openaiApiKey || ENV.forgeApiKey;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not configured");
-    }
-    const apiUrl =
-      ENV.openaiApiUrl && ENV.openaiApiUrl.trim().length > 0
-        ? ENV.openaiApiUrl.replace(/\/$/, "")
-        : "https://api.openai.com/v1/chat/completions";
-    const model = (ENV.llmModel || "gpt-4o-mini").trim();
-    return {
-      apiUrl,
-      apiKey,
-      model,
-      supportsThinking: false,
-      supportsFileUrl: false,
-    };
-  }
-
-  if (!ENV.forgeApiKey) {
-    throw new Error("BUILT_IN_FORGE_API_KEY is not configured");
-  }
-
+const createForgeConfig = (modelOverride?: string): ResolvedLlmConfig | null => {
+  const apiKey = (ENV.forgeApiKey ?? "").trim();
+  if (!apiKey) return null;
   const apiUrl =
     ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
       ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
       : "https://forge.manus.im/v1/chat/completions";
-  const model = (ENV.llmModel || "gemini-2.5-flash").trim();
+  const model = (modelOverride || ENV.forgeModel || ENV.llmModel || "gemini-2.5-flash").trim();
   return {
+    provider: "forge",
     apiUrl,
-    apiKey: ENV.forgeApiKey,
+    apiKey,
     model,
     supportsThinking: model.toLowerCase().includes("gemini"),
     supportsFileUrl: true,
   };
+};
+
+const resolveLlmAttemptChain = (requestedModel?: string): ResolvedLlmConfig[] => {
+  const providerRaw = (ENV.llmProvider ?? "").trim().toLowerCase();
+  const openaiPrimary = createOpenAiConfig(requestedModel);
+  const openaiFallback = createOpenAiConfig();
+  const forgePrimary = createForgeConfig(requestedModel);
+  const forgeFallback = createForgeConfig();
+
+  const uniqueByProvider = (items: Array<ResolvedLlmConfig | null>) => {
+    const byProvider = new Map<LlmProvider, ResolvedLlmConfig>();
+    for (const item of items) {
+      if (!item) continue;
+      if (!byProvider.has(item.provider)) {
+        byProvider.set(item.provider, item);
+      }
+    }
+    return Array.from(byProvider.values());
+  };
+
+  if (providerRaw === "openai") {
+    return uniqueByProvider([openaiPrimary, forgeFallback]);
+  }
+  if (providerRaw === "forge") {
+    return uniqueByProvider([forgePrimary, openaiFallback]);
+  }
+
+  return uniqueByProvider([openaiPrimary, forgePrimary, openaiFallback, forgeFallback]);
 };
 
 const normalizeResponseFormat = ({
@@ -318,8 +343,6 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  const llmConfig = resolveLlmConfig();
-
   const {
     messages,
     model,
@@ -332,58 +355,65 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
   } = params;
 
-  const payload: Record<string, unknown> = {
-    model: (model || llmConfig.model).trim(),
-    messages: messages.map(message =>
-      normalizeMessage(message, { supportsFileUrl: llmConfig.supportsFileUrl })
-    ),
-  };
-
-  if (tools && tools.length > 0) {
-    payload.tools = tools;
+  const attempts = resolveLlmAttemptChain(model);
+  if (attempts.length === 0) {
+    throw new Error(
+      "Kein LLM konfiguriert. Bitte OPENAI_API_KEY oder BUILT_IN_FORGE_API_KEY setzen."
+    );
   }
 
-  const normalizedToolChoice = normalizeToolChoice(
-    toolChoice || tool_choice,
-    tools
-  );
-  if (normalizedToolChoice) {
-    payload.tool_choice = normalizedToolChoice;
-  }
-
-  payload.max_tokens = 32768;
-  if (llmConfig.supportsThinking) {
-    payload.thinking = {
-      budget_tokens: 128,
-    };
-  }
-
+  const normalizedToolChoice = normalizeToolChoice(toolChoice || tool_choice, tools);
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
     response_format,
     outputSchema,
     output_schema,
   });
+  const attemptErrors: string[] = [];
 
-  if (normalizedResponseFormat) {
-    payload.response_format = normalizedResponseFormat;
+  for (const attempt of attempts) {
+    const payload: Record<string, unknown> = {
+      model: attempt.model,
+      messages: messages.map(message =>
+        normalizeMessage(message, { supportsFileUrl: attempt.supportsFileUrl })
+      ),
+      max_tokens: 32768,
+    };
+
+    if (tools && tools.length > 0) {
+      payload.tools = tools;
+    }
+    if (normalizedToolChoice) {
+      payload.tool_choice = normalizedToolChoice;
+    }
+    if (normalizedResponseFormat) {
+      payload.response_format = normalizedResponseFormat;
+    }
+    if (attempt.supportsThinking) {
+      payload.thinking = { budget_tokens: 128 };
+    }
+
+    try {
+      const response = await fetch(attempt.apiUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${attempt.apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`${response.status} ${response.statusText} – ${errorText}`);
+      }
+
+      return (await response.json()) as InvokeResult;
+    } catch (error: any) {
+      const msg = String(error?.message ?? error ?? "Unbekannter Fehler");
+      attemptErrors.push(`${attempt.provider}(${attempt.model}): ${msg}`);
+    }
   }
 
-  const response = await fetch(llmConfig.apiUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${llmConfig.apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
-    );
-  }
-
-  return (await response.json()) as InvokeResult;
+  throw new Error(`LLM invoke failed after fallback chain: ${attemptErrors.join(" || ")}`);
 }
