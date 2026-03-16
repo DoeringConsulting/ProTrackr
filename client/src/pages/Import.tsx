@@ -33,6 +33,8 @@ type ImportResult = {
   runtimeErrors: string[];
 };
 
+const AI_BATCH_MAX_FILES = 20;
+
 export default function Import() {
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -81,7 +83,18 @@ export default function Import() {
       setLatestAiUploadResult(data);
       toast.success(`Upload abgeschlossen: ${data.uploadedCount}/${data.total}`);
     },
-    onError: error => toast.error(`Upload fehlgeschlagen: ${error.message}`),
+    onError: error => {
+      const message = String(error.message ?? "");
+      const normalized = message.toLowerCase();
+      if (
+        normalized.includes("expected array to have <=20 items") ||
+        (normalized.includes('"code":"too_big"') && normalized.includes('"path":["files"]'))
+      ) {
+        toast.error(`Upload fehlgeschlagen: Maximal ${AI_BATCH_MAX_FILES} Dateien pro Batch erlaubt.`);
+        return;
+      }
+      toast.error(`Upload fehlgeschlagen: ${error.message}`);
+    },
   });
   const dryRunBatchApproveMutation = trpc.receiptAi.dryRunBatchApprove.useMutation({
     onSuccess: data => {
@@ -652,7 +665,29 @@ export default function Import() {
       valid.push(file);
     }
     if (valid.length > 0) {
-      setAiBatchFiles(prev => [...prev, ...valid]);
+      const dedupe = (items: File[]) => {
+        const byKey = new Map<string, File>();
+        for (const item of items) {
+          const key = `${item.name}__${item.size}__${item.lastModified}`;
+          if (!byKey.has(key)) byKey.set(key, item);
+        }
+        return Array.from(byKey.values());
+      };
+
+      const merged = dedupe([...aiBatchFiles, ...valid]);
+      const duplicateCount = aiBatchFiles.length + valid.length - merged.length;
+      const limited = merged.slice(0, AI_BATCH_MAX_FILES);
+      const overflowCount = merged.length - limited.length;
+      setAiBatchFiles(limited);
+
+      if (duplicateCount > 0) {
+        toast.info(`${duplicateCount} doppelte Datei(en) wurden übersprungen.`);
+      }
+      if (overflowCount > 0) {
+        toast.warning(
+          `Maximal ${AI_BATCH_MAX_FILES} Dateien pro Batch. ${overflowCount} Datei(en) wurden nicht übernommen.`
+        );
+      }
     }
     event.target.value = "";
   };
@@ -682,6 +717,10 @@ export default function Import() {
       toast.error("Bitte zuerst Dateien für den Batch auswählen");
       return;
     }
+    if (aiBatchFiles.length > AI_BATCH_MAX_FILES) {
+      toast.error(`Bitte höchstens ${AI_BATCH_MAX_FILES} Dateien auswählen.`);
+      return;
+    }
     const filesPayload = await Promise.all(
       aiBatchFiles.map(async file => ({
         fileName: file.name,
@@ -691,6 +730,7 @@ export default function Import() {
       }))
     );
     const uploadResult = await uploadAiBatchMutation.mutateAsync({ files: filesPayload });
+    setAiBatchFiles([]);
     const uploadedDocs = Array.isArray(uploadResult.uploaded) ? uploadResult.uploaded : [];
     const documentIds = uploadedDocs
       .map((doc: any) => Number(doc?.id))
@@ -713,6 +753,10 @@ export default function Import() {
       toast.error("Bitte zuerst Dateien für den Upload auswählen");
       return;
     }
+    if (aiBatchFiles.length > AI_BATCH_MAX_FILES) {
+      toast.error(`Bitte höchstens ${AI_BATCH_MAX_FILES} Dateien auswählen.`);
+      return;
+    }
     const filesPayload = await Promise.all(
       aiBatchFiles.map(async file => ({
         fileName: file.name,
@@ -722,6 +766,7 @@ export default function Import() {
       }))
     );
     const uploadResult = await uploadAiBatchMutation.mutateAsync({ files: filesPayload });
+    setAiBatchFiles([]);
     const uploadedDocs = Array.isArray(uploadResult.uploaded) ? uploadResult.uploaded : [];
     const documentIds = uploadedDocs
       .map((doc: any) => Number(doc?.id))
@@ -1049,8 +1094,20 @@ export default function Import() {
                   onChange={event => setAiProjectName(event.target.value)}
                 />
                 <div className="space-y-2 rounded border p-3">
-                  <Label>Multi-File-Upload (Batch)</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Multi-File-Upload (Batch)</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {aiBatchFiles.length}/{AI_BATCH_MAX_FILES}
+                    </span>
+                  </div>
                   <Input type="file" multiple accept="image/*,.pdf,application/pdf" onChange={handleAiBatchFileChange} />
+                  {aiBatchFiles.length > 0 && (
+                    <div className="flex justify-end">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setAiBatchFiles([])}>
+                        Auswahl leeren
+                      </Button>
+                    </div>
+                  )}
                   {aiBatchFiles.length > 0 && (
                     <div className="max-h-28 overflow-auto space-y-1 text-xs">
                       {aiBatchFiles.map((file, index) => (
