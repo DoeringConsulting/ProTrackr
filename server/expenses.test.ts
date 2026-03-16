@@ -140,7 +140,7 @@ describe("expenses", () => {
     expect(expenses[0]?.amount).toBe(12000);
   });
 
-  it("should reject international flights without mandatory times", async () => {
+  it("should reject flights without any time", async () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
@@ -153,11 +153,11 @@ describe("expenses", () => {
         flightRouteType: "international",
       })
     ).rejects.toThrow(
-      "Bei internationalen Fluegen sind Abflugzeit und Ankunftszeit verpflichtend"
+      "Bei Fluegen muss mindestens eine Zeit (Abflug oder Ankunft) angegeben werden"
     );
   });
 
-  it("should allow one-way international flight with required times", async () => {
+  it("should allow one-way international flight with only departure time", async () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
@@ -168,7 +168,6 @@ describe("expenses", () => {
       currency: "EUR",
       flightRouteType: "international",
       departureTime: "08:20",
-      arrivalTime: "11:05",
     });
 
     expect(result).toBeDefined();

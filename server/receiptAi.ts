@@ -444,14 +444,15 @@ export function validateReceiptCandidate(candidate: ReceiptExpenseCandidate): Im
   }
 
   if (category === "flight") {
-    const routeType = candidate.flightRouteType ?? "domestic";
-    if (routeType === "international") {
-      if (!candidate.departureTime) {
-        issues.push(buildIssue("EXP-FLT-001", "error", "Internationaler Flug ohne Abflugzeit.", "departureTime"));
-      }
-      if (!candidate.arrivalTime) {
-        issues.push(buildIssue("EXP-FLT-002", "error", "Internationaler Flug ohne Ankunftszeit.", "arrivalTime"));
-      }
+    if (!candidate.departureTime && !candidate.arrivalTime) {
+      issues.push(
+        buildIssue(
+          "EXP-FLT-001",
+          "error",
+          "Flug ohne Zeitangabe. Mindestens Abflugzeit oder Ankunftszeit erforderlich.",
+          "departureTime"
+        )
+      );
     }
     if (candidate.departureTime && !TIME_RE.test(candidate.departureTime)) {
       issues.push(buildIssue("EXP-FLT-003", "error", "Abflugzeit muss im Format HH:MM sein.", "departureTime"));

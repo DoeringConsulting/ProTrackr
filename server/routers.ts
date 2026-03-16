@@ -314,14 +314,11 @@ function validateFlightAndHotelExpenseRules(input: {
       });
     }
 
-    if (routeType === "international") {
-      if (!input.departureTime || !input.arrivalTime) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "Bei internationalen Fluegen sind Abflugzeit und Ankunftszeit verpflichtend",
-        });
-      }
+    if (!input.departureTime && !input.arrivalTime) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Bei Fluegen muss mindestens eine Zeit (Abflug oder Ankunft) angegeben werden",
+      });
     }
 
     const outboundDate = toComparableDate(input.date);

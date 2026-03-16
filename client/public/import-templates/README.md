@@ -28,5 +28,5 @@ Diese Dateien sind für den strukturierten Import in **/import** vorgesehen.
 - `amount` muss > 0 sein.
 - `currency` muss ISO-3 sein (z. B. `EUR`, `PLN`).
 - `full_day` nur `0` oder `1`.
-- Kategorie `flight`: `date` = Hinflugdatum; bei `flight_route_type=international` sind `departure_time` und `arrival_time` Pflicht (`HH:MM`).
+- Kategorie `flight`: `date` = Hinflugdatum; es muss mindestens eine Zeit gesetzt sein (`departure_time` ODER `arrival_time`, Format `HH:MM`).
 - Kategorie `hotel`: `check_in_date` Pflicht, dazu entweder `nights` oder `check_out_date`.

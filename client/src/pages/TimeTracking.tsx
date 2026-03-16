@@ -1199,12 +1199,9 @@ export default function TimeTracking() {
                   };
 
                   if (tempExpenseCategory === "flight") {
-                    if (
-                      tempFlightRouteType === "international" &&
-                      (!tempFlightTravelStart || !tempFlightTravelEnd)
-                    ) {
+                    if (!tempFlightTravelStart && !tempFlightTravelEnd) {
                       toast.error(
-                        "Bei internationalen Flügen sind Abflugzeit und Ankunftszeit verpflichtend"
+                        "Bei Flügen muss mindestens eine Zeit (Abflug oder Ankunft) angegeben werden"
                       );
                       return;
                     }
@@ -1340,7 +1337,7 @@ export default function TimeTracking() {
                       <div className="space-y-2">
                         <Label htmlFor="flight-travel-start">
                           Reise-Start (Abflugzeit
-                          {tempFlightRouteType === "international" ? ", Pflicht" : ", optional"})
+                          {", optional"})
                         </Label>
                         <Input
                           id="flight-travel-start"
@@ -1352,7 +1349,7 @@ export default function TimeTracking() {
                       <div className="space-y-2">
                         <Label htmlFor="flight-travel-end">
                           Reise-Ende (Landezeit
-                          {tempFlightRouteType === "international" ? ", Pflicht" : ", optional"})
+                          {", optional"})
                         </Label>
                         <Input
                           id="flight-travel-end"

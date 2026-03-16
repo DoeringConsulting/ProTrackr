@@ -182,13 +182,13 @@ export const IMPORT_ERROR_CATALOG: Record<
   },
   "EXP-FLT-001": {
     severity: "error",
-    template: "[Reisekosten | Zeile {row}] Internationaler Flug ohne Abflugzeit.",
-    explanation: "Bei internationalem Flug ist departure_time Pflicht.",
+    template: "[Reisekosten | Zeile {row}] Flug ohne Zeitangabe.",
+    explanation: "Für Flug muss mindestens departure_time oder arrival_time gesetzt sein.",
   },
   "EXP-FLT-002": {
     severity: "error",
-    template: "[Reisekosten | Zeile {row}] Internationaler Flug ohne Ankunftszeit.",
-    explanation: "Bei internationalem Flug ist arrival_time Pflicht.",
+    template: "[Reisekosten | Zeile {row}] Flug ohne ausreichende Zeitangaben.",
+    explanation: "Legacy-Code, wird nicht mehr aktiv verwendet.",
   },
   "EXP-FLT-003": {
     severity: "error",
@@ -823,25 +823,14 @@ export function validateParsedWorkbook(parsed: ParsedImportWorkbook): ImportIssu
     }
 
     if (row.category === "flight") {
-      if (row.flightRouteType === "international") {
-        if (!row.departureTime) {
-          addIssue(issues, {
-            code: "EXP-FLT-001",
-            table: "Reisekosten",
-            row: row.rowNumber,
-            field: "departure_time",
-            message: `[Reisekosten | Zeile ${row.rowNumber}] Internationaler Flug ohne Abflugzeit.`,
-          });
-        }
-        if (!row.arrivalTime) {
-          addIssue(issues, {
-            code: "EXP-FLT-002",
-            table: "Reisekosten",
-            row: row.rowNumber,
-            field: "arrival_time",
-            message: `[Reisekosten | Zeile ${row.rowNumber}] Internationaler Flug ohne Ankunftszeit.`,
-          });
-        }
+      if (!row.departureTime && !row.arrivalTime) {
+        addIssue(issues, {
+          code: "EXP-FLT-001",
+          table: "Reisekosten",
+          row: row.rowNumber,
+          field: "departure_time",
+          message: `[Reisekosten | Zeile ${row.rowNumber}] Flug ohne Zeitangabe (Abflug oder Ankunft erforderlich).`,
+        });
       }
       if (row.departureTime && !isIsoTime(row.departureTime)) {
         addIssue(issues, {

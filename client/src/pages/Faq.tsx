@@ -57,7 +57,7 @@ const FAQ_SECTIONS: Array<{
       {
         question: "Warum ist der Import manchmal blockiert?",
         answer:
-          "Blockierende Fehler (Severity=error) verhindern den Import bewusst, z. B. ungültiges Datum, fehlender Kundenbezug, ungültige Währung, internationale Flüge ohne Zeiten.",
+          "Blockierende Fehler (Severity=error) verhindern den Import bewusst, z. B. ungültiges Datum, fehlender Kundenbezug, ungültige Währung oder Flug ohne Zeitangabe.",
       },
       {
         question: "Was bedeuten Warnungen?",
