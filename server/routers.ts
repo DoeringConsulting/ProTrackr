@@ -110,6 +110,11 @@ function formatMandatenNumber(sequence: number): string {
   return String(sequence).padStart(3, "0");
 }
 
+function isAiImportFileKey(fileKey: unknown): boolean {
+  if (typeof fileKey !== "string") return false;
+  return fileKey.includes("/ai-import/");
+}
+
 function decodePdfLiteral(value: string): string {
   return value
     .replace(/\\([\\()])/g, "$1")
@@ -2220,6 +2225,178 @@ export const appRouter = router({
         validationPayload: parseJsonSafely(row.validationPayload),
         matchingPayload: parseJsonSafely(row.matchingPayload),
       }));
+    }),
+
+    cleanupImportData: protectedProcedure.input((val: unknown) => {
+      return z
+        .object({
+          mode: z.enum(["selection", "all_import_data"]).default("selection"),
+          analysisIds: z.array(z.number().int().positive()).optional(),
+          documentIds: z.array(z.number().int().positive()).optional(),
+        })
+        .superRefine((input, refineCtx) => {
+          if (input.mode === "selection") {
+            const analysisCount = input.analysisIds?.length ?? 0;
+            const documentCount = input.documentIds?.length ?? 0;
+            if (analysisCount === 0 && documentCount === 0) {
+              refineCtx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["analysisIds"],
+                message: "Bitte mindestens eine Analyse-ID oder Dokument-ID angeben",
+              });
+            }
+          }
+        })
+        .parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      const { expenseAiAnalyses, documents } = await import("../drizzle/schema");
+      let targetAnalysisIds: number[] = [];
+      let targetDocumentIds: number[] = [];
+      const targetDocumentRefs = new Map<number, { fileKey: string | null; fileUrl: string | null }>();
+      let skippedAnalyses = 0;
+      let skippedDocuments = 0;
+      const skippedDocumentReasons: Array<{ id: number; reason: string }> = [];
+
+      if (input.mode === "all_import_data") {
+        const allAnalyses = await db
+          .select({ id: expenseAiAnalyses.id })
+          .from(expenseAiAnalyses)
+          .where(eq(expenseAiAnalyses.userId, ctx.user.id));
+        targetAnalysisIds = allAnalyses.map(row => Number(row.id)).filter(id => Number.isInteger(id) && id > 0);
+
+        const allDocs = await db
+          .select({
+            id: documents.id,
+            fileKey: documents.fileKey,
+            fileUrl: documents.fileUrl,
+            expenseId: documents.expenseId,
+            timeEntryId: documents.timeEntryId,
+          })
+          .from(documents)
+          .where(eq(documents.userId, ctx.user.id));
+
+        for (const row of allDocs) {
+          const id = Number(row.id);
+          if (!Number.isInteger(id) || id <= 0) continue;
+          if (!isAiImportFileKey(row.fileKey)) continue;
+          if (row.expenseId || row.timeEntryId) {
+            skippedDocuments += 1;
+            skippedDocumentReasons.push({
+              id,
+              reason: "Dokument ist mit Reisekosten/Zeit verknüpft und wurde übersprungen",
+            });
+            continue;
+          }
+          targetDocumentIds.push(id);
+          targetDocumentRefs.set(id, {
+            fileKey: row.fileKey ?? null,
+            fileUrl: row.fileUrl ?? null,
+          });
+        }
+      } else {
+        const requestedAnalysisIds = Array.from(new Set((input.analysisIds ?? []).map(Number))).filter(
+          id => Number.isInteger(id) && id > 0
+        );
+        const requestedDocumentIds = Array.from(new Set((input.documentIds ?? []).map(Number))).filter(
+          id => Number.isInteger(id) && id > 0
+        );
+
+        if (requestedAnalysisIds.length > 0) {
+          const ownedAnalyses = await db
+            .select({ id: expenseAiAnalyses.id })
+            .from(expenseAiAnalyses)
+            .where(and(eq(expenseAiAnalyses.userId, ctx.user.id), inArray(expenseAiAnalyses.id, requestedAnalysisIds)));
+          targetAnalysisIds = ownedAnalyses.map(row => Number(row.id)).filter(id => Number.isInteger(id) && id > 0);
+          skippedAnalyses += Math.max(0, requestedAnalysisIds.length - targetAnalysisIds.length);
+        }
+
+        if (requestedDocumentIds.length > 0) {
+          const ownedDocs = await db
+            .select({
+              id: documents.id,
+              fileKey: documents.fileKey,
+              fileUrl: documents.fileUrl,
+              expenseId: documents.expenseId,
+              timeEntryId: documents.timeEntryId,
+            })
+            .from(documents)
+            .where(and(eq(documents.userId, ctx.user.id), inArray(documents.id, requestedDocumentIds)));
+          const foundDocIds = new Set<number>();
+
+          for (const row of ownedDocs) {
+            const id = Number(row.id);
+            if (!Number.isInteger(id) || id <= 0) continue;
+            foundDocIds.add(id);
+
+            if (!isAiImportFileKey(row.fileKey)) {
+              skippedDocuments += 1;
+              skippedDocumentReasons.push({
+                id,
+                reason: "Dokument gehört nicht zum KI-Import-Upload (/ai-import/)",
+              });
+              continue;
+            }
+            if (row.expenseId || row.timeEntryId) {
+              skippedDocuments += 1;
+              skippedDocumentReasons.push({
+                id,
+                reason: "Dokument ist mit Reisekosten/Zeit verknüpft und wurde übersprungen",
+              });
+              continue;
+            }
+            targetDocumentIds.push(id);
+            targetDocumentRefs.set(id, {
+              fileKey: row.fileKey ?? null,
+              fileUrl: row.fileUrl ?? null,
+            });
+          }
+
+          for (const requestedId of requestedDocumentIds) {
+            if (!foundDocIds.has(requestedId)) {
+              skippedDocuments += 1;
+            }
+          }
+        }
+      }
+
+      targetAnalysisIds = Array.from(new Set(targetAnalysisIds));
+      targetDocumentIds = Array.from(new Set(targetDocumentIds));
+
+      if (targetAnalysisIds.length > 0) {
+        await db.delete(expenseAiAnalyses).where(inArray(expenseAiAnalyses.id, targetAnalysisIds));
+      }
+      if (targetDocumentIds.length > 0) {
+        const { storageDeleteByReference } = await import("./storage");
+        for (const id of targetDocumentIds) {
+          const ref = targetDocumentRefs.get(id);
+          if (!ref) continue;
+          try {
+            await storageDeleteByReference(ref.fileKey, ref.fileUrl);
+          } catch {
+            // Storage cleanup is best-effort; DB cleanup continues.
+          }
+        }
+        await db.delete(documents).where(inArray(documents.id, targetDocumentIds));
+      }
+
+      return {
+        success: true,
+        mode: input.mode,
+        deleted: {
+          analyses: targetAnalysisIds.length,
+          documents: targetDocumentIds.length,
+        },
+        skipped: {
+          analyses: skippedAnalyses,
+          documents: skippedDocuments,
+        },
+        skippedDocumentReasons: skippedDocumentReasons.slice(0, 25),
+      };
     }),
 
     approve: protectedProcedure.input((val: unknown) => {

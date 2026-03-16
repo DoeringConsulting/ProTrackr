@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Download, Bot, ShieldCheck, CircleX } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Download, Bot, ShieldCheck, CircleX, Trash2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { trpc } from "@/lib/trpc";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +34,22 @@ type ImportResult = {
 };
 
 const AI_BATCH_MAX_FILES = 20;
+const AI_RECEIPT_SCAFFOLD = [
+  "REISEKOSTEN-GERUEST (optional fuer bessere KI-Erkennung)",
+  "beleg_art: flight|hotel|taxi|train|car|fuel|meal|other",
+  "betrag_gesamt: 0.00",
+  "waehrung: EUR|PLN|USD",
+  "datum: YYYY-MM-DD",
+  "projekt: optional",
+  "hinweis: optional",
+  "flug_abflug: HH:MM (optional)",
+  "flug_ankunft: HH:MM (optional)",
+  "flug_rueckflug_datum: YYYY-MM-DD (optional)",
+  "hotel_check_in: YYYY-MM-DD (optional)",
+  "hotel_naecht: 0..N (optional)",
+  "hotel_check_out: YYYY-MM-DD (optional)",
+  "--- OCR/BELEGTEXT ---",
+].join("\n");
 
 export default function Import() {
   const [file, setFile] = useState<File | null>(null);
@@ -57,6 +73,9 @@ export default function Import() {
   const [latestAiUploadResult, setLatestAiUploadResult] = useState<any>(null);
   const [latestAiDryRunResult, setLatestAiDryRunResult] = useState<any>(null);
   const [latestAiApplyResult, setLatestAiApplyResult] = useState<any>(null);
+  const [aiCleanupDocumentIdsInput, setAiCleanupDocumentIdsInput] = useState("");
+  const [aiCleanupAnalysisIdsInput, setAiCleanupAnalysisIdsInput] = useState("");
+  const [latestAiCleanupResult, setLatestAiCleanupResult] = useState<any>(null);
 
   const utils = trpc.useUtils();
   const createCustomerMutation = trpc.customers.create.useMutation();
@@ -126,6 +145,19 @@ export default function Import() {
       toast.success("KI-Vorschlag verworfen");
     },
     onError: error => toast.error(`Ablehnen fehlgeschlagen: ${error.message}`),
+  });
+  const cleanupAiImportDataMutation = trpc.receiptAi.cleanupImportData.useMutation({
+    onSuccess: data => {
+      setLatestAiCleanupResult(data);
+      setLatestAiBatchResult(null);
+      setLatestAiUploadResult(null);
+      setLatestAiResult(null);
+      utils.receiptAi.list.invalidate();
+      const deletedAnalyses = Number(data?.deleted?.analyses ?? 0);
+      const deletedDocuments = Number(data?.deleted?.documents ?? 0);
+      toast.success(`Bereinigung abgeschlossen: ${deletedAnalyses} Analysen, ${deletedDocuments} Dokumente gelöscht`);
+    },
+    onError: error => toast.error(`Bereinigung fehlgeschlagen: ${error.message}`),
   });
   const aiQueueQuery = trpc.receiptAi.list.useQuery({ limit: 30 });
 
@@ -223,6 +255,29 @@ export default function Import() {
     }
     return message;
   };
+
+  const parseOptionalPositiveInt = (raw: string, label: string): number | undefined => {
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    if (!/^\d+$/.test(trimmed)) {
+      throw new Error(`${label} muss eine ganze Zahl sein`);
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new Error(`${label} muss größer als 0 sein`);
+    }
+    return parsed;
+  };
+
+  const parseIdList = (raw: string): number[] =>
+    Array.from(
+      new Set(
+        raw
+          .split(/[\n,; ]+/)
+          .map(value => Number(value.trim()))
+          .filter(value => Number.isInteger(value) && value > 0)
+      )
+    );
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -568,17 +623,24 @@ export default function Import() {
   };
 
   const handleAnalyzeReceipt = async () => {
-    if (!ocrText.trim() && !aiDocumentId.trim()) {
-      toast.error("Bitte OCR-Text oder documentId angeben");
-      return;
+    try {
+      const documentId = parseOptionalPositiveInt(aiDocumentId, "documentId");
+      const customerId = parseOptionalPositiveInt(aiCustomerId, "customerId");
+      const timeEntryId = parseOptionalPositiveInt(aiTimeEntryId, "timeEntryId");
+      if (!ocrText.trim() && !documentId) {
+        toast.error("Bitte OCR-Text oder documentId angeben");
+        return;
+      }
+      await analyzeReceiptMutation.mutateAsync({
+        ocrText: ocrText.trim() || undefined,
+        documentId,
+        customerId,
+        timeEntryId,
+        projectName: aiProjectName.trim() || undefined,
+      });
+    } catch (error: any) {
+      toast.error(error?.message ?? "Ungültige Eingabe");
     }
-    await analyzeReceiptMutation.mutateAsync({
-      ocrText: ocrText.trim() || undefined,
-      documentId: aiDocumentId.trim() ? Number(aiDocumentId) : undefined,
-      customerId: aiCustomerId.trim() ? Number(aiCustomerId) : undefined,
-      timeEntryId: aiTimeEntryId.trim() ? Number(aiTimeEntryId) : undefined,
-      projectName: aiProjectName.trim() || undefined,
-    });
   };
 
   const handleAnalyzeReceiptBatch = async () => {
@@ -594,11 +656,59 @@ export default function Import() {
       toast.error("Bitte mindestens eine gültige documentId eingeben (z. B. 12,13,14)");
       return;
     }
-    await analyzeReceiptBatchMutation.mutateAsync({
+    try {
+      const customerId = parseOptionalPositiveInt(aiCustomerId, "customerId");
+      const timeEntryId = parseOptionalPositiveInt(aiTimeEntryId, "timeEntryId");
+      await analyzeReceiptBatchMutation.mutateAsync({
+        documentIds,
+        customerId,
+        timeEntryId,
+        projectName: aiProjectName.trim() || undefined,
+      });
+    } catch (error: any) {
+      toast.error(error?.message ?? "Ungültige Eingabe");
+    }
+  };
+
+  const applyAiScaffold = () => {
+    if (ocrText.trim().length > 0) {
+      const confirmed = window.confirm(
+        "Im OCR-Feld ist bereits Text vorhanden. Soll das Reisekosten-Gerüst zusätzlich eingefügt werden?"
+      );
+      if (!confirmed) return;
+      setOcrText(prev => `${AI_RECEIPT_SCAFFOLD}\n${prev}`);
+      return;
+    }
+    setOcrText(AI_RECEIPT_SCAFFOLD);
+  };
+
+  const handleCleanupSelection = async () => {
+    const documentIds = parseIdList(aiCleanupDocumentIdsInput);
+    const analysisIds = parseIdList(aiCleanupAnalysisIdsInput);
+    if (documentIds.length === 0 && analysisIds.length === 0) {
+      toast.error("Bitte mindestens eine Analyse-ID oder Dokument-ID angeben");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Ausgewählte Datensätze löschen?\nAnalysen: ${analysisIds.length}\nDokumente: ${documentIds.length}`
+    );
+    if (!confirmed) return;
+
+    await cleanupAiImportDataMutation.mutateAsync({
+      mode: "selection",
+      analysisIds,
       documentIds,
-      customerId: aiCustomerId.trim() ? Number(aiCustomerId) : undefined,
-      timeEntryId: aiTimeEntryId.trim() ? Number(aiTimeEntryId) : undefined,
-      projectName: aiProjectName.trim() || undefined,
+    });
+  };
+
+  const handleCleanupAllImportData = async () => {
+    const confirmed = window.confirm(
+      "Wirklich ALLE KI-Importdaten dieses Kontos löschen?\n(Analysen + hochgeladene KI-Importdokumente)"
+    );
+    if (!confirmed) return;
+
+    await cleanupAiImportDataMutation.mutateAsync({
+      mode: "all_import_data",
     });
   };
 
@@ -721,6 +831,15 @@ export default function Import() {
       toast.error(`Bitte höchstens ${AI_BATCH_MAX_FILES} Dateien auswählen.`);
       return;
     }
+    let customerId: number | undefined;
+    let timeEntryId: number | undefined;
+    try {
+      customerId = parseOptionalPositiveInt(aiCustomerId, "customerId");
+      timeEntryId = parseOptionalPositiveInt(aiTimeEntryId, "timeEntryId");
+    } catch (error: any) {
+      toast.error(error?.message ?? "Ungültige Eingabe");
+      return;
+    }
     const filesPayload = await Promise.all(
       aiBatchFiles.map(async file => ({
         fileName: file.name,
@@ -742,8 +861,8 @@ export default function Import() {
     mergeDocumentIdsIntoInputs(documentIds, true);
     await analyzeReceiptBatchMutation.mutateAsync({
       documentIds,
-      customerId: aiCustomerId.trim() ? Number(aiCustomerId) : undefined,
-      timeEntryId: aiTimeEntryId.trim() ? Number(aiTimeEntryId) : undefined,
+      customerId,
+      timeEntryId,
       projectName: aiProjectName.trim() || undefined,
     });
   };
@@ -1060,6 +1179,9 @@ export default function Import() {
                 <p className="text-xs text-muted-foreground">
                   Hier reinen OCR-/Belegtext einfügen. Alternativ documentId nutzen (Dokument muss bereits als Beleg hochgeladen sein).
                 </p>
+                <Button type="button" variant="outline" size="sm" onClick={applyAiScaffold}>
+                  KI-Reisekosten-Gerüst einfügen
+                </Button>
                 <Textarea
                   rows={8}
                   placeholder="Belegtext einfügen (oder documentId verwenden)"
@@ -1269,6 +1391,69 @@ export default function Import() {
                   <p className="text-sm text-muted-foreground">
                     Übernahme: {latestAiApplyResult.approved} freigegeben, {latestAiApplyResult.skipped} übersprungen.
                   </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Bereinigung (Import-Datensätze/Dateien)</CardTitle>
+                <CardDescription>
+                  Löscht hochgeladene KI-Importdateien und/oder KI-Analyse-Datensätze. Bereits verknüpfte Dokumente werden
+                  aus Sicherheitsgründen übersprungen.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  rows={2}
+                  placeholder="Dokument-IDs zum Löschen (komma-/zeilengetrennt), z. B. 101,102"
+                  value={aiCleanupDocumentIdsInput}
+                  onChange={event => setAiCleanupDocumentIdsInput(event.target.value)}
+                />
+                <Textarea
+                  rows={2}
+                  placeholder="Analyse-IDs zum Löschen (komma-/zeilengetrennt), z. B. 901,902"
+                  value={aiCleanupAnalysisIdsInput}
+                  onChange={event => setAiCleanupAnalysisIdsInput(event.target.value)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleCleanupSelection}
+                    disabled={cleanupAiImportDataMutation.isPending}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {cleanupAiImportDataMutation.isPending ? "Lösche..." : "Ausgewählte löschen"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleCleanupAllImportData}
+                    disabled={cleanupAiImportDataMutation.isPending}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Alles KI-Importdaten löschen
+                  </Button>
+                </div>
+                {latestAiCleanupResult && (
+                  <div className="text-sm text-muted-foreground space-y-1">
+                    <p>
+                      Gelöscht: {latestAiCleanupResult.deleted?.analyses ?? 0} Analysen ·{" "}
+                      {latestAiCleanupResult.deleted?.documents ?? 0} Dokumente
+                    </p>
+                    <p>
+                      Übersprungen: {latestAiCleanupResult.skipped?.analyses ?? 0} Analysen ·{" "}
+                      {latestAiCleanupResult.skipped?.documents ?? 0} Dokumente
+                    </p>
+                    {(latestAiCleanupResult.skippedDocumentReasons ?? []).length > 0 && (
+                      <div className="max-h-24 overflow-auto space-y-1">
+                        {latestAiCleanupResult.skippedDocumentReasons.map((entry: any, idx: number) => (
+                          <p key={`${entry.id}-${idx}`}>
+                            Dokument {entry.id}: {entry.reason}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>

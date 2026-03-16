@@ -2,7 +2,7 @@
 // Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
 import { ENV } from './_core/env';
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 type StorageConfig = { baseUrl: string; apiKey: string };
@@ -82,6 +82,21 @@ export function resolveLocalStorageReference(fileKey?: string | null, fileUrl?: 
 export async function storageReadLocal(relKey: string): Promise<Buffer> {
   const targetPath = toLocalStoragePath(relKey);
   return await readFile(targetPath);
+}
+
+export async function storageDeleteByReference(fileKey?: string | null, fileUrl?: string | null): Promise<void> {
+  const localRef = resolveLocalStorageReference(fileKey, fileUrl);
+  if (!localRef) {
+    // Remote deletion is intentionally skipped here because not all storage backends expose a delete API.
+    return;
+  }
+  try {
+    const targetPath = toLocalStoragePath(localRef);
+    await unlink(targetPath);
+  } catch (error: any) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
 }
 
 function toFormData(

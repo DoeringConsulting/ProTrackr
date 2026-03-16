@@ -105,6 +105,28 @@ const CURRENCY_ALIASES: Record<string, string> = {
   "$": "USD",
 };
 
+const RECEIPT_EXTRACTION_GUIDE = `
+Du bist eine Extraktions-Engine für Reisekosten.
+Arbeite strikt nach diesem Gerüst:
+- category: car|train|flight|taxi|transport|meal|hotel|food|fuel|other
+- amount: Gesamtbetrag in Hauptwährung (z. B. 123.45)
+- currency: ISO-3 Code (EUR, PLN, USD, ...)
+- date: Leistungs-/Belegdatum (YYYY-MM-DD)
+- comment: kurze, sachliche Beschreibung
+- fullDay: true/false (default false)
+- flightRouteType: domestic|international|null
+- departureTime/arrivalTime: HH:MM oder null
+- returnDate/checkInDate/checkOutDate: YYYY-MM-DD oder null
+- nights, distanceKm, ratePerKm, liters, pricePerLiter: number oder null
+- ticketNumber, flightNumber, receiptNo, vendorName, projectName: string oder null
+
+Regeln:
+- Bei Flug/Hotel immer den Gesamtbetrag genau einmal auf den Starttag beziehen.
+- Währung nur setzen, wenn klar erkennbar; sonst null.
+- Datum/Zeit nur setzen, wenn sicher erkennbar; sonst null.
+- Keine Freitext-Erfindungen, keine zusätzlichen Felder.
+`.trim();
+
 function normalizeCurrency(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toUpperCase();
@@ -254,8 +276,7 @@ async function extractByLlm(input: ReceiptAnalysisInput): Promise<{ model: strin
     const messageParts: any[] = [
       {
         type: "text",
-        text:
-          "Extrahiere Reisekosten aus Belegen. Gib NUR strukturierte Daten zurück. Kategorien: car,train,flight,taxi,transport,meal,hotel,food,fuel,other.",
+        text: RECEIPT_EXTRACTION_GUIDE,
       },
     ];
 
