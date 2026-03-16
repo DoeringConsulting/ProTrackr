@@ -1151,96 +1151,269 @@ export async function importDatabase(backup: any) {
     accountSettings,
     invoiceNumbers,
   } = await import("../drizzle/schema");
+
+  const parseToDate = (value: unknown): Date | null => {
+    if (value === null || value === undefined || value === "") return null;
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+    if (typeof value === "number") {
+      const fromNumber = new Date(value);
+      return Number.isNaN(fromNumber.getTime()) ? null : fromNumber;
+    }
+    if (typeof value !== "string") return null;
+
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const sqlDateTimeMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?$/);
+    if (sqlDateTimeMatch) {
+      const isoLike = `${sqlDateTimeMatch[1]}T${sqlDateTimeMatch[2] ?? "00:00:00"}`;
+      const parsed = new Date(isoLike);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const parseToSqlDateTimeString = (value: unknown): string | null => {
+    if (value === null || value === undefined || value === "") return null;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return `${trimmed} 00:00:00`;
+    }
+
+    const parsed = parseToDate(value);
+    if (!parsed) return null;
+    return parsed.toISOString().slice(0, 19).replace("T", " ");
+  };
+
+  type DateFieldRule = {
+    name: string;
+    mode?: "date" | "sql";
+    required?: boolean;
+  };
+
+  const normalizeBackupRowDates = <T extends Record<string, any>>(
+    row: T,
+    rules: DateFieldRule[],
+    context: string
+  ): T => {
+    const normalized: Record<string, any> = { ...row };
+    for (const rule of rules) {
+      if (!(rule.name in normalized)) continue;
+      const raw = normalized[rule.name];
+      if (raw === null || raw === undefined || raw === "") {
+        if (rule.required) {
+          throw new Error(`Ungültiges Backup: ${context}.${rule.name} fehlt`);
+        }
+        normalized[rule.name] = null;
+        continue;
+      }
+
+      const parsed =
+        rule.mode === "sql" ? parseToSqlDateTimeString(raw) : parseToDate(raw);
+      if (!parsed) {
+        throw new Error(`Ungültiges Backup: ${context}.${rule.name} hat ein ungültiges Datum`);
+      }
+      normalized[rule.name] = parsed;
+    }
+    return normalized as T;
+  };
   
   // Import data (this will overwrite existing data)
   // In production, you might want to add more sophisticated merge logic
   if (backup.data.mandanten && backup.data.mandanten.length > 0) {
     for (const mandant of backup.data.mandanten) {
-      await db.insert(mandanten).values(mandant).onDuplicateKeyUpdate({ set: mandant });
+      const normalizedMandant = normalizeBackupRowDates(
+        mandant,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `mandanten#${mandant?.id ?? "?"}`
+      );
+      await db.insert(mandanten).values(normalizedMandant).onDuplicateKeyUpdate({ set: normalizedMandant });
     }
   }
 
   if (backup.data.users && backup.data.users.length > 0) {
     for (const user of backup.data.users) {
-      await db.insert(users).values(user).onDuplicateKeyUpdate({ set: user });
+      const normalizedUser = normalizeBackupRowDates(
+        user,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `users#${user?.id ?? "?"}`
+      );
+      await db.insert(users).values(normalizedUser).onDuplicateKeyUpdate({ set: normalizedUser });
     }
   }
 
   if (backup.data.passwordResetTokens && backup.data.passwordResetTokens.length > 0) {
     for (const token of backup.data.passwordResetTokens) {
-      await db.insert(passwordResetTokens).values(token).onDuplicateKeyUpdate({ set: token });
+      const normalizedToken = normalizeBackupRowDates(
+        token,
+        [
+          { name: "expiresAt", required: true },
+          { name: "usedAt" },
+          { name: "createdAt" },
+        ],
+        `passwordResetTokens#${token?.id ?? "?"}`
+      );
+      await db
+        .insert(passwordResetTokens)
+        .values(normalizedToken)
+        .onDuplicateKeyUpdate({ set: normalizedToken });
     }
   }
   
   if (backup.data.customers && backup.data.customers.length > 0) {
     for (const customer of backup.data.customers) {
-      await db.insert(customers).values(customer).onDuplicateKeyUpdate({ set: customer });
+      const normalizedCustomer = normalizeBackupRowDates(
+        customer,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `customers#${customer?.id ?? "?"}`
+      );
+      await db.insert(customers).values(normalizedCustomer).onDuplicateKeyUpdate({ set: normalizedCustomer });
     }
   }
   
   if (backup.data.timeEntries && backup.data.timeEntries.length > 0) {
     for (const entry of backup.data.timeEntries) {
-      await db.insert(timeEntries).values(entry).onDuplicateKeyUpdate({ set: entry });
+      const normalizedEntry = normalizeBackupRowDates(
+        entry,
+        [
+          { name: "date", required: true },
+          { name: "createdAt" },
+          { name: "updatedAt" },
+        ],
+        `timeEntries#${entry?.id ?? "?"}`
+      );
+      await db.insert(timeEntries).values(normalizedEntry).onDuplicateKeyUpdate({ set: normalizedEntry });
     }
   }
   
   if (backup.data.expenses && backup.data.expenses.length > 0) {
     for (const expense of backup.data.expenses) {
-      await db.insert(expenses).values(expense).onDuplicateKeyUpdate({ set: expense });
+      const normalizedExpense = normalizeBackupRowDates(
+        expense,
+        [
+          { name: "date", mode: "sql", required: true },
+          { name: "checkInDate", mode: "sql" },
+          { name: "checkOutDate", mode: "sql" },
+          { name: "createdAt" },
+          { name: "updatedAt" },
+        ],
+        `expenses#${expense?.id ?? "?"}`
+      );
+      await db.insert(expenses).values(normalizedExpense).onDuplicateKeyUpdate({ set: normalizedExpense });
     }
   }
 
   if (backup.data.documents && backup.data.documents.length > 0) {
     for (const document of backup.data.documents) {
-      await db.insert(documents).values(document).onDuplicateKeyUpdate({ set: document });
+      const normalizedDocument = normalizeBackupRowDates(
+        document,
+        [{ name: "createdAt" }],
+        `documents#${document?.id ?? "?"}`
+      );
+      await db
+        .insert(documents)
+        .values(normalizedDocument)
+        .onDuplicateKeyUpdate({ set: normalizedDocument });
     }
   }
 
   if (backup.data.expenseAiAnalyses && backup.data.expenseAiAnalyses.length > 0) {
     for (const analysis of backup.data.expenseAiAnalyses) {
-      await db.insert(expenseAiAnalyses).values(analysis).onDuplicateKeyUpdate({ set: analysis });
+      const normalizedAnalysis = normalizeBackupRowDates(
+        analysis,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `expenseAiAnalyses#${analysis?.id ?? "?"}`
+      );
+      await db
+        .insert(expenseAiAnalyses)
+        .values(normalizedAnalysis)
+        .onDuplicateKeyUpdate({ set: normalizedAnalysis });
     }
   }
   
   if (backup.data.exchangeRates && backup.data.exchangeRates.length > 0) {
     for (const rate of backup.data.exchangeRates) {
-      await db.insert(exchangeRates).values(rate).onDuplicateKeyUpdate({ set: rate });
+      const normalizedRate = normalizeBackupRowDates(
+        rate,
+        [{ name: "date", required: true }, { name: "createdAt" }],
+        `exchangeRates#${rate?.id ?? "?"}`
+      );
+      await db.insert(exchangeRates).values(normalizedRate).onDuplicateKeyUpdate({ set: normalizedRate });
     }
   }
   
   if (backup.data.fixedCosts && backup.data.fixedCosts.length > 0) {
     for (const cost of backup.data.fixedCosts) {
-      await db.insert(fixedCosts).values(cost).onDuplicateKeyUpdate({ set: cost });
+      const normalizedCost = normalizeBackupRowDates(
+        cost,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `fixedCosts#${cost?.id ?? "?"}`
+      );
+      await db.insert(fixedCosts).values(normalizedCost).onDuplicateKeyUpdate({ set: normalizedCost });
     }
   }
   
   if (backup.data.taxSettings && backup.data.taxSettings.length > 0) {
     for (const setting of backup.data.taxSettings) {
-      await db.insert(taxSettings).values(setting).onDuplicateKeyUpdate({ set: setting });
+      const normalizedSetting = normalizeBackupRowDates(
+        setting,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `taxSettings#${setting?.id ?? "?"}`
+      );
+      await db.insert(taxSettings).values(normalizedSetting).onDuplicateKeyUpdate({ set: normalizedSetting });
     }
   }
 
   if (backup.data.taxProfiles && backup.data.taxProfiles.length > 0) {
     for (const profile of backup.data.taxProfiles) {
-      await db.insert(taxProfiles).values(profile).onDuplicateKeyUpdate({ set: profile });
+      const normalizedProfile = normalizeBackupRowDates(
+        profile,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `taxProfiles#${profile?.id ?? "?"}`
+      );
+      await db.insert(taxProfiles).values(normalizedProfile).onDuplicateKeyUpdate({ set: normalizedProfile });
     }
   }
 
   if (backup.data.taxConfigPl && backup.data.taxConfigPl.length > 0) {
     for (const config of backup.data.taxConfigPl) {
-      await db.insert(taxConfigPl).values(config).onDuplicateKeyUpdate({ set: config });
+      const normalizedConfig = normalizeBackupRowDates(
+        config,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `taxConfigPl#${config?.id ?? "?"}`
+      );
+      await db.insert(taxConfigPl).values(normalizedConfig).onDuplicateKeyUpdate({ set: normalizedConfig });
     }
   }
   
   if (backup.data.accountSettings && backup.data.accountSettings.length > 0) {
     for (const setting of backup.data.accountSettings) {
-      await db.insert(accountSettings).values(setting).onDuplicateKeyUpdate({ set: setting });
+      const normalizedAccountSetting = normalizeBackupRowDates(
+        setting,
+        [{ name: "createdAt" }, { name: "updatedAt" }],
+        `accountSettings#${setting?.id ?? "?"}`
+      );
+      await db
+        .insert(accountSettings)
+        .values(normalizedAccountSetting)
+        .onDuplicateKeyUpdate({ set: normalizedAccountSetting });
     }
   }
   
   if (backup.data.invoiceNumbers && backup.data.invoiceNumbers.length > 0) {
     for (const invoice of backup.data.invoiceNumbers) {
-      await db.insert(invoiceNumbers).values(invoice).onDuplicateKeyUpdate({ set: invoice });
+      const normalizedInvoice = normalizeBackupRowDates(
+        invoice,
+        [{ name: "createdAt" }],
+        `invoiceNumbers#${invoice?.id ?? "?"}`
+      );
+      await db.insert(invoiceNumbers).values(normalizedInvoice).onDuplicateKeyUpdate({ set: normalizedInvoice });
     }
   }
   
