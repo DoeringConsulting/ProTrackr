@@ -2,6 +2,8 @@
 // Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
 
 import { ENV } from './_core/env';
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 type StorageConfig = { baseUrl: string; apiKey: string };
 
@@ -16,6 +18,10 @@ function getStorageConfig(): StorageConfig {
   }
 
   return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+}
+
+function hasRemoteStorageConfig(): boolean {
+  return Boolean((ENV.forgeApiUrl ?? "").trim() && (ENV.forgeApiKey ?? "").trim());
 }
 
 function buildUploadUrl(baseUrl: string, relKey: string): URL {
@@ -49,6 +55,35 @@ function normalizeKey(relKey: string): string {
   return relKey.replace(/^\/+/, "");
 }
 
+function getLocalStorageRoot(): string {
+  return path.resolve(process.cwd(), "local-storage");
+}
+
+function toLocalStoragePath(relKey: string): string {
+  const root = getLocalStorageRoot();
+  const normalized = normalizeKey(relKey).replace(/\.\./g, "");
+  const resolved = path.resolve(root, normalized);
+  if (!(resolved === root || resolved.startsWith(`${root}${path.sep}`))) {
+    throw new Error("Invalid local storage path");
+  }
+  return resolved;
+}
+
+export function resolveLocalStorageReference(fileKey?: string | null, fileUrl?: string | null): string | null {
+  if (typeof fileKey === "string" && fileKey.startsWith("local:")) {
+    return normalizeKey(fileKey.slice("local:".length));
+  }
+  if (typeof fileUrl === "string" && fileUrl.startsWith("local-file://")) {
+    return normalizeKey(fileUrl.slice("local-file://".length));
+  }
+  return null;
+}
+
+export async function storageReadLocal(relKey: string): Promise<Buffer> {
+  const targetPath = toLocalStoragePath(relKey);
+  return await readFile(targetPath);
+}
+
 function toFormData(
   data: Buffer | Uint8Array | string,
   contentType: string,
@@ -72,6 +107,18 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
+  if (!hasRemoteStorageConfig()) {
+    const key = normalizeKey(relKey);
+    const targetPath = toLocalStoragePath(key);
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    const bytes = typeof data === "string" ? Buffer.from(data) : Buffer.from(data);
+    await writeFile(targetPath, bytes);
+    return {
+      key: `local:${key}`,
+      url: `local-file://${key}`,
+    };
+  }
+
   const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
   const uploadUrl = buildUploadUrl(baseUrl, key);

@@ -110,6 +110,32 @@ function formatMandatenNumber(sequence: number): string {
   return String(sequence).padStart(3, "0");
 }
 
+function decodePdfLiteral(value: string): string {
+  return value
+    .replace(/\\([\\()])/g, "$1")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\b/g, "\b")
+    .replace(/\\f/g, "\f")
+    .replace(/\\(\d{3})/g, (_, octal: string) => {
+      const code = Number.parseInt(octal, 8);
+      return Number.isFinite(code) ? String.fromCharCode(code) : "";
+    });
+}
+
+function extractTextFromPdfBytes(buffer: Buffer): string {
+  const raw = buffer.toString("latin1");
+  const matches = raw.match(/\((?:\\.|[^\\()]){1,300}\)\s*Tj/g) ?? [];
+  const text = matches
+    .map(entry => {
+      const literal = entry.replace(/\)\s*Tj$/, "").replace(/^\(/, "");
+      return decodePdfLiteral(literal);
+    })
+    .join(" ");
+  return text.replace(/\s+/g, " ").trim();
+}
+
 type CopyScope = "day" | "week" | "month";
 
 function formatDateKeyLocal(date: Date): string {
@@ -567,6 +593,7 @@ async function runReceiptAnalyzeForUser(
   let ownerUserId = user.id;
   let documentUrl: string | null = null;
   let mimeType: string | null = null;
+  let effectiveOcrText: string | undefined = input.ocrText?.trim() || undefined;
 
   if (input.documentId) {
     const document = await getDocumentById(input.documentId);
@@ -579,6 +606,32 @@ async function runReceiptAnalyzeForUser(
     ownerUserId = document.userId;
     documentUrl = document.fileUrl ?? null;
     mimeType = document.mimeType ?? null;
+
+    // Local fallback mode: load the file bytes directly when no remote storage proxy is configured.
+    const { resolveLocalStorageReference, storageReadLocal } = await import("./storage");
+    const localRef = resolveLocalStorageReference(document.fileKey, document.fileUrl);
+    if (localRef) {
+      try {
+        const bytes = await storageReadLocal(localRef);
+        const isPdf =
+          (document.mimeType ?? "").toLowerCase().includes("pdf") ||
+          String(document.fileName ?? "").toLowerCase().endsWith(".pdf");
+        if (isPdf) {
+          const extractedText = extractTextFromPdfBytes(bytes);
+          if (extractedText.length > 0) {
+            effectiveOcrText = [effectiveOcrText, extractedText].filter(Boolean).join("\n\n");
+            // Prefer OCR text path for PDFs in local fallback mode.
+            documentUrl = null;
+          } else {
+            documentUrl = `data:${document.mimeType || "application/pdf"};base64,${bytes.toString("base64")}`;
+          }
+        } else if ((document.mimeType ?? "").toLowerCase().startsWith("image/")) {
+          documentUrl = `data:${document.mimeType};base64,${bytes.toString("base64")}`;
+        }
+      } catch {
+        // Keep persisted URL if local fallback file cannot be read.
+      }
+    }
   }
 
   if (input.timeEntryId) {
@@ -606,7 +659,7 @@ async function runReceiptAnalyzeForUser(
   }
 
   const analysis = await analyzeReceipt({
-    ocrText: input.ocrText,
+    ocrText: effectiveOcrText,
     documentUrl,
     mimeType,
     hintCategory: input.hintCategory,
@@ -675,7 +728,7 @@ async function runReceiptAnalyzeForUser(
     documentId: input.documentId ?? null,
     source: analysis.source,
     modelName: analysis.model,
-    ocrText: input.ocrText ?? null,
+    ocrText: effectiveOcrText ?? null,
     extractionPayload: JSON.stringify(analysis.rawExtraction ?? null),
     normalizedPayload: JSON.stringify(enrichedCandidates),
     validationPayload: JSON.stringify(validationPayload),
@@ -3270,6 +3323,174 @@ export const appRouter = router({
           taxConfigPl: taxConfigData,
           accountSettings: accountSettingsData,
           invoiceNumbers: invoiceNumbersData,
+        },
+      };
+    }),
+    clearTimeAndExpenseEntries: adminOrMandantAdminProcedure.input((val: unknown) => {
+      return z
+        .object({
+          scope: z.enum(["all", "year", "month", "custom"]),
+          year: z.number().int().min(2000).max(2100).optional(),
+          month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+          startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        })
+        .superRefine((input, refineCtx) => {
+          if (input.scope === "year" && !input.year) {
+            refineCtx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["year"],
+              message: "Jahr ist erforderlich",
+            });
+          }
+          if (input.scope === "month" && !input.month) {
+            refineCtx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["month"],
+              message: "Monat ist erforderlich",
+            });
+          }
+          if (input.scope === "custom") {
+            if (!input.startDate) {
+              refineCtx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["startDate"],
+                message: "Startdatum ist erforderlich",
+              });
+            }
+            if (!input.endDate) {
+              refineCtx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["endDate"],
+                message: "Enddatum ist erforderlich",
+              });
+            }
+            if (input.startDate && input.endDate && input.endDate < input.startDate) {
+              refineCtx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["endDate"],
+                message: "Enddatum darf nicht vor Startdatum liegen",
+              });
+            }
+          }
+        })
+        .parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      if (!ctx.user.mandantId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Mandant fehlt im Kontext",
+        });
+      }
+
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      }
+
+      let dateFrom: string | null = null;
+      let dateTo: string | null = null;
+
+      if (input.scope === "year") {
+        const year = Number(input.year);
+        dateFrom = `${year}-01-01`;
+        dateTo = `${year}-12-31`;
+      } else if (input.scope === "month" && input.month) {
+        const [yearRaw, monthRaw] = input.month.split("-");
+        const year = Number(yearRaw);
+        const month = Number(monthRaw);
+        const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+        dateFrom = `${yearRaw}-${monthRaw}-01`;
+        dateTo = `${yearRaw}-${monthRaw}-${String(lastDay).padStart(2, "0")}`;
+      } else if (input.scope === "custom") {
+        dateFrom = input.startDate ?? null;
+        dateTo = input.endDate ?? null;
+      }
+
+      const { users, timeEntries, expenses: expensesTable, documents } = await import("../drizzle/schema");
+      const mandantUsers = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.mandantId, ctx.user.mandantId));
+      const userIds = mandantUsers.map((u) => Number(u.id)).filter((id) => Number.isInteger(id) && id > 0);
+      if (userIds.length === 0) {
+        return {
+          success: true,
+          scope: input.scope,
+          dateFrom,
+          dateTo,
+          deleted: {
+            timeEntries: 0,
+            expenses: 0,
+            documents: 0,
+          },
+        };
+      }
+
+      const dateFilter = (column: any) =>
+        dateFrom && dateTo ? sql`DATE(${column}) BETWEEN ${dateFrom} AND ${dateTo}` : sql`TRUE`;
+
+      const timeEntriesToDelete = await db
+        .select({ id: timeEntries.id })
+        .from(timeEntries)
+        .where(and(inArray(timeEntries.userId, userIds), dateFilter(timeEntries.date)));
+      const timeEntryIds = timeEntriesToDelete.map((entry) => Number(entry.id));
+
+      const expensesToDelete = await db
+        .select({ id: expensesTable.id })
+        .from(expensesTable)
+        .where(
+          and(
+            or(
+              inArray(expensesTable.userId, userIds),
+              timeEntryIds.length > 0 ? inArray(expensesTable.timeEntryId, timeEntryIds) : sql`FALSE`
+            ),
+            dateFrom && dateTo
+              ? or(
+                  dateFilter(expensesTable.date),
+                  timeEntryIds.length > 0 ? inArray(expensesTable.timeEntryId, timeEntryIds) : sql`FALSE`
+                )
+              : sql`TRUE`
+          )
+        );
+      const expenseIds = expensesToDelete.map((entry) => Number(entry.id));
+
+      const documentsToDelete =
+        expenseIds.length > 0 || timeEntryIds.length > 0
+          ? await db
+              .select({ id: documents.id })
+              .from(documents)
+              .where(
+                and(
+                  inArray(documents.userId, userIds),
+                  or(
+                    expenseIds.length > 0 ? inArray(documents.expenseId, expenseIds) : sql`FALSE`,
+                    timeEntryIds.length > 0 ? inArray(documents.timeEntryId, timeEntryIds) : sql`FALSE`
+                  )
+                )
+              )
+          : [];
+      const documentIds = documentsToDelete.map((entry) => Number(entry.id));
+
+      if (documentIds.length > 0) {
+        await db.delete(documents).where(inArray(documents.id, documentIds));
+      }
+      if (expenseIds.length > 0) {
+        await db.delete(expensesTable).where(inArray(expensesTable.id, expenseIds));
+      }
+      if (timeEntryIds.length > 0) {
+        await db.delete(timeEntries).where(inArray(timeEntries.id, timeEntryIds));
+      }
+
+      return {
+        success: true,
+        scope: input.scope,
+        dateFrom,
+        dateTo,
+        deleted: {
+          timeEntries: timeEntryIds.length,
+          expenses: expenseIds.length,
+          documents: documentIds.length,
         },
       };
     }),

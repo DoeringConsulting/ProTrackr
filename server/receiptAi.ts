@@ -267,15 +267,27 @@ async function extractByLlm(input: ReceiptAnalysisInput): Promise<{ model: strin
     }
 
     if (input.documentUrl && input.documentUrl.trim()) {
-      messageParts.push({
-        type: "file_url",
-        file_url: {
-          url: input.documentUrl,
-          ...(input.mimeType && input.mimeType.startsWith("application/pdf")
-            ? { mime_type: "application/pdf" as const }
-            : {}),
-        },
-      });
+      const isImageInput =
+        (input.mimeType?.startsWith("image/") ?? false) || input.documentUrl.startsWith("data:image/");
+      if (isImageInput) {
+        messageParts.push({
+          type: "image_url",
+          image_url: {
+            url: input.documentUrl,
+            detail: "high",
+          },
+        });
+      } else {
+        messageParts.push({
+          type: "file_url",
+          file_url: {
+            url: input.documentUrl,
+            ...(input.mimeType && input.mimeType.startsWith("application/pdf")
+              ? { mime_type: "application/pdf" as const }
+              : {}),
+          },
+        });
+      }
     }
 
     const response = await invokeLLM({
