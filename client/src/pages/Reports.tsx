@@ -385,6 +385,25 @@ export default function Reports() {
   const accountingData = calculateAccountingReport();
   const customerData = calculateCustomerReport();
 
+  const appliedExchangeRatesForUi = useMemo(() => {
+    const pairs = new Set<string>();
+    for (const entry of timeEntriesDetailed) {
+      const source = String(entry.sourceCurrency || "EUR").toUpperCase();
+      if (source !== "EUR") {
+        pairs.add(`${source}/PLN`);
+        pairs.add("EUR/PLN");
+      }
+    }
+    for (const expense of expensesDetailedAll) {
+      const source = String(expense.sourceCurrency || "EUR").toUpperCase();
+      if (source !== "PLN") pairs.add(`${source}/PLN`);
+      if (source !== "EUR") pairs.add("EUR/PLN");
+    }
+    return Array.from(pairs)
+      .map(pair => ({ pair, rate: rateMap.get(pair) ?? null }))
+      .sort((a, b) => a.pair.localeCompare(b.pair, "de"));
+  }, [timeEntriesDetailed, expensesDetailedAll, rateMap]);
+
   const handleExportPolishBookkeepingReport = async () => {
     const dateKeyOf = (value: string | Date) => {
       if (typeof value === "string") {
@@ -1018,7 +1037,7 @@ export default function Reports() {
                         </TableRow>
                         <TableRow>
                           <TableCell className="pl-8 text-muted-foreground">
-                            Arbeitsstunden: {formatHours(customerData.totalHours)}
+                            Arbeitsstunden (hh:mm): {formatHours(customerData.totalHours)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatCalculatedCurrency(customerData.totalAmount)}
@@ -1069,7 +1088,7 @@ export default function Reports() {
                           <TableHead>Datum</TableHead>
                           <TableHead>Wochentag</TableHead>
                           <TableHead>Typ</TableHead>
-                          <TableHead className="text-right">Stunden</TableHead>
+                          <TableHead className="text-right">Stunden (hh:mm)</TableHead>
                           <TableHead className="text-right">Manntage</TableHead>
                           <TableHead className="text-right">Betrag</TableHead>
                           <TableHead className="text-right">Reisekosten</TableHead>
@@ -1127,6 +1146,20 @@ export default function Reports() {
                         </TableRow>
                       </TableBody>
                     </Table>
+                <div className="mt-4 rounded border p-3 text-sm">
+                  <p className="font-medium mb-2">Angewendete Wechselkurse</p>
+                  {appliedExchangeRatesForUi.length === 0 ? (
+                    <p className="text-muted-foreground">Keine Wechselkurse erforderlich (nur Basiswährung).</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-1 text-muted-foreground">
+                      {appliedExchangeRatesForUi.map((entry) => (
+                        <p key={entry.pair}>
+                          {entry.pair}: {entry.rate === null ? "Kurs fehlt" : entry.rate.toFixed(6)}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
                   </CardContent>
                 </Card>
               </>
