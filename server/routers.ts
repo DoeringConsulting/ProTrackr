@@ -3294,6 +3294,96 @@ export const appRouter = router({
         userId: ctx.user.id,
       });
     }),
+    resolveForReportDate: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        date: z.string(),
+        pairs: z.array(z.string()).min(1).max(25),
+      }).parse(val);
+    }).query(async ({ ctx, input }) => {
+      if (isWebAppAdmin(ctx.user)) return [];
+      const {
+        createExchangeRate,
+        getExchangeRateByDate,
+        getExchangeRateOnOrBeforeDate,
+      } = await import("./db");
+      const { fetchNBPExchangeRateWithMeta } = await import("./nbp");
+
+      const targetDate = new Date(input.date);
+      if (Number.isNaN(targetDate.getTime())) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Ungültiges Berichtsdatum" });
+      }
+
+      const normalizePair = (raw: string) => String(raw || "").trim().toUpperCase();
+      const normalizedPairs = Array.from(new Set(input.pairs.map(normalizePair))).filter(pair =>
+        /^[A-Z]{3}\/PLN$/.test(pair)
+      );
+
+      const results: Array<{
+        pair: string;
+        rate: number | null;
+        date: string | null;
+        source: string;
+        fetchedFromArchive: boolean;
+      }> = [];
+
+      for (const pair of normalizedPairs) {
+        try {
+          let resolved: any | null = null;
+          // 1) Benutzer-Override am Datum
+          resolved = await getExchangeRateByDate(pair, targetDate, ctx.user.id);
+          // 2) Global am Datum
+          if (!resolved) resolved = await getExchangeRateByDate(pair, targetDate, 0);
+          // 3) Benutzer-Override <= Datum
+          if (!resolved) resolved = await getExchangeRateOnOrBeforeDate(pair, targetDate, ctx.user.id);
+          // 4) Global <= Datum
+          if (!resolved) resolved = await getExchangeRateOnOrBeforeDate(pair, targetDate, 0);
+
+          let fetchedFromArchive = false;
+          if (!resolved) {
+            const baseCurrency = pair.split("/")[0];
+            const archived = await fetchNBPExchangeRateWithMeta(baseCurrency, targetDate);
+            const effectiveDate = new Date(`${archived.effectiveDate}T00:00:00`);
+            await createExchangeRate({
+              date: effectiveDate,
+              currencyPair: pair,
+              rate: Math.round(archived.rate * 10000),
+              source: "NBP",
+              userId: 0,
+            });
+            resolved = await getExchangeRateByDate(pair, effectiveDate, 0);
+            fetchedFromArchive = true;
+          }
+
+          const normalizedRate =
+            typeof resolved?.rate === "number"
+              ? (resolved.rate > 100 ? resolved.rate / 10000 : resolved.rate)
+              : null;
+          const dateValue = resolved?.date ? new Date(resolved.date) : null;
+          const dateIso =
+            dateValue && !Number.isNaN(dateValue.getTime())
+              ? dateValue.toISOString().slice(0, 10)
+              : null;
+
+          results.push({
+            pair,
+            rate: normalizedRate,
+            date: dateIso,
+            source: String(resolved?.source ?? "NBP"),
+            fetchedFromArchive,
+          });
+        } catch {
+          results.push({
+            pair,
+            rate: null,
+            date: targetDate.toISOString().slice(0, 10),
+            source: "NBP",
+            fetchedFromArchive: false,
+          });
+        }
+      }
+
+      return results;
+    }),
     upsert: protectedProcedure.input((val: unknown) => {
       return z.object({
         date: z.string(),

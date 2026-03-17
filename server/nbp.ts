@@ -30,28 +30,38 @@ export async function fetchNBPExchangeRate(
   currencyCode: string = "EUR",
   date: Date = new Date()
 ): Promise<number> {
+  const result = await fetchNBPExchangeRateWithMeta(currencyCode, date);
+  return result.rate;
+}
+
+/**
+ * Fetches exchange rate + effective NBP date.
+ * Falls back up to 7 previous days for weekends/holidays.
+ */
+export async function fetchNBPExchangeRateWithMeta(
+  currencyCode: string = "EUR",
+  date: Date = new Date(),
+  attempt: number = 0
+): Promise<{ rate: number; effectiveDate: string }> {
   try {
     const dateStr = date.toISOString().split("T")[0]; // YYYY-MM-DD
     const url = `https://api.nbp.pl/api/exchangerates/rates/a/${currencyCode.toLowerCase()}/${dateStr}/?format=json`;
     
     const response = await axios.get(url);
-    const rate = response.data.rates[0].mid;
-    
-    return rate;
+    const rate = Number(response.data?.rates?.[0]?.mid);
+    const effectiveDate = String(response.data?.rates?.[0]?.effectiveDate || dateStr);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new Error(`Invalid NBP response for ${currencyCode} on ${dateStr}`);
+    }
+    return { rate, effectiveDate };
   } catch (error: any) {
     // If rate not available for the exact date (weekend/holiday), try previous day
-    if (error.response?.status === 404) {
+    if (error.response?.status === 404 && attempt < 7) {
       const previousDay = new Date(date);
       previousDay.setDate(previousDay.getDate() - 1);
-      
-      // Prevent infinite recursion - max 7 days back
-      const daysDiff = Math.floor((Date.now() - previousDay.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysDiff > 7) {
-        throw new Error("No exchange rate available for the past 7 days");
-      }
-      
-      return fetchNBPExchangeRate(currencyCode, previousDay);
+      return fetchNBPExchangeRateWithMeta(currencyCode, previousDay, attempt + 1);
     }
+    if (attempt >= 7) throw new Error("No exchange rate available for the past 7 days");
     
     throw error;
   }

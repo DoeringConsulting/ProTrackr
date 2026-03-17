@@ -48,6 +48,9 @@ type BookkeepingSummary = {
 type AppliedExchangeRate = {
   pair: string;
   rate: number | null;
+  date?: string | null;
+  source?: string | null;
+  fetchedFromArchive?: boolean;
 };
 
 function formatDateDe(value: string | Date) {
@@ -62,6 +65,13 @@ function formatHours(minutes: number) {
 
 function formatManDays(value: number) {
   return (value / 1000).toFixed(3);
+}
+
+function formatRateDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("de-DE");
 }
 
 function getPolishWeekday(weekdayValue: string | null | undefined) {
@@ -283,11 +293,21 @@ export async function exportPolishBookkeepingReportToPDF(input: {
 
   autoTable(doc, {
     startY: ratesStartY,
-    head: [["Zastosowane kursy walut", "Kurs"]],
+    head: [["Zastosowane kursy walut", "Kurs", "Data kursu", "Zrodlo"]],
     body:
       normalizedRates.length > 0
-        ? normalizedRates.map((item) => [item.pair, item.rate === null ? "Brak kursu" : item.rate.toFixed(6)])
-        : [["-", "Brak kursow (wszystkie pozycje w walucie bazowej)"]],
+        ? normalizedRates.map((item) => {
+            const original = (input.appliedExchangeRates ?? []).find(
+              (entry) => String(entry.pair || "").toUpperCase() === item.pair
+            );
+            return [
+              item.pair,
+              item.rate === null ? "Brak kursu" : item.rate.toFixed(6),
+              formatRateDate(original?.date ?? null),
+              String(original?.source || "NBP"),
+            ];
+          })
+        : [["-", "Brak kursow (wszystkie pozycje w walucie bazowej)", "-", "-"]],
     styles: { fontSize: 9 },
     headStyles: { fillColor: [2, 90, 100] },
   });
@@ -324,6 +344,7 @@ export async function exportCustomerTimesheetToPDF(input: {
   }>;
   totalHours: number;
   totalManDays: number;
+  appliedExchangeRates?: AppliedExchangeRate[];
 }) {
   const t = {
     de: {
@@ -410,6 +431,32 @@ export async function exportCustomerTimesheetToPDF(input: {
     headStyles: { fillColor: [185, 136, 71] },
   });
 
+  const normalizedRates = (input.appliedExchangeRates ?? [])
+    .map((item) => ({
+      pair: String(item.pair || "").toUpperCase(),
+      rate: typeof item.rate === "number" && Number.isFinite(item.rate) ? item.rate : null,
+      date: item.date ?? null,
+      source: item.source ?? "NBP",
+    }))
+    .filter((item) => item.pair.length > 0)
+    .sort((a, b) => a.pair.localeCompare(b.pair, "de"));
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 4,
+    head: [["Applied exchange rates", "Rate", "Rate date", "Source"]],
+    body:
+      normalizedRates.length > 0
+        ? normalizedRates.map((item) => [
+            item.pair,
+            item.rate === null ? "n/a" : item.rate.toFixed(6),
+            formatRateDate(item.date),
+            String(item.source || "NBP"),
+          ])
+        : [["-", "n/a", "-", "-"]],
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [2, 90, 100] },
+  });
+
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -448,6 +495,7 @@ export async function exportCustomerCostStatementToPDF(input: {
     travelAmount: number;
     grandTotal: number;
   };
+  appliedExchangeRates?: AppliedExchangeRate[];
 }) {
   const t = {
     de: {
@@ -530,6 +578,32 @@ export async function exportCustomerCostStatementToPDF(input: {
     ],
     styles: { fontSize: 9 },
     headStyles: { fillColor: [185, 136, 71] },
+  });
+
+  const normalizedRates = (input.appliedExchangeRates ?? [])
+    .map((item) => ({
+      pair: String(item.pair || "").toUpperCase(),
+      rate: typeof item.rate === "number" && Number.isFinite(item.rate) ? item.rate : null,
+      date: item.date ?? null,
+      source: item.source ?? "NBP",
+    }))
+    .filter((item) => item.pair.length > 0)
+    .sort((a, b) => a.pair.localeCompare(b.pair, "de"));
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 4,
+    head: [["Applied exchange rates", "Rate", "Rate date", "Source"]],
+    body:
+      normalizedRates.length > 0
+        ? normalizedRates.map((item) => [
+            item.pair,
+            item.rate === null ? "n/a" : item.rate.toFixed(6),
+            formatRateDate(item.date),
+            String(item.source || "NBP"),
+          ])
+        : [["-", "n/a", "-", "-"]],
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [2, 90, 100] },
   });
 
   const pageCount = doc.getNumberOfPages();

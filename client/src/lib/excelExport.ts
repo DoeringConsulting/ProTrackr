@@ -12,6 +12,12 @@ interface AccountingReportData {
   netProfit: number;
   startDate: string;
   endDate: string;
+  appliedExchangeRates?: Array<{
+    pair: string;
+    rate: number | null;
+    date?: string | null;
+    source?: string | null;
+  }>;
 }
 
 interface CustomerReportData {
@@ -33,6 +39,12 @@ interface CustomerReportData {
   totalExpenses: number;
   billableExpenses?: number;
   grandTotal: number;
+  appliedExchangeRates?: Array<{
+    pair: string;
+    rate: number | null;
+    date?: string | null;
+    source?: string | null;
+  }>;
 }
 
 function formatHours(minutes: number) {
@@ -80,6 +92,30 @@ export async function exportAccountingReportToExcel(data: AccountingReportData) 
 
   // Add worksheet to workbook
   XLSX.utils.book_append_sheet(wb, ws, "Buchhaltung");
+
+  const ratesSheetData = [
+    ["Angewendete Wechselkurse", "", "", ""],
+    ["Währungspaar", "Kurs", "Kursdatum", "Quelle"],
+    ...((data.appliedExchangeRates ?? []).length > 0
+      ? (data.appliedExchangeRates ?? [])
+          .map((entry) => ({
+            pair: String(entry.pair || "").toUpperCase(),
+            rate: typeof entry.rate === "number" ? entry.rate : null,
+            date: entry.date ?? null,
+            source: entry.source ?? "NBP",
+          }))
+          .sort((a, b) => a.pair.localeCompare(b.pair, "de"))
+          .map((entry) => [
+            entry.pair,
+            entry.rate === null ? "n/a" : entry.rate.toFixed(6),
+            entry.date ? new Date(entry.date).toLocaleDateString("de-DE") : "-",
+            String(entry.source || "NBP"),
+          ])
+      : [["-", "n/a", "-", "-"]]),
+  ];
+  const wsRates = XLSX.utils.aoa_to_sheet(ratesSheetData);
+  wsRates["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsRates, "Wechselkurse");
 
   // Generate filename
   const filename = `Buchhaltungsbericht_${data.startDate}_${data.endDate}.xlsx`;
@@ -147,6 +183,30 @@ export async function exportCustomerReportToExcel(data: CustomerReportData) {
   const wsDetails = XLSX.utils.aoa_to_sheet(detailsData);
   wsDetails["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, wsDetails, "Details");
+
+  const ratesSheetData = [
+    ["Angewendete Wechselkurse", "", "", ""],
+    ["Währungspaar", "Kurs", "Kursdatum", "Quelle"],
+    ...((data.appliedExchangeRates ?? []).length > 0
+      ? (data.appliedExchangeRates ?? [])
+          .map((entry) => ({
+            pair: String(entry.pair || "").toUpperCase(),
+            rate: typeof entry.rate === "number" ? entry.rate : null,
+            date: entry.date ?? null,
+            source: entry.source ?? "NBP",
+          }))
+          .sort((a, b) => a.pair.localeCompare(b.pair, "de"))
+          .map((entry) => [
+            entry.pair,
+            entry.rate === null ? "n/a" : entry.rate.toFixed(6),
+            entry.date ? new Date(entry.date).toLocaleDateString("de-DE") : "-",
+            String(entry.source || "NBP"),
+          ])
+      : [["-", "n/a", "-", "-"]]),
+  ];
+  const wsRates = XLSX.utils.aoa_to_sheet(ratesSheetData);
+  wsRates["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsRates, "Wechselkurse");
 
   // Generate filename
   const filename = `Kundenbericht_${data.customerName}_${data.startDate}_${data.endDate}.xlsx`;

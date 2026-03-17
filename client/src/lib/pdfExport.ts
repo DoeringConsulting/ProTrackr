@@ -35,10 +35,18 @@ interface CustomerData {
   grandTotal: number;
 }
 
+type AppliedExchangeRate = {
+  pair: string;
+  rate: number | null;
+  date?: string | null;
+  source?: string | null;
+};
+
 export async function exportAccountingReportToPDF(
   data: AccountingData,
   startDate: string,
-  endDate: string
+  endDate: string,
+  appliedExchangeRates: AppliedExchangeRate[] = []
 ) {
   const doc = new jsPDF();
 
@@ -84,6 +92,31 @@ export async function exportAccountingReportToPDF(
     },
   });
 
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 6,
+    head: [["Angewendete Wechselkurse", "Kurs", "Kursdatum", "Quelle"]],
+    body:
+      appliedExchangeRates.length > 0
+        ? appliedExchangeRates
+            .map((entry) => ({
+              pair: String(entry.pair || "").toUpperCase(),
+              rate: typeof entry.rate === "number" ? entry.rate : null,
+              date: entry.date ?? null,
+              source: entry.source ?? "NBP",
+            }))
+            .sort((a, b) => a.pair.localeCompare(b.pair, "de"))
+            .map((entry) => [
+              entry.pair,
+              entry.rate === null ? "n/a" : entry.rate.toFixed(6),
+              entry.date ? new Date(entry.date).toLocaleDateString("de-DE") : "-",
+              String(entry.source || "NBP"),
+            ])
+        : [["-", "n/a", "-", "-"]],
+    theme: "striped",
+    headStyles: { fillColor: [3, 109, 121] },
+    styles: { fontSize: 9 },
+  });
+
   // Footer
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
@@ -120,7 +153,8 @@ export async function exportAccountingReportToPDF(
 export async function exportCustomerReportToPDF(
   data: CustomerData,
   startDate: string,
-  endDate: string
+  endDate: string,
+  appliedExchangeRates: AppliedExchangeRate[] = []
 ) {
   const doc = new jsPDF();
 
@@ -177,6 +211,31 @@ export async function exportCustomerReportToPDF(
     ]),
     theme: "striped",
     headStyles: { fillColor: [59, 130, 246] },
+    styles: { fontSize: 9 },
+  });
+
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 6,
+    head: [["Angewendete Wechselkurse", "Kurs", "Kursdatum", "Quelle"]],
+    body:
+      appliedExchangeRates.length > 0
+        ? appliedExchangeRates
+            .map((entry) => ({
+              pair: String(entry.pair || "").toUpperCase(),
+              rate: typeof entry.rate === "number" ? entry.rate : null,
+              date: entry.date ?? null,
+              source: entry.source ?? "NBP",
+            }))
+            .sort((a, b) => a.pair.localeCompare(b.pair, "de"))
+            .map((entry) => [
+              entry.pair,
+              entry.rate === null ? "n/a" : entry.rate.toFixed(6),
+              entry.date ? new Date(entry.date).toLocaleDateString("de-DE") : "-",
+              String(entry.source || "NBP"),
+            ])
+        : [["-", "n/a", "-", "-"]],
+    theme: "striped",
+    headStyles: { fillColor: [3, 109, 121] },
     styles: { fontSize: 9 },
   });
 

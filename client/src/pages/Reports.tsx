@@ -46,6 +46,16 @@ const EXPENSE_CATEGORY_LABELS: Record<
 };
 
 export default function Reports() {
+  const toDateKey = (value: unknown): string | null => {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(String(value));
+    if (Number.isNaN(date.getTime())) return null;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
   const getTodayLocalDate = () => {
     const now = new Date();
     const y = now.getFullYear();
@@ -85,23 +95,86 @@ export default function Reports() {
   const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: reportYear });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
-  const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
+  const historyRateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
+  const reportLastDate = useMemo(() => {
+    const keys: string[] = [];
+    for (const entry of timeEntries as any[]) {
+      const key = toDateKey(entry?.date);
+      if (key) keys.push(key);
+    }
+    for (const expense of expenses as any[]) {
+      const key = toDateKey(expense?.checkOutDate || expense?.checkInDate || expense?.date);
+      if (key) keys.push(key);
+    }
+    if (keys.length === 0) return endDate;
+    keys.sort((a, b) => a.localeCompare(b, "de"));
+    return keys[keys.length - 1] ?? endDate;
+  }, [timeEntries, expenses, endDate]);
+  const reportPairs = useMemo(() => {
+    const currencies = new Set<string>(["EUR", "PLN", targetCurrency]);
+    for (const customer of customers as any[]) {
+      currencies.add(String(customer?.onsiteRateCurrency || "EUR").toUpperCase());
+      currencies.add(String(customer?.remoteRateCurrency || "EUR").toUpperCase());
+    }
+    for (const expense of expenses as any[]) {
+      currencies.add(String(expense?.currency || "EUR").toUpperCase());
+    }
+    for (const cost of fixedCosts as any[]) {
+      currencies.add(String(cost?.currency || "EUR").toUpperCase());
+    }
+    return Array.from(currencies)
+      .filter(code => code.length === 3 && code !== "PLN")
+      .map(code => `${code}/PLN`)
+      .sort((a, b) => a.localeCompare(b, "de"));
+  }, [customers, expenses, fixedCosts, targetCurrency]);
+  const reportRatesQuery = trpc.exchangeRatesManagement.resolveForReportDate.useQuery(
+    {
+      date: reportLastDate,
+      pairs: reportPairs.length > 0 ? reportPairs : ["EUR/PLN"],
+    },
+    { enabled: Boolean(reportLastDate) }
+  );
+  const reportRateMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of reportRatesQuery.data ?? []) {
+      if (typeof entry?.rate === "number" && Number.isFinite(entry.rate) && entry.rate > 0) {
+        map.set(String(entry.pair).toUpperCase(), entry.rate);
+      }
+    }
+    return map.size > 0 ? map : historyRateMap;
+  }, [reportRatesQuery.data, historyRateMap]);
+  const reportRateMetaByPair = useMemo(
+    () =>
+      new Map(
+        (reportRatesQuery.data ?? []).map((entry: any) => [
+          String(entry.pair).toUpperCase(),
+          {
+            pair: String(entry.pair).toUpperCase(),
+            rate: typeof entry?.rate === "number" ? entry.rate : null,
+            date: typeof entry?.date === "string" ? entry.date : null,
+            source: String(entry?.source || "NBP"),
+            fetchedFromArchive: Boolean(entry?.fetchedFromArchive),
+          },
+        ])
+      ),
+    [reportRatesQuery.data]
+  );
 
   const convertToEur = (amountCents: number, sourceCurrency?: string | null) => {
     const source = (sourceCurrency || "EUR").toUpperCase();
     if (source === "EUR") return amountCents;
-    return convertAmountCents(amountCents, source, "EUR", rateMap);
+    return convertAmountCents(amountCents, source, "EUR", reportRateMap);
   };
 
   const convertToPln = (amountCents: number, sourceCurrency?: string | null) => {
     const source = (sourceCurrency || "EUR").toUpperCase();
     if (source === "PLN") return amountCents;
-    return convertAmountCents(amountCents, source, "PLN", rateMap);
+    return convertAmountCents(amountCents, source, "PLN", reportRateMap);
   };
 
   const formatCalculatedCurrency = (amountInEurCents: number) => {
     if (!showUnifiedCurrency) return formatMoney(amountInEurCents, "EUR");
-    const converted = convertAmountCents(amountInEurCents, "EUR", targetCurrency, rateMap);
+    const converted = convertAmountCents(amountInEurCents, "EUR", targetCurrency, reportRateMap);
     if (converted === null) {
       return `Kurs fehlt (EUR → ${targetCurrency})`;
     }
@@ -116,7 +189,7 @@ export default function Reports() {
   // Steuerwerte (PL-Regime) stammen aus PLN-Basiswerten.
   const formatPlnBasedCurrency = (amountInPlnCents: number) => {
     if (!showUnifiedCurrency) return formatMoney(amountInPlnCents, "PLN");
-    const converted = convertAmountCents(amountInPlnCents, "PLN", targetCurrency, rateMap);
+    const converted = convertAmountCents(amountInPlnCents, "PLN", targetCurrency, reportRateMap);
     if (converted === null) return `Kurs fehlt (PLN → ${targetCurrency})`;
     return formatMoney(converted, targetCurrency);
   };
@@ -167,7 +240,7 @@ export default function Reports() {
           amountEur,
         };
       }),
-    [timeEntries, customersById, rateMap]
+    [timeEntries, customersById, reportRateMap]
   );
 
   const expensesDetailedAll = useMemo(
@@ -178,7 +251,7 @@ export default function Reports() {
         const amountPln =
           sourceCurrency === "PLN"
             ? expense.amount
-            : convertAmountCents(expense.amount, sourceCurrency, "PLN", rateMap);
+            : convertAmountCents(expense.amount, sourceCurrency, "PLN", reportRateMap);
         const relatedEntry = expense.timeEntryId ? entriesById.get(expense.timeEntryId) : undefined;
         const relatedCustomer = relatedEntry ? customersById.get(relatedEntry.customerId) : undefined;
         return {
@@ -190,7 +263,7 @@ export default function Reports() {
           relatedCustomer,
         };
       }),
-    [expenses, rateMap, entriesById, customersById]
+    [expenses, reportRateMap, entriesById, customersById]
   );
 
   // Calculate accounting report data
@@ -400,9 +473,18 @@ export default function Reports() {
       if (source !== "EUR") pairs.add("EUR/PLN");
     }
     return Array.from(pairs)
-      .map(pair => ({ pair, rate: rateMap.get(pair) ?? null }))
+      .map(pair => {
+        const meta = reportRateMetaByPair.get(pair);
+        return {
+          pair,
+          rate: typeof meta?.rate === "number" ? meta.rate : reportRateMap.get(pair) ?? null,
+          date: meta?.date ?? reportLastDate ?? null,
+          source: meta?.source ?? "NBP",
+          fetchedFromArchive: Boolean(meta?.fetchedFromArchive),
+        };
+      })
       .sort((a, b) => a.pair.localeCompare(b.pair, "de"));
-  }, [timeEntriesDetailed, expensesDetailedAll, rateMap]);
+  }, [timeEntriesDetailed, expensesDetailedAll, reportRateMap, reportRateMetaByPair, reportLastDate]);
 
   const handleExportPolishBookkeepingReport = async () => {
     const dateKeyOf = (value: string | Date) => {
@@ -501,10 +583,16 @@ export default function Reports() {
     }
 
     const appliedExchangeRates = Array.from(appliedRatePairs)
-      .map((pair) => ({
-        pair,
-        rate: rateMap.get(pair) ?? null,
-      }))
+      .map((pair) => {
+        const meta = reportRateMetaByPair.get(pair);
+        return {
+          pair,
+          rate: typeof meta?.rate === "number" ? meta.rate : reportRateMap.get(pair) ?? null,
+          date: meta?.date ?? reportLastDate ?? null,
+          source: meta?.source ?? "NBP",
+          fetchedFromArchive: Boolean(meta?.fetchedFromArchive),
+        };
+      })
       .sort((a, b) => a.pair.localeCompare(b.pair, "pl"));
 
     await exportPolishBookkeepingReportToPDF({
@@ -543,6 +631,7 @@ export default function Reports() {
       })),
       totalHours: customerData.totalHours,
       totalManDays: customerData.totalManDays,
+      appliedExchangeRates: appliedExchangeRatesForUi,
     });
     toast.success("Stundennachweis wurde erstellt");
   };
@@ -558,7 +647,7 @@ export default function Reports() {
     const convertToCustomerCurrency = (amount: number, sourceCurrency: string) => {
       const source = sourceCurrency.toUpperCase();
       if (source === customerCurrency) return amount;
-      return convertAmountCents(amount, source, customerCurrency, rateMap);
+      return convertAmountCents(amount, source, customerCurrency, reportRateMap);
     };
 
     const rows = customerData.entries.map((entry) => {
@@ -614,6 +703,7 @@ export default function Reports() {
         travelAmount: travelTotal,
         grandTotal: serviceTotal + travelTotal,
       },
+      appliedExchangeRates: appliedExchangeRatesForUi,
     });
     toast.success("Kostenaufstellung wurde erstellt");
   };
@@ -731,15 +821,30 @@ export default function Reports() {
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleExportPolishBookkeepingReport}>
+                    <Button
+                      variant="outline"
+                      onClick={handleExportPolishBookkeepingReport}
+                      disabled={reportRatesQuery.isLoading}
+                    >
                       <Download className="mr-2 h-4 w-4" />
                       PL Buchhaltung (PDF)
                     </Button>
-                    <Button variant="outline" onClick={() => exportAccountingReportToPDF(accountingData, startDate, endDate)}>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        exportAccountingReportToPDF(
+                          accountingData,
+                          startDate,
+                          endDate,
+                          appliedExchangeRatesForUi
+                        )
+                      }
+                      disabled={reportRatesQuery.isLoading}
+                    >
                       <Download className="mr-2 h-4 w-4" />
                       PDF Export
                     </Button>
-                    <Button variant="outline" onClick={() => {
+                    <Button variant="outline" disabled={reportRatesQuery.isLoading} onClick={() => {
                       exportAccountingReportToExcel({
                         revenue: accountingData.grossRevenue,
                         timeRevenue: accountingData.timeRevenue,
@@ -752,6 +857,7 @@ export default function Reports() {
                         netProfit: accountingData.netProfit,
                         startDate,
                         endDate,
+                        appliedExchangeRates: appliedExchangeRatesForUi,
                       });
                       toast.success("Excel-Datei wird heruntergeladen");
                     }}>
@@ -826,7 +932,7 @@ export default function Reports() {
                                 cost.amount,
                                 cost.sourceCurrency,
                                 targetCurrency,
-                                rateMap
+                                reportRateMap
                               );
                               if (converted === null) {
                                 return (
@@ -962,19 +1068,39 @@ export default function Reports() {
                         </CardDescription>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="outline" onClick={handleExportCustomerTimesheet}>
+                        <Button
+                          variant="outline"
+                          onClick={handleExportCustomerTimesheet}
+                          disabled={reportRatesQuery.isLoading}
+                        >
                           <Download className="mr-2 h-4 w-4" />
                           Stundennachweis (PDF)
                         </Button>
-                        <Button variant="outline" onClick={handleExportCustomerCostStatement}>
+                        <Button
+                          variant="outline"
+                          onClick={handleExportCustomerCostStatement}
+                          disabled={reportRatesQuery.isLoading}
+                        >
                           <Download className="mr-2 h-4 w-4" />
                           Kostenaufstellung (PDF)
                         </Button>
-                        <Button variant="outline" onClick={() => customerData && exportCustomerReportToPDF(customerData, startDate, endDate)}>
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            customerData &&
+                            exportCustomerReportToPDF(
+                              customerData,
+                              startDate,
+                              endDate,
+                              appliedExchangeRatesForUi
+                            )
+                          }
+                          disabled={reportRatesQuery.isLoading}
+                        >
                           <Download className="mr-2 h-4 w-4" />
                           PDF Export
                         </Button>
-                        <Button variant="outline" onClick={() => {
+                        <Button variant="outline" disabled={reportRatesQuery.isLoading} onClick={() => {
                           if (customerData) {
                             exportCustomerReportToExcel({
                               customerName: customerData.customer.provider,
@@ -995,6 +1121,7 @@ export default function Reports() {
                               totalExpenses: customerData.totalExpenses,
                               billableExpenses: customerData.billableExpenses,
                               grandTotal: customerData.grandTotal,
+                              appliedExchangeRates: appliedExchangeRatesForUi,
                             });
                             toast.success("Excel-Datei wird heruntergeladen");
                           }
@@ -1148,13 +1275,18 @@ export default function Reports() {
                     </Table>
                 <div className="mt-4 rounded border p-3 text-sm">
                   <p className="font-medium mb-2">Angewendete Wechselkurse</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Referenzdatum für Berichte: {new Date(reportLastDate).toLocaleDateString("de-DE")}
+                    {reportRatesQuery.isLoading ? " (Kurse werden geladen...)" : ""}
+                  </p>
                   {appliedExchangeRatesForUi.length === 0 ? (
                     <p className="text-muted-foreground">Keine Wechselkurse erforderlich (nur Basiswährung).</p>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-1 text-muted-foreground">
                       {appliedExchangeRatesForUi.map((entry) => (
                         <p key={entry.pair}>
-                          {entry.pair}: {entry.rate === null ? "Kurs fehlt" : entry.rate.toFixed(6)}
+                          {entry.pair}: {entry.rate === null ? "Kurs fehlt" : entry.rate.toFixed(6)} ·{" "}
+                          {entry.date ? `Datum ${new Date(entry.date).toLocaleDateString("de-DE")}` : "Datum -"}
                         </p>
                       ))}
                     </div>

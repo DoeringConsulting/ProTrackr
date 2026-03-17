@@ -551,6 +551,28 @@ export async function getExchangeRateByDate(currencyPair: string, date: Date, us
   return result[0] || null;
 }
 
+export async function getExchangeRateOnOrBeforeDate(currencyPair: string, date: Date, userId: number = 0) {
+  const db = await getDb();
+  if (!db) return null;
+  const { exchangeRates } = await import("../drizzle/schema");
+  const dateKey = date.toISOString().split("T")[0];
+
+  const result = await db
+    .select()
+    .from(exchangeRates)
+    .where(
+      and(
+        eq(exchangeRates.currencyPair, currencyPair),
+        eq(exchangeRates.userId, userId),
+        sql`DATE(${exchangeRates.date}) <= ${dateKey}`
+      )
+    )
+    .orderBy(desc(exchangeRates.date))
+    .limit(1);
+
+  return result[0] || null;
+}
+
 export async function deleteExpense(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
