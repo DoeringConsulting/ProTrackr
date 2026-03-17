@@ -248,6 +248,53 @@ export default function Import() {
     URL.revokeObjectURL(url);
   };
 
+  const triggerExcelDownload = (workbook: XLSX.WorkBook, fileName: string) => {
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadAiUploadMappingExcel = (uploadResult?: any) => {
+    const source = uploadResult ?? latestAiUploadResult;
+    const uploaded = Array.isArray(source?.uploaded) ? source.uploaded : [];
+    const failed = Array.isArray(source?.failed) ? source.failed : [];
+    if (uploaded.length === 0 && failed.length === 0) {
+      toast.error("Keine Upload-Zuordnung für den Excel-Download vorhanden");
+      return;
+    }
+
+    const rows = [
+      ...uploaded.map((doc: any) => ({
+        Dateiname: String(doc?.fileName ?? "-"),
+        DocumentID: Number.isInteger(Number(doc?.id)) && Number(doc?.id) > 0 ? Number(doc?.id) : "",
+        Status: "hochgeladen",
+        Hinweis: "",
+      })),
+      ...failed.map((entry: any) => ({
+        Dateiname: String(entry?.fileName ?? "-"),
+        DocumentID: "",
+        Status: "fehlgeschlagen",
+        Hinweis: String(entry?.message ?? "Upload fehlgeschlagen"),
+      })),
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet["!cols"] = [{ wch: 48 }, { wch: 14 }, { wch: 16 }, { wch: 64 }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "DokumentIDs");
+    const stamp = new Date().toISOString().replace(/[:]/g, "-").slice(0, 19);
+    triggerExcelDownload(workbook, `ki-belege-documentids-${stamp}.xlsx`);
+  };
+
   const formatImportErrorMessage = (error: unknown): string => {
     const message = String((error as any)?.message ?? "Unbekannter Fehler");
     if (message.startsWith("Failed query:")) {
@@ -893,6 +940,10 @@ export default function Import() {
 
     setLatestAiUploadResult(aggregate);
     toast.success(`Upload abgeschlossen: ${aggregate.uploadedCount}/${aggregate.total}`);
+    if (aggregate.uploadedCount > 0) {
+      handleDownloadAiUploadMappingExcel(aggregate);
+      toast.success("Excel mit Dateiname ↔ DocumentID wurde erstellt");
+    }
     return aggregate;
   };
 
@@ -1356,6 +1407,12 @@ export default function Import() {
                     Upload-Ergebnis: {latestAiUploadResult.uploadedCount}/{latestAiUploadResult.total} erfolgreich ·{" "}
                     {latestAiUploadResult.failedCount} fehlgeschlagen
                   </p>
+                  <div>
+                    <Button variant="outline" size="sm" onClick={() => handleDownloadAiUploadMappingExcel()}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Dateiname ↔ DocumentID als Excel
+                    </Button>
+                  </div>
                   {(latestAiUploadResult.failed || []).length > 0 && (
                     <div className="max-h-24 overflow-auto space-y-1 text-muted-foreground">
                       {latestAiUploadResult.failed.map((f: any, idx: number) => (
