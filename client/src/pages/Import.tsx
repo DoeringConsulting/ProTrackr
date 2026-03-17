@@ -33,7 +33,8 @@ type ImportResult = {
   runtimeErrors: string[];
 };
 
-const AI_BATCH_MAX_FILES = 20;
+const AI_BATCH_MAX_FILES = 200;
+const AI_BATCH_UPLOAD_CHUNK_SIZE = 20;
 const AI_RECEIPT_SCAFFOLD = [
   "REISEKOSTEN-GERUEST (optional fuer bessere KI-Erkennung)",
   "beleg_art: flight|hotel|taxi|train|car|fuel|meal|other",
@@ -52,7 +53,7 @@ const AI_RECEIPT_SCAFFOLD = [
 ].join("\n");
 
 export default function Import() {
-  const [file, setFile] = useState<File | null>(null);
+  const [importFiles, setImportFiles] = useState<File[]>([]);
   const [importing, setImporting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -100,7 +101,6 @@ export default function Import() {
   const uploadAiBatchMutation = trpc.documents.uploadForAiBatch.useMutation({
     onSuccess: data => {
       setLatestAiUploadResult(data);
-      toast.success(`Upload abgeschlossen: ${data.uploadedCount}/${data.total}`);
     },
     onError: error => {
       const message = String(error.message ?? "");
@@ -109,7 +109,7 @@ export default function Import() {
         normalized.includes("expected array to have <=20 items") ||
         (normalized.includes('"code":"too_big"') && normalized.includes('"path":["files"]'))
       ) {
-        toast.error(`Upload fehlgeschlagen: Maximal ${AI_BATCH_MAX_FILES} Dateien pro Batch erlaubt.`);
+        toast.error("Upload fehlgeschlagen: Serverlimit pro Upload-Chunk überschritten.");
         return;
       }
       toast.error(`Upload fehlgeschlagen: ${error.message}`);
@@ -256,6 +256,16 @@ export default function Import() {
     return message;
   };
 
+  const isSupportedImportFile = (name: string): boolean => {
+    const lower = name.toLowerCase();
+    return lower.endsWith(".xlsx") || lower.endsWith(".xls") || lower.endsWith(".csv");
+  };
+
+  const withFileContext = (issue: ImportIssue, fileName: string): ImportIssue => ({
+    ...issue,
+    message: `[${fileName}] ${issue.message}`,
+  });
+
   const parseOptionalPositiveInt = (raw: string, label: string): number | undefined => {
     const trimmed = raw.trim();
     if (!trimmed) return undefined;
@@ -280,20 +290,24 @@ export default function Import() {
     );
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile) return;
-    if (
-      !selectedFile.name.endsWith(".xlsx") &&
-      !selectedFile.name.endsWith(".xls") &&
-      !selectedFile.name.endsWith(".csv")
-    ) {
-      toast.error("Bitte wählen Sie eine Excel- oder CSV-Datei aus (.xlsx, .xls, .csv)");
+    const selectedFiles = Array.from(event.target.files ?? []);
+    if (selectedFiles.length === 0) return;
+
+    const validFiles = selectedFiles.filter(file => isSupportedImportFile(file.name));
+    const invalidCount = selectedFiles.length - validFiles.length;
+    if (invalidCount > 0) {
+      toast.error(`${invalidCount} Datei(en) übersprungen: erlaubt sind nur .xlsx, .xls, .csv`);
+    }
+    if (validFiles.length === 0) {
+      event.target.value = "";
       return;
     }
-    setFile(selectedFile);
+
+    setImportFiles(validFiles);
     setResult(null);
     setParsedWorkbook(null);
     setIssues([]);
+    event.target.value = "";
   };
 
   const parseWorkbookFromFile = async (selectedFile: File): Promise<XLSX.WorkBook> => {
@@ -313,35 +327,55 @@ export default function Import() {
   };
 
   const handleValidate = async () => {
-    if (!file) {
-      toast.error("Bitte wählen Sie eine Datei aus");
+    if (importFiles.length === 0) {
+      toast.error("Bitte mindestens eine Datei auswählen");
       return;
     }
 
     setValidating(true);
     setProgress(10);
     try {
-      const workbook = await parseWorkbookFromFile(file);
-      setProgress(30);
-      const structureIssues = validateWorkbookStructure(workbook);
-      if (structureIssues.length > 0) {
-        setIssues(structureIssues);
-        setParsedWorkbook(null);
-        setProgress(100);
-        return;
+      const mergedWorkbook: ParsedImportWorkbook = {
+        customers: [],
+        timeEntries: [],
+        expenses: [],
+      };
+      const collectedIssues: ImportIssue[] = [];
+
+      for (let index = 0; index < importFiles.length; index++) {
+        const currentFile = importFiles[index];
+        const workbook = await parseWorkbookFromFile(currentFile);
+        const structureIssues = validateWorkbookStructure(workbook).map(issue =>
+          withFileContext(issue, currentFile.name)
+        );
+        collectedIssues.push(...structureIssues);
+
+        if (structureIssues.length === 0) {
+          const parsed = parseWorkbookV1(workbook);
+          const contentIssues = validateParsedWorkbook(parsed).map(issue =>
+            withFileContext(issue, currentFile.name)
+          );
+          collectedIssues.push(...contentIssues);
+          mergedWorkbook.customers.push(...parsed.customers);
+          mergedWorkbook.timeEntries.push(...parsed.timeEntries);
+          mergedWorkbook.expenses.push(...parsed.expenses);
+        }
+
+        setProgress(Math.max(10, Math.round(((index + 1) / importFiles.length) * 100)));
       }
 
-      const parsed = parseWorkbookV1(workbook);
-      setProgress(60);
-      const contentIssues = validateParsedWorkbook(parsed);
-      setParsedWorkbook(parsed);
-      setIssues(contentIssues);
+      const hasRows =
+        mergedWorkbook.customers.length > 0 ||
+        mergedWorkbook.timeEntries.length > 0 ||
+        mergedWorkbook.expenses.length > 0;
+      setParsedWorkbook(hasRows ? mergedWorkbook : null);
+      setIssues(collectedIssues);
       setProgress(100);
-      if (contentIssues.length === 0) {
+      if (collectedIssues.length === 0) {
         toast.success("Validierung erfolgreich: keine Auffälligkeiten");
       } else {
-        const errors = contentIssues.filter(item => item.severity === "error").length;
-        const warnings = contentIssues.filter(item => item.severity === "warning").length;
+        const errors = collectedIssues.filter(item => item.severity === "error").length;
+        const warnings = collectedIssues.filter(item => item.severity === "warning").length;
         toast.warning(`Validierung abgeschlossen: ${errors} Fehler, ${warnings} Warnungen`);
       }
     } catch (error: any) {
@@ -822,6 +856,46 @@ export default function Import() {
       reader.readAsDataURL(file);
     });
 
+  const chunkFiles = (files: File[], chunkSize: number): File[][] => {
+    const chunks: File[][] = [];
+    for (let i = 0; i < files.length; i += chunkSize) {
+      chunks.push(files.slice(i, i + chunkSize));
+    }
+    return chunks;
+  };
+
+  const uploadAiFilesInChunks = async (files: File[]) => {
+    const chunks = chunkFiles(files, AI_BATCH_UPLOAD_CHUNK_SIZE);
+    const aggregate = {
+      total: files.length,
+      uploadedCount: 0,
+      failedCount: 0,
+      uploaded: [] as any[],
+      failed: [] as any[],
+    };
+
+    for (const chunk of chunks) {
+      const filesPayload = await Promise.all(
+        chunk.map(async file => ({
+          fileName: file.name,
+          mimeType:
+            file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream"),
+          fileSize: file.size,
+          base64Data: await toBase64Payload(file),
+        }))
+      );
+      const partial = await uploadAiBatchMutation.mutateAsync({ files: filesPayload });
+      aggregate.uploadedCount += Number(partial.uploadedCount ?? 0);
+      aggregate.failedCount += Number(partial.failedCount ?? 0);
+      aggregate.uploaded.push(...(Array.isArray(partial.uploaded) ? partial.uploaded : []));
+      aggregate.failed.push(...(Array.isArray(partial.failed) ? partial.failed : []));
+    }
+
+    setLatestAiUploadResult(aggregate);
+    toast.success(`Upload abgeschlossen: ${aggregate.uploadedCount}/${aggregate.total}`);
+    return aggregate;
+  };
+
   const handleUploadAndAnalyzeBatch = async () => {
     if (aiBatchFiles.length === 0) {
       toast.error("Bitte zuerst Dateien für den Batch auswählen");
@@ -840,15 +914,7 @@ export default function Import() {
       toast.error(error?.message ?? "Ungültige Eingabe");
       return;
     }
-    const filesPayload = await Promise.all(
-      aiBatchFiles.map(async file => ({
-        fileName: file.name,
-        mimeType: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream"),
-        fileSize: file.size,
-        base64Data: await toBase64Payload(file),
-      }))
-    );
-    const uploadResult = await uploadAiBatchMutation.mutateAsync({ files: filesPayload });
+    const uploadResult = await uploadAiFilesInChunks(aiBatchFiles);
     setAiBatchFiles([]);
     const uploadedDocs = Array.isArray(uploadResult.uploaded) ? uploadResult.uploaded : [];
     const documentIds = uploadedDocs
@@ -876,15 +942,7 @@ export default function Import() {
       toast.error(`Bitte höchstens ${AI_BATCH_MAX_FILES} Dateien auswählen.`);
       return;
     }
-    const filesPayload = await Promise.all(
-      aiBatchFiles.map(async file => ({
-        fileName: file.name,
-        mimeType: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream"),
-        fileSize: file.size,
-        base64Data: await toBase64Payload(file),
-      }))
-    );
-    const uploadResult = await uploadAiBatchMutation.mutateAsync({ files: filesPayload });
+    const uploadResult = await uploadAiFilesInChunks(aiBatchFiles);
     setAiBatchFiles([]);
     const uploadedDocs = Array.isArray(uploadResult.uploaded) ? uploadResult.uploaded : [];
     const documentIds = uploadedDocs
@@ -946,19 +1004,26 @@ export default function Import() {
               </Button>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="file">Datei</Label>
+              <Label htmlFor="file">Datei(en)</Label>
               <Input
                 id="file"
                 type="file"
+                multiple
                 onChange={handleFileChange}
-                accept=".xlsx,.xls,.csv"
                 disabled={importing || validating}
               />
-              {file && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <FileSpreadsheet className="h-4 w-4" />
-                  <span>{file.name}</span>
-                  <span>({(file.size / 1024).toFixed(1)} KB)</span>
+              <p className="text-xs text-muted-foreground">
+                Erlaubte Formate: .xlsx, .xls, .csv
+              </p>
+              {importFiles.length > 0 && (
+                <div className="max-h-28 overflow-auto space-y-1 text-sm text-muted-foreground">
+                  {importFiles.map((selectedFile, index) => (
+                    <div key={`${selectedFile.name}-${index}`} className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      <span className="truncate">{selectedFile.name}</span>
+                      <span>({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -972,7 +1037,7 @@ export default function Import() {
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Button onClick={handleValidate} disabled={!file || importing || validating}>
+              <Button onClick={handleValidate} disabled={importFiles.length === 0 || importing || validating}>
                 <ShieldCheck className="mr-2 h-4 w-4" />
                 {validating ? "Validiere..." : "1) Validierung starten"}
               </Button>
@@ -1222,7 +1287,7 @@ export default function Import() {
                       {aiBatchFiles.length}/{AI_BATCH_MAX_FILES}
                     </span>
                   </div>
-                  <Input type="file" multiple accept="image/*,.pdf,application/pdf" onChange={handleAiBatchFileChange} />
+                  <Input type="file" multiple onChange={handleAiBatchFileChange} />
                   {aiBatchFiles.length > 0 && (
                     <div className="flex justify-end">
                       <Button type="button" variant="ghost" size="sm" onClick={() => setAiBatchFiles([])}>
