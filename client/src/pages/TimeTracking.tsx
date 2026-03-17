@@ -302,6 +302,9 @@ export default function TimeTracking() {
   const deleteMutation = trpc.timeEntries.delete.useMutation({
     onSuccess: () => {
       utils.timeEntries.list.invalidate();
+      setIsDialogOpen(false);
+      setEditingEntry(null);
+      setFormData(initialFormData);
       toast.success("Zeiteintrag erfolgreich gelöscht");
     },
     onError: (error) => {
