@@ -17,7 +17,7 @@ import {
 } from "@/lib/currencyUtils";
 
 type FilterPeriod = "month" | "year" | "lifetime" | "average";
-type ExpenseSortKey = "date" | "category" | "amount" | "currency" | "comment";
+type ExpenseSortKey = "date" | "category" | "amount" | "currency" | "details" | "comment";
 
 const CATEGORY_LABELS: Record<string, string> = {
   car: "Mietwagen",
@@ -157,6 +157,21 @@ export default function Expenses() {
       } else if (sortKey === "currency") {
         left = String(a.sourceCurrency || "");
         right = String(b.sourceCurrency || "");
+      } else if (sortKey === "details") {
+        left = String(
+          a.category === "flight"
+            ? `${a.departureTime || ""}|${a.arrivalTime || ""}`
+            : a.category === "hotel"
+              ? `${a.checkInDate || ""}|${a.checkOutDate || ""}`
+              : ""
+        );
+        right = String(
+          b.category === "flight"
+            ? `${b.departureTime || ""}|${b.arrivalTime || ""}`
+            : b.category === "hotel"
+              ? `${b.checkInDate || ""}|${b.checkOutDate || ""}`
+              : ""
+        );
       } else {
         left = String(a.comment || "");
         right = String(b.comment || "");
@@ -185,6 +200,20 @@ export default function Expenses() {
   const sortSymbol = (key: ExpenseSortKey) => {
     if (sortKey !== key) return "↕";
     return sortDirection === "asc" ? "↑" : "↓";
+  };
+
+  const renderExpenseDetails = (expense: any) => {
+    if (expense.category === "flight") {
+      const departure = expense.departureTime || "-";
+      const arrival = expense.arrivalTime || "-";
+      return `Wylot: ${departure} | Przylot: ${arrival}`;
+    }
+    if (expense.category === "hotel") {
+      const checkIn = expense.checkInDate ? new Date(expense.checkInDate).toLocaleDateString("de-DE") : "-";
+      const checkOut = expense.checkOutDate ? new Date(expense.checkOutDate).toLocaleDateString("de-DE") : "-";
+      return `Check-in: ${checkIn} | Check-out: ${checkOut}`;
+    }
+    return "-";
   };
 
   const relevantTimeEntries = useMemo(() => {
@@ -528,6 +557,11 @@ export default function Expenses() {
                     </Button>
                   </TableHead>
                   <TableHead>
+                    <Button type="button" variant="ghost" size="sm" className="h-8 px-1" onClick={() => handleSort("details")}>
+                      Flugdaten {sortSymbol("details")}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
                     <Button type="button" variant="ghost" size="sm" className="h-8 px-1" onClick={() => handleSort("comment")}>
                       Kommentar {sortSymbol("comment")}
                     </Button>
@@ -537,7 +571,7 @@ export default function Expenses() {
               <TableBody>
                 {filteredExpenseRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
                       Keine Reisekosten für Filterauswahl im ausgewählten Zeitraum
                     </TableCell>
                   </TableRow>
@@ -555,6 +589,7 @@ export default function Expenses() {
                         )}
                       </TableCell>
                       <TableCell>{expense.sourceCurrency || "EUR"}</TableCell>
+                      <TableCell className="max-w-sm">{renderExpenseDetails(expense)}</TableCell>
                       <TableCell className="max-w-xs truncate">{expense.comment || "-"}</TableCell>
                     </TableRow>
                   ))

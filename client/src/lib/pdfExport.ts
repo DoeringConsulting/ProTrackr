@@ -150,7 +150,7 @@ export async function exportCustomerReportToPDF(
     head: [["Zusammenfassung", ""]],
     body: [
       ["Abrechnungsmodell", data.customer.costModel ?? "n/a"],
-      ["Gesamtstunden", formatHours(data.totalHours)],
+      ["Gesamtstunden (hh:mm)", formatHours(data.totalHours)],
       ["Manntage", formatManDays(data.totalManDays)],
       ["Leistungswert", formatCurrency(data.totalAmount)],
       ["Reisekosten (gesamt)", formatCurrency(data.totalExpenses)],

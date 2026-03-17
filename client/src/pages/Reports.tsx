@@ -463,6 +463,31 @@ export default function Reports() {
     const revenueEur = timeEntriesDetailed.reduce((sum, entry) => sum + (entry.amountEur ?? 0), 0);
     const travelEur = expensesDetailedAll.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0);
 
+    const appliedRatePairs = new Set<string>();
+    for (const entry of timeEntriesDetailed) {
+      const source = String(entry.sourceCurrency || "EUR").toUpperCase();
+      if (source !== "EUR") {
+        appliedRatePairs.add(`${source}/PLN`);
+        appliedRatePairs.add("EUR/PLN");
+      }
+    }
+    for (const expense of expensesDetailedAll) {
+      const source = String(expense.sourceCurrency || "EUR").toUpperCase();
+      if (source !== "PLN") {
+        appliedRatePairs.add(`${source}/PLN`);
+      }
+      if (source !== "EUR") {
+        appliedRatePairs.add("EUR/PLN");
+      }
+    }
+
+    const appliedExchangeRates = Array.from(appliedRatePairs)
+      .map((pair) => ({
+        pair,
+        rate: rateMap.get(pair) ?? null,
+      }))
+      .sort((a, b) => a.pair.localeCompare(b.pair, "pl"));
+
     await exportPolishBookkeepingReportToPDF({
       startDate,
       endDate,
@@ -475,6 +500,7 @@ export default function Reports() {
         revenueEur,
         travelEur,
       },
+      appliedExchangeRates,
     });
     toast.success("Polnischer Buchhaltungsbericht wurde erstellt");
   };

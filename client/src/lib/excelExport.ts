@@ -35,6 +35,13 @@ interface CustomerReportData {
   grandTotal: number;
 }
 
+function formatHours(minutes: number) {
+  const total = Number(minutes || 0);
+  const hours = Math.floor(total / 60);
+  const mins = total % 60;
+  return `${hours}:${String(mins).padStart(2, "0")}`;
+}
+
 export async function exportAccountingReportToExcel(data: AccountingReportData) {
   const wb = XLSX.utils.book_new();
   const timeRevenue = data.timeRevenue ?? (data.revenue - data.variableCosts);
@@ -111,7 +118,7 @@ export async function exportCustomerReportToExcel(data: CustomerReportData) {
     [`Zeitraum: ${data.startDate} bis ${data.endDate}`],
     [],
     ["Zusammenfassung"],
-    ["Gesamtstunden", data.totalHours],
+    ["Gesamtstunden (hh:mm)", formatHours(data.totalHours)],
     ["Leistungswert", data.totalAmount / 100],
     ["Reisekosten (gesamt)", data.totalExpenses / 100],
     ["Reisekosten (abrechenbar)", billableExpenses / 100],
@@ -134,7 +141,7 @@ export async function exportCustomerReportToExcel(data: CustomerReportData) {
       (entry.amount + (isExclusive ? entry.expenses : 0)) / 100,
     ]),
     [],
-    ["Summe", data.totalHours, "", data.totalAmount / 100, data.totalExpenses / 100, data.grandTotal / 100],
+    ["Summe (hh:mm)", formatHours(data.totalHours), "", data.totalAmount / 100, data.totalExpenses / 100, data.grandTotal / 100],
   ];
 
   const wsDetails = XLSX.utils.aoa_to_sheet(detailsData);

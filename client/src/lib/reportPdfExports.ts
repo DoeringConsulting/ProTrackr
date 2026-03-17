@@ -45,6 +45,11 @@ type BookkeepingSummary = {
   travelEur: number;
 };
 
+type AppliedExchangeRate = {
+  pair: string;
+  rate: number | null;
+};
+
 function formatDateDe(value: string | Date) {
   return new Date(value).toLocaleDateString("de-DE");
 }
@@ -117,7 +122,7 @@ function getExpenseDetailLabel(expense: BookkeepingExpense) {
     const route = expense.flightRouteType === "international" ? "Miedzynarodowy" : "Krajowy";
     const departure = expense.departureTime || "-";
     const arrival = expense.arrivalTime || "-";
-    return `Typ lotu: ${route} | Odlot: ${departure} | Przylot: ${arrival}`;
+    return `Typ lotu: ${route} | Wylot: ${departure} | Przylot: ${arrival}`;
   }
   return "-";
 }
@@ -166,6 +171,7 @@ export async function exportPolishBookkeepingReportToPDF(input: {
   entries: BookkeepingEntry[];
   expenses: BookkeepingExpense[];
   summary: BookkeepingSummary;
+  appliedExchangeRates?: AppliedExchangeRate[];
 }) {
   const doc = new jsPDF("l", "mm", "a4");
   doc.setFontSize(16);
@@ -178,6 +184,16 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     14,
     20
   );
+
+  const sortedExpenses = [...input.expenses].sort((left, right) => {
+    const leftCategory = getExpenseCategoryPl(left.category || "").toLowerCase();
+    const rightCategory = getExpenseCategoryPl(right.category || "").toLowerCase();
+    const categoryCmp = leftCategory.localeCompare(rightCategory, "pl");
+    if (categoryCmp !== 0) return categoryCmp;
+    const leftTs = new Date(left.date).getTime();
+    const rightTs = new Date(right.date).getTime();
+    return rightTs - leftTs;
+  });
 
   autoTable(doc, {
     startY: 25,
@@ -223,7 +239,7 @@ export async function exportPolishBookkeepingReportToPDF(input: {
       "Kwota PLN",
       "Komentarz",
     ]],
-    body: input.expenses.map((exp) => [
+    body: sortedExpenses.map((exp) => [
       formatDateDe(exp.date),
       exp.endDate ? formatDateDe(exp.endDate) : formatDateDe(exp.date),
       getExpenseCategoryPl(exp.category),
@@ -243,7 +259,7 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     startY: sumStartY,
     head: [["Podsumowanie", "Wartosc"]],
     body: [
-      ["Suma godzin", formatHours(input.summary.totalHoursMinutes)],
+      ["Suma godzin (hh:mm)", formatHours(input.summary.totalHoursMinutes)],
       ["Suma man-days", formatManDays(input.summary.totalManDays)],
       ["Przychod (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
       ["Koszty podrozy (EUR)", formatMoney(input.summary.travelEur, "EUR")],
@@ -254,6 +270,26 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     ],
     styles: { fontSize: 9 },
     headStyles: { fillColor: [3, 109, 121] },
+  });
+
+  const ratesStartY = (doc as any).lastAutoTable.finalY + 6;
+  const normalizedRates = (input.appliedExchangeRates ?? [])
+    .map((item) => ({
+      pair: String(item.pair || "").toUpperCase(),
+      rate: typeof item.rate === "number" && Number.isFinite(item.rate) ? item.rate : null,
+    }))
+    .filter((item) => item.pair.length > 0)
+    .sort((a, b) => a.pair.localeCompare(b.pair, "pl"));
+
+  autoTable(doc, {
+    startY: ratesStartY,
+    head: [["Zastosowane kursy walut", "Kurs"]],
+    body:
+      normalizedRates.length > 0
+        ? normalizedRates.map((item) => [item.pair, item.rate === null ? "Brak kursu" : item.rate.toFixed(6)])
+        : [["-", "Brak kursow (wszystkie pozycje w walucie bazowej)"]],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [2, 90, 100] },
   });
 
   const pageCount = doc.getNumberOfPages();
@@ -367,7 +403,7 @@ export async function exportCustomerTimesheetToPDF(input: {
     startY: (doc as any).lastAutoTable.finalY + 4,
     head: [[t.total, ""]],
     body: [
-      [t.hours, formatHours(input.totalHours)],
+      [`${t.hours} (hh:mm)`, formatHours(input.totalHours)],
       [t.md, formatManDays(input.totalManDays)],
     ],
     styles: { fontSize: 9 },
