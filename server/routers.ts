@@ -2,6 +2,7 @@
 import { systemRouter } from "./_core/systemRouter";
 import {
   adminOrMandantAdminProcedure,
+  adminProcedure,
   isMandantAdmin,
   isWebAppAdmin,
   mandantAdminProcedure,
@@ -22,6 +23,7 @@ import {
   validateReceiptCandidate,
   type ReceiptExpenseCandidate,
 } from "./receiptAi";
+import { toScopeContext } from "./scope";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
   if (!actorMandantId) return false;
@@ -1789,37 +1791,46 @@ export const appRouter = router({
     }),
   }),
 
-  // Scheduler – geschützt durch API-Key (für Cron-Jobs, nicht für eingeloggte User)
+  // Scheduler – geschützt durch API-Key (M2M) und Admin-Rolle
   scheduler: router({
     runTasks: publicProcedure.mutation(async ({ ctx }) => {
       const apiKey = ctx.req.headers["x-scheduler-key"];
-      if (apiKey !== process.env.SCHEDULER_API_KEY) {
+      const configuredSchedulerApiKey = process.env.SCHEDULER_API_KEY?.trim();
+      if (!configuredSchedulerApiKey || apiKey !== configuredSchedulerApiKey) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültiger Scheduler API-Key" });
       }
-      const { runScheduledTasks } = await import("./scheduler");
-      return await runScheduledTasks();
+      const { runScheduledTasksGlobal } = await import("./scheduler");
+      return await runScheduledTasksGlobal();
     }),
     checkMonthEnd: publicProcedure.mutation(async ({ ctx }) => {
       const apiKey = ctx.req.headers["x-scheduler-key"];
-      if (apiKey !== process.env.SCHEDULER_API_KEY) {
+      const configuredSchedulerApiKey = process.env.SCHEDULER_API_KEY?.trim();
+      if (!configuredSchedulerApiKey || apiKey !== configuredSchedulerApiKey) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültiger Scheduler API-Key" });
       }
       const { checkMonthEnd } = await import("./scheduler");
-      return await checkMonthEnd();
+      return {
+        executed: false,
+        reason: "Per-user scope required. Use cron endpoint for global execution.",
+      };
     }),
     checkMissingEntries: publicProcedure.mutation(async ({ ctx }) => {
       const apiKey = ctx.req.headers["x-scheduler-key"];
-      if (apiKey !== process.env.SCHEDULER_API_KEY) {
+      const configuredSchedulerApiKey = process.env.SCHEDULER_API_KEY?.trim();
+      if (!configuredSchedulerApiKey || apiKey !== configuredSchedulerApiKey) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Ungültiger Scheduler API-Key" });
       }
       const { checkMissingTimeEntries } = await import("./scheduler");
-      return await checkMissingTimeEntries();
+      return {
+        executed: false,
+        reason: "Per-user scope required. Use cron endpoint for global execution.",
+      };
     }),
   }),
 
   // Notifications
   notifications: router({
-    sendMonthEndNotification: publicProcedure.input((val: unknown) => {
+    sendMonthEndNotification: adminProcedure.input((val: unknown) => {
       return z.object({
         month: z.string(),
         revenue: z.number(),
@@ -1829,7 +1840,7 @@ export const appRouter = router({
       const { notifyMonthEnd } = await import("./notifications");
       return await notifyMonthEnd(input.month, input.revenue, input.expenses);
     }),
-    sendMissingTimeEntriesNotification: publicProcedure.input((val: unknown) => {
+    sendMissingTimeEntriesNotification: adminProcedure.input((val: unknown) => {
       return z.object({
         date: z.string(),
         daysWithoutEntries: z.number(),
@@ -1838,7 +1849,7 @@ export const appRouter = router({
       const { notifyMissingTimeEntries } = await import("./notifications");
       return await notifyMissingTimeEntries(input.date, input.daysWithoutEntries);
     }),
-    sendInvoiceDeadlineNotification: publicProcedure.input((val: unknown) => {
+    sendInvoiceDeadlineNotification: adminProcedure.input((val: unknown) => {
       return z.object({
         customer: z.string(),
         deadline: z.string(),
@@ -1848,7 +1859,7 @@ export const appRouter = router({
       const { notifyUpcomingInvoiceDeadline } = await import("./notifications");
       return await notifyUpcomingInvoiceDeadline(input.customer, input.deadline, input.daysLeft);
     }),
-    sendIncompleteExpensesNotification: publicProcedure.input((val: unknown) => {
+    sendIncompleteExpensesNotification: adminProcedure.input((val: unknown) => {
       return z.object({
         month: z.string(),
         entriesWithoutExpenses: z.number(),
@@ -2538,34 +2549,15 @@ export const appRouter = router({
   // Fixed costs
   fixedCosts: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      const { getFixedCosts } = await import("./db");
-      const allCosts = await getFixedCosts();
-
-      // WebApp admins must stay blind regarding tenant business data.
       if (isWebAppAdmin(ctx.user)) {
         return [];
       }
-
+      const { getFixedCostsByMandant, getFixedCostsByUser } = await import("./db");
       if (isMandantAdmin(ctx.user)) {
-        const ownerCache = new Map<number, boolean>();
-        const filtered = [];
-
-        for (const cost of allCosts) {
-          if (!ownerCache.has(cost.userId)) {
-            ownerCache.set(
-              cost.userId,
-              await isSameMandantForUser(ctx.user.mandantId, cost.userId)
-            );
-          }
-          if (ownerCache.get(cost.userId)) {
-            filtered.push(cost);
-          }
-        }
-
-        return filtered;
+        if (!ctx.user.mandantId) return [];
+        return await getFixedCostsByMandant(ctx.user.mandantId);
       }
-
-      return allCosts.filter((cost) => cost.userId === ctx.user.id);
+      return await getFixedCostsByUser(ctx.user.id);
     }),
     create: protectedProcedure.input((val: unknown) => {
       return z.object({
@@ -2630,9 +2622,9 @@ export const appRouter = router({
 
   // Tax settings
   taxSettings: router({
-    get: protectedProcedure.query(async () => {
+    get: protectedProcedure.query(async ({ ctx }) => {
       const { getTaxSettings } = await import("./db");
-      return await getTaxSettings();
+      return await getTaxSettings(ctx.user.id);
     }),
     upsert: mandantAdminProcedure.input((val: unknown) => {
       return z.object({
@@ -2643,9 +2635,9 @@ export const appRouter = router({
         taxType: z.enum(["percentage", "fixed"]),
         taxValue: z.number(),
       }).parse(val);
-    }).mutation(async ({ input }) => {
+    }).mutation(async ({ ctx, input }) => {
       const { upsertTaxSettings } = await import("./db");
-      return await upsertTaxSettings(input);
+      return await upsertTaxSettings(ctx.user.id, input);
     }),
     getProfile: protectedProcedure.query(async ({ ctx }) => {
       const { getTaxProfile } = await import("./db");
@@ -2772,9 +2764,9 @@ export const appRouter = router({
   search: router({
     global: protectedProcedure
       .input(z.object({ query: z.string().min(1) }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
         const { globalSearch } = await import("./globalSearch");
-        return await globalSearch(input.query);
+        return await globalSearch(input.query, toScopeContext(ctx.user));
       }),
   }),
 

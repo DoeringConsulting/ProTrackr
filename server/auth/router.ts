@@ -13,6 +13,7 @@ import {
 } from "../db";
 import { findMandantByName, findMandantByNr } from "../db-mandanten";
 import { sendPasswordResetEmail, testEmailConnectionDetailed } from "../email";
+import { getSessionCookieConfig } from "../_core/sessionConfig";
 
 export const authRouter = Router();
 const RESET_TOKEN_BYTES = 32;
@@ -45,18 +46,24 @@ authRouter.post("/login", (req: Request, res: Response, next: NextFunction) => {
     if (!user) {
       return res.status(401).json({ error: info?.message ?? "Ungültige E-Mail oder Passwort" });
     }
-    req.logIn(user, (loginErr) => {
-      if (loginErr) {
-        return res.status(500).json({ error: "Login fehlgeschlagen" });
+    req.session.regenerate((regenerateErr) => {
+      if (regenerateErr) {
+        console.error("[Auth] Session regenerate failed:", regenerateErr);
+        return res.status(500).json({ error: "Session-Fehler" });
       }
-      return res.json({
-        user: {
-          id: user.id,
-          mandantId: user.mandantId,
-          email: user.email,
-          displayName: user.displayName,
-          role: user.role,
-        },
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          return res.status(500).json({ error: "Login fehlgeschlagen" });
+        }
+        return res.json({
+          user: {
+            id: user.id,
+            mandantId: user.mandantId,
+            email: user.email,
+            displayName: user.displayName,
+            role: user.role,
+          },
+        });
       });
     });
   })(req, res, next);
@@ -65,7 +72,25 @@ authRouter.post("/login", (req: Request, res: Response, next: NextFunction) => {
 // POST /api/auth/logout
 authRouter.post("/logout", (req: Request, res: Response) => {
   req.logout(() => {
-    res.json({ success: true });
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        console.error("[Auth] Session destroy failed:", destroyErr);
+      }
+      const cookieConfig = getSessionCookieConfig();
+      res.clearCookie("connect.sid", {
+        path: cookieConfig.path,
+        httpOnly: cookieConfig.httpOnly,
+        secure: cookieConfig.secure,
+        sameSite: cookieConfig.sameSite,
+      });
+      res.clearCookie("csrf-token", {
+        path: cookieConfig.path,
+        httpOnly: false,
+        secure: cookieConfig.secure,
+        sameSite: cookieConfig.sameSite,
+      });
+      res.json({ success: true });
+    });
   });
 });
 

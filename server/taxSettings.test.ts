@@ -4,7 +4,13 @@ import { appRouter } from "./routers";
 describe("taxSettings", () => {
   it("should upsert and retrieve tax settings", async () => {
     const caller = appRouter.createCaller({
-      user: { id: 999, name: "Test User", email: "test@example.com", role: "admin" },
+      user: {
+        id: 999,
+        mandantId: 1,
+        displayName: "Test User",
+        email: "test@example.com",
+        role: "admin",
+      },
       req: {} as any,
       res: {} as any,
     });
@@ -36,7 +42,13 @@ describe("taxSettings", () => {
 
   it("should update existing tax settings", async () => {
     const caller = appRouter.createCaller({
-      user: { id: 999, name: "Test User", email: "test@example.com", role: "admin" },
+      user: {
+        id: 999,
+        mandantId: 1,
+        displayName: "Test User",
+        email: "test@example.com",
+        role: "admin",
+      },
       req: {} as any,
       res: {} as any,
     });

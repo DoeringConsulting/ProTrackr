@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ensureCsrfToken, getCsrfHeaderName } from "@/lib/csrf";
 
 export default function ForgotPassword() {
   const [mandant, setMandant] = useState("");
@@ -16,9 +17,15 @@ export default function ForgotPassword() {
     e.preventDefault();
     setIsLoading(true);
     try {
+      const csrfToken = await ensureCsrfToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (csrfToken) {
+        headers[getCsrfHeaderName()] = csrfToken;
+      }
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({ mandant, email }),
       });
       const data = await res.json();

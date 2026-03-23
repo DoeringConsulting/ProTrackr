@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { ensureCsrfToken, getCsrfHeaderName } from "@/lib/csrf";
 
 export default function Login() {
   const [mandant, setMandant] = useState("");
@@ -18,9 +19,14 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
     try {
+      const csrfToken = await ensureCsrfToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (csrfToken) {
+        headers[getCsrfHeaderName()] = csrfToken;
+      }
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         credentials: "include",
         body: JSON.stringify({ mandant, email, password }),
       });

@@ -1,14 +1,19 @@
-import { notifyMonthEnd, notifyMissingTimeEntries, notifyUpcomingInvoiceDeadline, notifyIncompleteExpenses } from "./notifications";
-import { getDb } from "./db";
-import { timeEntries, customers } from "../drizzle/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import {
+  notifyMonthEnd,
+  notifyMissingTimeEntries,
+  notifyUpcomingInvoiceDeadline,
+  notifyIncompleteExpenses,
+} from "./notifications";
+import { getDb, listAllActiveUsers } from "./db";
+import { customers, expenses, timeEntries } from "../drizzle/schema";
+import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
 
 /**
  * Scheduler service for automatic notifications
  * This service should be called periodically (e.g., via cron job or scheduled task)
  */
 
-export async function checkMonthEnd() {
+export async function checkMonthEnd(userId: number) {
   const now = new Date();
   const isLastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() === now.getDate();
   
@@ -32,6 +37,7 @@ export async function checkMonthEnd() {
     .from(timeEntries)
     .where(
       and(
+        eq(timeEntries.userId, userId),
         gte(timeEntries.date, firstDay),
         lte(timeEntries.date, lastDay)
       )
@@ -39,26 +45,43 @@ export async function checkMonthEnd() {
 
   const revenue = entries.reduce((sum, entry) => sum + entry.calculatedAmount, 0);
   
-  // Query expenses for the month
-  const { expenses: expensesTable } = await import("../drizzle/schema");
-  const expenseRecords = await db
-    .select()
-    .from(expensesTable)
+  // Query expenses for the month (linked to user-owned time entries + standalone user expenses)
+  const linkedExpenseRecords = await db
+    .select({ amount: expenses.amount })
+    .from(expenses)
+    .innerJoin(timeEntries, eq(expenses.timeEntryId, timeEntries.id))
     .where(
       and(
-        gte(expensesTable.date, firstDayStr),
-        lte(expensesTable.date, lastDayStr)
+        eq(timeEntries.userId, userId),
+        gte(expenses.date, firstDayStr),
+        lte(expenses.date, lastDayStr)
       )
     );
-  const expenses = expenseRecords.reduce((sum, exp) => sum + exp.amount, 0);
+
+  const standaloneExpenseRecords = await db
+    .select({ amount: expenses.amount })
+    .from(expenses)
+    .where(
+      and(
+        eq(expenses.userId, userId),
+        isNull(expenses.timeEntryId),
+        gte(expenses.date, firstDayStr),
+        lte(expenses.date, lastDayStr)
+      )
+    );
+
+  const totalExpenses = [...linkedExpenseRecords, ...standaloneExpenseRecords].reduce(
+    (sum, exp) => sum + exp.amount,
+    0
+  );
 
   const monthName = now.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
-  await notifyMonthEnd(monthName, revenue, expenses);
+  await notifyMonthEnd(monthName, revenue, totalExpenses);
 
-  return { executed: true, month: monthName, revenue, expenses };
+  return { executed: true, month: monthName, revenue, expenses: totalExpenses };
 }
 
-export async function checkMissingTimeEntries(userId?: number) {
+export async function checkMissingTimeEntries(userId: number) {
   const now = new Date();
   const db = await getDb();
   if (!db) {
@@ -80,19 +103,16 @@ export async function checkMissingTimeEntries(userId?: number) {
     const startOfDay = new Date(checkDate.setHours(0, 0, 0, 0));
     const endOfDay = new Date(checkDate.setHours(23, 59, 59, 999));
 
-    const whereConditions = [
-      gte(timeEntries.date, startOfDay),
-      lte(timeEntries.date, endOfDay)
-    ];
-    
-    if (userId) {
-      whereConditions.push(eq(timeEntries.userId, userId));
-    }
-    
     const entries = await db
       .select()
       .from(timeEntries)
-      .where(and(...whereConditions));
+      .where(
+        and(
+          eq(timeEntries.userId, userId),
+          gte(timeEntries.date, startOfDay),
+          lte(timeEntries.date, endOfDay)
+        )
+      );
 
     if (entries.length === 0) {
       missingDays.push(checkDate.toLocaleDateString("de-DE"));
@@ -108,7 +128,7 @@ export async function checkMissingTimeEntries(userId?: number) {
   return { executed: false, reason: "No missing entries" };
 }
 
-export async function checkUpcomingInvoiceDeadlines() {
+export async function checkUpcomingInvoiceDeadlines(userId: number) {
   const now = new Date();
   const db = await getDb();
   if (!db) {
@@ -120,7 +140,10 @@ export async function checkUpcomingInvoiceDeadlines() {
   const daysUntilMonthEnd = lastDayOfMonth - now.getDate();
 
   if (daysUntilMonthEnd <= 5 && daysUntilMonthEnd > 0) {
-    const allCustomers = await db.select().from(customers);
+    const allCustomers = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.userId, userId));
     
     for (const customer of allCustomers) {
       const deadline = new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString("de-DE");
@@ -137,7 +160,7 @@ export async function checkUpcomingInvoiceDeadlines() {
   return { executed: false, reason: "Not within deadline window" };
 }
 
-export async function checkIncompleteExpenses() {
+export async function checkIncompleteExpenses(userId: number) {
   const now = new Date();
   const db = await getDb();
   if (!db) {
@@ -153,6 +176,7 @@ export async function checkIncompleteExpenses() {
     .from(timeEntries)
     .where(
       and(
+        eq(timeEntries.userId, userId),
         gte(timeEntries.date, firstDay),
         lte(timeEntries.date, lastDay),
         eq(timeEntries.entryType, "business_trip")
@@ -187,16 +211,27 @@ export async function checkIncompleteExpenses() {
  * Main scheduler function to run all checks
  * Should be called periodically (e.g., daily at a specific time)
  */
-export async function runScheduledTasks(userId?: number) {
+export async function runScheduledTasks(userId: number) {
   console.log("[Scheduler] Running scheduled tasks...");
   
   const results = {
-    monthEnd: await checkMonthEnd(),
-    missingEntries: userId ? await checkMissingTimeEntries(userId) : { executed: false, reason: "No userId provided" },
-    invoiceDeadlines: await checkUpcomingInvoiceDeadlines(),
-    incompleteExpenses: await checkIncompleteExpenses(),
+    monthEnd: await checkMonthEnd(userId),
+    missingEntries: await checkMissingTimeEntries(userId),
+    invoiceDeadlines: await checkUpcomingInvoiceDeadlines(userId),
+    incompleteExpenses: await checkIncompleteExpenses(userId),
   };
 
   console.log("[Scheduler] Results:", JSON.stringify(results, null, 2));
+  return results;
+}
+
+export async function runScheduledTasksGlobal() {
+  const users = await listAllActiveUsers();
+  const results: Record<number, Awaited<ReturnType<typeof runScheduledTasks>>> = {};
+
+  for (const user of users) {
+    results[user.id] = await runScheduledTasks(user.id);
+  }
+
   return results;
 }

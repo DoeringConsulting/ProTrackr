@@ -2,13 +2,18 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import crypto from "crypto";
 import session from "express-session";
+import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleCronRequest } from "../cronEndpoint";
+import { csrfProtection } from "./csrf";
+import { getSessionCookieConfig, toExpressSessionCookieOptions } from "./sessionConfig";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -33,19 +38,7 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   const isProduction = process.env.NODE_ENV === "production";
-  const sessionCookieSecure =
-    process.env.SESSION_COOKIE_SECURE !== undefined
-      ? process.env.SESSION_COOKIE_SECURE === "true"
-      : isProduction;
-  const sessionCookieSameSiteEnv = process.env.SESSION_COOKIE_SAMESITE;
-  const sessionCookieSameSite =
-    sessionCookieSameSiteEnv === "none" ||
-    sessionCookieSameSiteEnv === "lax" ||
-    sessionCookieSameSiteEnv === "strict"
-      ? sessionCookieSameSiteEnv
-      : sessionCookieSecure
-        ? "none"
-        : "lax";
+  const sessionCookieConfig = getSessionCookieConfig();
   
   // Security headers
   app.use(helmet({
@@ -61,7 +54,7 @@ async function startServer() {
   // Session-Middleware
   // WICHTIG: In Production hinter Reverse-Proxy (Nginx/Manus) trust proxy setzen,
   // sonst kann express-session das Secure-Cookie nicht zuverlässig setzen.
-  if (isProduction && sessionCookieSecure) {
+  if (isProduction && sessionCookieConfig.secure) {
     app.set("trust proxy", 1);
   }
   // secure + sameSite:none sind in Production für HTTPS/Cross-Origin nötig
@@ -74,13 +67,8 @@ async function startServer() {
       secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
-      proxy: isProduction && sessionCookieSecure,
-      cookie: {
-        secure: sessionCookieSecure,
-        httpOnly: true,
-        sameSite: sessionCookieSameSite,
-        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 Tage
-      },
+      proxy: isProduction && sessionCookieConfig.secure,
+      cookie: toExpressSessionCookieOptions(sessionCookieConfig),
     })
   );
 
@@ -89,6 +77,52 @@ async function startServer() {
   const { default: passportInstance } = await import("passport");
   app.use(passportInstance.initialize());
   app.use(passportInstance.session());
+  app.use(cookieParser());
+  app.use(csrfProtection());
+
+  const normalizeRateLimitValue = (value: unknown): string =>
+    typeof value === "string" ? value.trim().toLowerCase() : "";
+  const hashRateLimitIdentity = (mandant: string, email: string): string =>
+    crypto.createHash("sha256").update(`${mandant}:${email}`).digest("hex");
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Zu viele Anmeldeversuche. Bitte in 15 Minuten erneut versuchen." },
+    keyGenerator: (req) => {
+      const body = req.body as Record<string, unknown> | undefined;
+      const mandant = normalizeRateLimitValue(body?.mandant);
+      const email = normalizeRateLimitValue(body?.email);
+      const identityHash = hashRateLimitIdentity(mandant, email);
+      return `${req.ip}:${identityHash}`;
+    },
+  });
+  const passwordResetLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Zu viele Anfragen. Bitte später erneut versuchen." },
+    keyGenerator: (req) => {
+      const body = req.body as Record<string, unknown> | undefined;
+      const mandant = normalizeRateLimitValue(body?.mandant);
+      const email = normalizeRateLimitValue(body?.email);
+      const identityHash = hashRateLimitIdentity(mandant, email);
+      return `${req.ip}:${identityHash}`;
+    },
+  });
+  const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Zu viele Registrierungsversuche." },
+  });
+  app.use("/api/auth/login", loginLimiter);
+  app.use("/api/auth/forgot-password", passwordResetLimiter);
+  app.use("/api/auth/reset-password", passwordResetLimiter);
+  app.use("/api/auth/register", registerLimiter);
 
   // Auth-Routen: /api/auth/login, /api/auth/logout, /api/auth/me, /api/auth/register
   const { authRouter } = await import("../auth/router");

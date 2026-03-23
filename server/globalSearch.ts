@@ -1,6 +1,7 @@
 import { getDb } from "./db";
-import { customers, timeEntries, expenses } from "../drizzle/schema";
-import { like, or, sql } from "drizzle-orm";
+import { customers, timeEntries, expenses, users } from "../drizzle/schema";
+import { and, eq, inArray, like, or } from "drizzle-orm";
+import type { ScopeContext } from "./scope";
 
 export interface SearchResult {
   type: "customer" | "timeEntry" | "expense";
@@ -10,11 +11,25 @@ export interface SearchResult {
   metadata?: string;
 }
 
-export async function globalSearch(query: string): Promise<SearchResult[]> {
+export async function globalSearch(query: string, scope: ScopeContext): Promise<SearchResult[]> {
   const db = await getDb();
   if (!db) return [];
+  if (scope.role === "webapp_admin") return [];
   
   const searchTerm = `%${query}%`;
+  let visibleUserIds: number[] = [scope.userId];
+
+  if (scope.role === "mandant_admin" && scope.mandantId) {
+    const mandantUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.mandantId, scope.mandantId));
+    visibleUserIds = mandantUsers.map((entry) => entry.id);
+  }
+
+  if (visibleUserIds.length === 0) {
+    return [];
+  }
   const results: SearchResult[] = [];
 
   // Search customers
@@ -22,10 +37,13 @@ export async function globalSearch(query: string): Promise<SearchResult[]> {
     .select()
     .from(customers)
     .where(
-      or(
-        like(customers.provider, searchTerm),
-        like(customers.mandatenNr, searchTerm),
-        like(customers.projectName, searchTerm)
+      and(
+        inArray(customers.userId, visibleUserIds),
+        or(
+          like(customers.provider, searchTerm),
+          like(customers.mandatenNr, searchTerm),
+          like(customers.projectName, searchTerm)
+        )
       )
     )
     .limit(5);
@@ -50,7 +68,12 @@ export async function globalSearch(query: string): Promise<SearchResult[]> {
       customerId: timeEntries.customerId,
     })
     .from(timeEntries)
-    .where(like(timeEntries.description, searchTerm))
+    .where(
+      and(
+        inArray(timeEntries.userId, visibleUserIds),
+        like(timeEntries.description, searchTerm)
+      )
+    )
     .limit(5);
 
   results.push(
@@ -68,9 +91,12 @@ export async function globalSearch(query: string): Promise<SearchResult[]> {
     .select()
     .from(expenses)
     .where(
-      or(
-        like(expenses.category, searchTerm),
-        like(expenses.comment, searchTerm)
+      and(
+        inArray(expenses.userId, visibleUserIds),
+        or(
+          like(expenses.category, searchTerm),
+          like(expenses.comment, searchTerm)
+        )
       )
     )
     .limit(5);

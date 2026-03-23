@@ -30,6 +30,7 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { VersionFooter } from './VersionFooter';
+import { ensureCsrfToken, getCsrfHeaderName } from "@/lib/csrf";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -327,8 +328,14 @@ function DashboardLayoutContent({
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
                   onClick={async () => {
+                    const csrfToken = await ensureCsrfToken();
+                    const headers: Record<string, string> = {};
+                    if (csrfToken) {
+                      headers[getCsrfHeaderName()] = csrfToken;
+                    }
                     await fetch("/api/auth/logout", {
                       method: "POST",
+                      headers,
                       credentials: "include",
                     });
                     setLocation("/login");

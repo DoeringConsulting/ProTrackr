@@ -212,6 +212,33 @@ export async function getFixedCosts() {
   return await db.select().from(fixedCosts);
 }
 
+export async function getFixedCostsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { fixedCosts } = await import("../drizzle/schema");
+  return await db.select().from(fixedCosts).where(eq(fixedCosts.userId, userId));
+}
+
+export async function getFixedCostsByMandant(mandantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { fixedCosts, users } = await import("../drizzle/schema");
+  return await db
+    .select({
+      id: fixedCosts.id,
+      userId: fixedCosts.userId,
+      category: fixedCosts.category,
+      amount: fixedCosts.amount,
+      currency: fixedCosts.currency,
+      description: fixedCosts.description,
+      createdAt: fixedCosts.createdAt,
+      updatedAt: fixedCosts.updatedAt,
+    })
+    .from(fixedCosts)
+    .innerJoin(users, eq(fixedCosts.userId, users.id))
+    .where(eq(users.mandantId, mandantId));
+}
+
 export async function getFixedCostById(id: number) {
   const db = await getDb();
   if (!db) return null;
@@ -242,30 +269,37 @@ export async function deleteFixedCost(id: number) {
 }
 
 // Tax settings queries
-export async function getTaxSettings() {
+export async function getTaxSettings(userId: number) {
   const db = await getDb();
   if (!db) return null;
   const { taxSettings } = await import("../drizzle/schema");
-  const result = await db.select().from(taxSettings).limit(1);
+  const result = await db
+    .select()
+    .from(taxSettings)
+    .where(eq(taxSettings.userId, userId))
+    .limit(1);
   return result[0] || null;
 }
 
-export async function upsertTaxSettings(data: any) {
+export async function upsertTaxSettings(userId: number, data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { taxSettings } = await import("../drizzle/schema");
   
   // Check if settings exist
-  const existing = await getTaxSettings();
+  const existing = await getTaxSettings(userId);
   
   if (existing) {
-    await db.update(taxSettings).set(data).where(eq(taxSettings.id, existing.id));
+    await db
+      .update(taxSettings)
+      .set(data)
+      .where(and(eq(taxSettings.id, existing.id), eq(taxSettings.userId, userId)));
   } else {
-    await db.insert(taxSettings).values(data);
+    await db.insert(taxSettings).values({ ...data, userId });
   }
   
   // Return updated settings
-  return await getTaxSettings();
+  return await getTaxSettings(userId);
 }
 
 export async function getTaxProfile(userId: number) {
@@ -1065,6 +1099,21 @@ export async function listUsersByMandantId(mandantId: number) {
     })
     .from(users)
     .where(eq(users.mandantId, mandantId))
+    .orderBy(desc(users.id));
+}
+
+export async function listAllActiveUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  const { users } = await import("../drizzle/schema");
+  return await db
+    .select({
+      id: users.id,
+      mandantId: users.mandantId,
+      role: users.role,
+    })
+    .from(users)
+    .where(eq(users.accountStatus, "active"))
     .orderBy(desc(users.id));
 }
 

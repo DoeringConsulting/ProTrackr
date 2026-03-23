@@ -9,6 +9,7 @@ import App from "./App";
 import "./index.css";
 import "./i18n";
 import { registerServiceWorker } from "./registerSW";
+import { ensureCsrfToken, getCsrfHeaderName, getCsrfToken } from "./lib/csrf";
 
 const queryClient = new QueryClient();
 
@@ -39,14 +40,22 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+void ensureCsrfToken();
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
+        const csrfToken = getCsrfToken();
+        const nextHeaders = new Headers(init?.headers ?? {});
+        if (csrfToken) {
+          nextHeaders.set(getCsrfHeaderName(), csrfToken);
+        }
         return globalThis.fetch(input, {
           ...(init ?? {}),
+          headers: nextHeaders,
           credentials: "include",
         });
       },

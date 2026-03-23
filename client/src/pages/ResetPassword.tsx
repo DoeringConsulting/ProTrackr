@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ensureCsrfToken, getCsrfHeaderName } from "@/lib/csrf";
 
 export default function ResetPassword() {
   const [, navigate] = useLocation();
@@ -28,9 +29,14 @@ export default function ResetPassword() {
       }
 
       try {
+        const csrfToken = await ensureCsrfToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (csrfToken) {
+          headers[getCsrfHeaderName()] = csrfToken;
+        }
         const res = await fetch("/api/auth/verify-reset-token", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({ token }),
         });
         const data = await res.json();
@@ -59,9 +65,14 @@ export default function ResetPassword() {
 
     setIsLoading(true);
     try {
+      const csrfToken = await ensureCsrfToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (csrfToken) {
+        headers[getCsrfHeaderName()] = csrfToken;
+      }
       const res = await fetch("/api/auth/reset-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ token, newPassword }),
       });
       const data = await res.json();
