@@ -1,24 +1,5 @@
 import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, uniqueIndex, index } from "drizzle-orm/mysql-core";
 
-// ✅ AUTH TABLES RESTORED
-/**
- * Users table - application users for authentication
- */
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
-  mandantId: int("mandantId").notNull(), // Foreign key to mandanten
-  email: varchar("email", { length: 320 }).notNull(), // Removed unique - unique per mandant
-  passwordHash: varchar("passwordHash", { length: 255 }),     // bestehender Spaltenname in DB
-  displayName: varchar("name", { length: 255 }),              // bestehender Spaltenname "name" in DB
-  role: varchar("role", { length: 50 }).default("user").notNull(),
-  accountStatus: mysqlEnum("accountStatus", ["active", "suspended", "deleted"]).notNull().default("active"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
-
 /**
  * Mandanten table - multi-tenancy support
  */
@@ -33,12 +14,31 @@ export const mandanten = mysqlTable("mandanten", {
 export type Mandant = typeof mandanten.$inferSelect;
 export type InsertMandant = typeof mandanten.$inferInsert;
 
+// ✅ AUTH TABLES RESTORED
+/**
+ * Users table - application users for authentication
+ */
+export const users = mysqlTable("users", {
+  id: int("id").autoincrement().primaryKey(),
+  mandantId: int("mandantId").notNull().references(() => mandanten.id, { onDelete: "restrict", onUpdate: "cascade" }), // Foreign key to mandanten
+  email: varchar("email", { length: 320 }).notNull(), // Removed unique - unique per mandant
+  passwordHash: varchar("passwordHash", { length: 255 }),     // bestehender Spaltenname in DB
+  displayName: varchar("name", { length: 255 }),              // bestehender Spaltenname "name" in DB
+  role: varchar("role", { length: 50 }).default("user").notNull(),
+  accountStatus: mysqlEnum("accountStatus", ["active", "suspended", "deleted"]).notNull().default("active"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+
 /**
  * Password reset tokens - one-time tokens for secure password recovery
  */
 export const passwordResetTokens = mysqlTable("passwordResetTokens", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade", onUpdate: "cascade" }),
   tokenHash: varchar("tokenHash", { length: 128 }).notNull(),
   expiresAt: timestamp("expiresAt").notNull(),
   usedAt: timestamp("usedAt"),
@@ -56,7 +56,7 @@ export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
  */
 export const customers = mysqlTable("customers", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId"), // owner (creator/backfilled from first related time entry)
+  userId: int("userId").references(() => users.id, { onDelete: "set null", onUpdate: "cascade" }), // owner (creator/backfilled from first related time entry)
   provider: varchar("provider", { length: 255 }).notNull(),
   mandatenNr: varchar("mandatenNr", { length: 50 }).notNull(),
   projectName: varchar("projectName", { length: 255 }).notNull(),
@@ -96,7 +96,7 @@ export const invoiceNumbers = mysqlTable("invoiceNumbers", {
   year: int("year").notNull(),
   number: int("number").notNull(), // sequential number within year
   invoiceNumber: varchar("invoiceNumber", { length: 20 }).notNull().unique(), // formatted: YYYY-NNN
-  customerId: int("customerId").notNull(),
+  customerId: int("customerId").notNull().references(() => customers.id, { onDelete: "restrict", onUpdate: "cascade" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -108,8 +108,8 @@ export type InsertInvoiceNumber = typeof invoiceNumbers.$inferInsert;
  */
 export const timeEntries = mysqlTable("timeEntries", {
   id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
-  userId: int("userId").notNull(),
+  customerId: int("customerId").notNull().references(() => customers.id, { onDelete: "restrict", onUpdate: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "restrict", onUpdate: "cascade" }),
   date: timestamp("date").notNull(),
   weekday: varchar("weekday", { length: 10 }).notNull(),
   projectName: varchar("projectName", { length: 255 }).notNull(),
@@ -131,8 +131,8 @@ export type InsertTimeEntry = typeof timeEntries.$inferInsert;
  */
 export const expenses = mysqlTable("expenses", {
   id: int("id").autoincrement().primaryKey(),
-  timeEntryId: int("timeEntryId"),
-  userId: int("userId"), // owner for standalone expenses (and optional duplicate for linked)
+  timeEntryId: int("timeEntryId").references(() => timeEntries.id, { onDelete: "cascade", onUpdate: "cascade" }),
+  userId: int("userId").references(() => users.id, { onDelete: "set null", onUpdate: "cascade" }), // owner for standalone expenses (and optional duplicate for linked)
   date: timestamp("date", { mode: "string" }).notNull(), // Direct date for standalone expenses
   category: mysqlEnum("category", [
     "car",           // Mietwagen
@@ -179,9 +179,9 @@ export type InsertExpense = typeof expenses.$inferInsert;
  */
 export const documents = mysqlTable("documents", {
   id: int("id").autoincrement().primaryKey(),
-  expenseId: int("expenseId"),
-  timeEntryId: int("timeEntryId"),
-  userId: int("userId").notNull(),
+  expenseId: int("expenseId").references(() => expenses.id, { onDelete: "set null", onUpdate: "cascade" }),
+  timeEntryId: int("timeEntryId").references(() => timeEntries.id, { onDelete: "set null", onUpdate: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "restrict", onUpdate: "cascade" }),
   fileName: varchar("fileName", { length: 255 }).notNull(),
   fileKey: varchar("fileKey", { length: 500 }).notNull(),
   fileUrl: varchar("fileUrl", { length: 1000 }).notNull(),
@@ -198,8 +198,8 @@ export type InsertDocument = typeof documents.$inferInsert;
  */
 export const expenseAiAnalyses = mysqlTable("expenseAiAnalyses", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  documentId: int("documentId"),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade", onUpdate: "cascade" }),
+  documentId: int("documentId").references(() => documents.id, { onDelete: "set null", onUpdate: "cascade" }),
   source: varchar("source", { length: 30 }).notNull().default("manual_text"), // ocr_text|document_url|hybrid
   modelName: varchar("modelName", { length: 120 }).notNull().default("heuristic-v1"),
   ocrText: text("ocrText"),
@@ -209,7 +209,7 @@ export const expenseAiAnalyses = mysqlTable("expenseAiAnalyses", {
   matchingPayload: text("matchingPayload"), // match suggestions JSON
   dedupeHash: varchar("dedupeHash", { length: 80 }),
   status: varchar("status", { length: 30 }).notNull().default("needs_review"), // needs_review|approved|rejected|error
-  approvedExpenseId: int("approvedExpenseId"),
+  approvedExpenseId: int("approvedExpenseId").references(() => expenses.id, { onDelete: "set null", onUpdate: "cascade" }),
   confidence: int("confidence").notNull().default(0), // 0..10000
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -243,7 +243,7 @@ export type InsertExchangeRate = typeof exchangeRates.$inferInsert;
  */
 export const fixedCosts = mysqlTable("fixedCosts", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade", onUpdate: "cascade" }),
   category: varchar("category", { length: 100 }).notNull(),
   amount: int("amount").notNull(), // in currency cents
   currency: varchar("currency", { length: 3 }).notNull().default("PLN"), // ISO 4217 currency code
@@ -260,7 +260,7 @@ export type InsertFixedCost = typeof fixedCosts.$inferInsert;
  */
 export const taxSettings = mysqlTable("taxSettings", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(), // one setting per user
+  userId: int("userId").notNull().unique().references(() => users.id, { onDelete: "cascade", onUpdate: "cascade" }), // one setting per user
   zusType: mysqlEnum("zusType", ["percentage", "fixed"]).notNull().default("percentage"),
   zusValue: int("zusValue").notNull(), // percentage in basis points (1952 = 19.52%) or fixed amount in PLN cents
   healthInsuranceType: mysqlEnum("healthInsuranceType", ["percentage", "fixed"]).notNull().default("percentage"),
@@ -279,7 +279,7 @@ export type InsertTaxSetting = typeof taxSettings.$inferInsert;
  */
 export const taxProfiles = mysqlTable("taxProfiles", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
+  userId: int("userId").notNull().unique().references(() => users.id, { onDelete: "cascade", onUpdate: "cascade" }),
   taxCalculationMode: mysqlEnum("taxCalculationMode", ["normal", "zero"]).notNull().default("normal"),
   taxForm: mysqlEnum("taxForm", ["liniowy_19"]).notNull().default("liniowy_19"),
   zusRegime: mysqlEnum("zusRegime", [
@@ -326,7 +326,7 @@ export type InsertTaxConfigPl = typeof taxConfigPl.$inferInsert;
  */
 export const accountSettings = mysqlTable("accountSettings", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(), // one setting per user
+  userId: int("userId").notNull().unique().references(() => users.id, { onDelete: "cascade", onUpdate: "cascade" }), // one setting per user
   companyName: varchar("companyName", { length: 255 }),
   companyLogoUrl: varchar("companyLogoUrl", { length: 1000 }),
   companyLogoKey: varchar("companyLogoKey", { length: 500 }),

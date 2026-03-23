@@ -120,6 +120,34 @@
       "when": 1774200000000,
       "tag": "0016_expense_ai_analyses",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1774649400000,
+      "tag": "0017_fk_index_prep",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1774649700000,
+      "tag": "0018_fk_orphan_analysis",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1774650000000,
+      "tag": "0019_fk_orphan_cleanup_and_quarantine",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1774650300000,
+      "tag": "0020_fk_constraints",
+      "breakpoints": true
     }
   ]
 }
