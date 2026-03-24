@@ -1,5 +1,4 @@
 import { db, SyncQueue } from './db';
-import { trpc } from './trpc';
 
 /**
  * Sync Service for Online/Offline synchronization
@@ -59,12 +58,16 @@ class SyncService {
     try {
       // Get all pending items from sync queue
       const pendingItems = await db.syncQueue.toArray();
+      let syncedCount = 0;
 
       for (const item of pendingItems) {
         try {
-          await this.syncItem(item);
-          // Remove from queue after successful sync
-          await db.syncQueue.delete(item.id!);
+          const synced = await this.syncItem(item);
+          // Remove from queue only after a confirmed sync.
+          if (synced) {
+            await db.syncQueue.delete(item.id!);
+            syncedCount += 1;
+          }
         } catch (error) {
           console.error(`Failed to sync item ${item.id}:`, error);
           // Update attempts and error
@@ -76,7 +79,7 @@ class SyncService {
         }
       }
 
-      console.log(`Synced ${pendingItems.length} items`);
+      console.log(`Synced ${syncedCount}/${pendingItems.length} items`);
     } catch (error) {
       console.error('Sync failed:', error);
     } finally {
@@ -87,33 +90,13 @@ class SyncService {
   /**
    * Sync individual item
    */
-  private async syncItem(item: SyncQueue): Promise<void> {
-    // This would call the appropriate tRPC mutation based on tableName and operation
-    // For now, we'll implement a basic structure
-    
-    switch (item.tableName) {
-      case 'customers':
-        if (item.operation === 'create') {
-          // await trpc.customers.create.mutate(item.data);
-        } else if (item.operation === 'update') {
-          // await trpc.customers.update.mutate(item.data);
-        } else if (item.operation === 'delete') {
-          // await trpc.customers.delete.mutate({ id: item.recordId });
-        }
-        break;
-      
-      case 'timeEntries':
-        if (item.operation === 'create') {
-          // await trpc.timeEntries.create.mutate(item.data);
-        } else if (item.operation === 'update') {
-          // await trpc.timeEntries.update.mutate(item.data);
-        } else if (item.operation === 'delete') {
-          // await trpc.timeEntries.delete.mutate({ id: item.recordId });
-        }
-        break;
-      
-      // Add other tables as needed
-    }
+  private async syncItem(item: SyncQueue): Promise<boolean> {
+    // Explicitly keep queued items until server sync mutations are implemented.
+    console.warn(
+      `[SyncService] Sync not implemented for ${item.tableName}.${item.operation}; queue item retained.`,
+      { id: item.id, recordId: item.recordId }
+    );
+    return false;
   }
 
   /**

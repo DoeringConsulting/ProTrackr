@@ -65,7 +65,7 @@ export default function ImportTab() {
         return;
       }
 
-      importMutation.mutate({ backup });
+      importMutation.mutate({ backup, strategy: "merge" });
     } catch (error) {
       toast.error("Fehler beim Lesen der Datei");
       setIsImporting(false);

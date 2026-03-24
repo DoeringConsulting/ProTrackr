@@ -65,14 +65,13 @@ export function DocumentUpload({ expenseId, timeEntryId, onUploadComplete }: Doc
         const base64 = reader.result as string;
         const base64Data = base64.split(",")[1]; // Remove data:image/...;base64, prefix
 
-        // Upload to S3 via backend
+        // Upload via backend storage abstraction (remote or local fallback)
         const fileKey = `documents/${Date.now()}-${file.name}`;
-        const fileUrl = `https://storage.example.com/${fileKey}`; // This should be replaced with actual S3 upload
         
         await uploadMutation.mutateAsync({
           fileName: file.name,
           fileKey,
-          fileUrl,
+          fileData: base64Data,
           mimeType: file.type,
           fileSize: file.size,
           expenseId,
@@ -165,9 +164,11 @@ interface DocumentListProps {
 }
 
 export function DocumentList({ expenseId, timeEntryId }: DocumentListProps) {
-  const { data: documents, isLoading } = expenseId
-    ? trpc.documents.listByExpense.useQuery({ expenseId })
-    : { data: [], isLoading: false };
+  void timeEntryId;
+  const { data: documents = [], isLoading } = trpc.documents.listByExpense.useQuery(
+    { expenseId: expenseId ?? 0 },
+    { enabled: !!expenseId }
+  );
 
   const utils = trpc.useUtils();
   const deleteMutation = trpc.documents.delete.useMutation({
@@ -184,7 +185,7 @@ export function DocumentList({ expenseId, timeEntryId }: DocumentListProps) {
     return <p className="text-sm text-muted-foreground">Lädt...</p>;
   }
 
-  if (!documents || documents.length === 0) {
+  if (documents.length === 0) {
     return <p className="text-sm text-muted-foreground">Keine Belege vorhanden</p>;
   }
 

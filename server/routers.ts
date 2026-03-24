@@ -1594,7 +1594,7 @@ export const appRouter = router({
         checkInDate: z.string().optional(),
         checkOutDate: z.string().optional(),
         liters: z.number().optional(),
-        pricePerLiter: z.string().optional(),
+        pricePerLiter: z.number().optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
@@ -1896,12 +1896,14 @@ export const appRouter = router({
         timeEntryId: z.number().optional(),
         fileName: z.string(),
         fileKey: z.string(),
-        fileUrl: z.string(),
+        fileUrl: z.string().optional(),
+        fileData: z.string().optional(),
         mimeType: z.string(),
         fileSize: z.number(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { createDocument, getExpenseById, getTimeEntryById } = await import("./db");
+      const { storagePut } = await import("./storage");
 
       if (input.timeEntryId) {
         const timeEntry = await getTimeEntryById(input.timeEntryId);
@@ -1928,8 +1930,26 @@ export const appRouter = router({
         }
       }
 
+      let fileUrl = input.fileUrl ?? "";
+      let fileKey = input.fileKey;
+      if (input.fileData) {
+        const bytes = Buffer.from(input.fileData, "base64");
+        const storageResult = await storagePut(input.fileKey, bytes, input.mimeType);
+        fileKey = storageResult.key;
+        fileUrl = storageResult.url;
+      }
+      if (!fileUrl) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Dateiinhalt oder fileUrl erforderlich" });
+      }
+
       return await createDocument({
-        ...input,
+        expenseId: input.expenseId,
+        timeEntryId: input.timeEntryId,
+        fileName: input.fileName,
+        fileKey,
+        fileUrl,
+        mimeType: input.mimeType,
+        fileSize: input.fileSize,
         userId: ctx.user.id,
       });
     }),
@@ -2745,10 +2765,11 @@ export const appRouter = router({
     restore: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({
         backup: z.any(),
+        strategy: z.enum(["merge", "replace"]).optional().default("merge"),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { restoreBackup } = await import("./backup");
-      const result = await restoreBackup(input.backup);
+      const result = await restoreBackup(input.backup, input.strategy);
 
       // WebApp admins are allowed to execute restore blindly (DSGVO),
       // but must not receive any payload with domain data.
@@ -3753,6 +3774,7 @@ export const appRouter = router({
     import: adminOrMandantAdminProcedure.input((val: unknown) => {
       return z.object({
         backup: z.any(),
+        strategy: z.enum(["merge", "replace"]).optional().default("merge"),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { importDatabase } = await import("./db");
@@ -3843,6 +3865,19 @@ export const appRouter = router({
               ? rawData.invoiceNumbers.filter((invoice: any) => scopedCustomerIds.has(invoice.customerId))
               : [],
           },
+        };
+      }
+
+      if (input.strategy === "replace") {
+        const { restoreBackup } = await import("./backup");
+        const restoreResult = await restoreBackup(backupToImport, "replace");
+        if (isWebAppAdmin(ctx.user)) {
+          return { success: true, message: "Import ausgefuehrt (blind)" };
+        }
+        return {
+          success: true,
+          message: "Import erfolgreich",
+          ...restoreResult,
         };
       }
 

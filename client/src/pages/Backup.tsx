@@ -60,7 +60,7 @@ export default function Backup() {
       const text = await file.text();
       const backup = JSON.parse(text);
       
-      const result = await restoreBackupMutation.mutateAsync({ backup });
+      const result = await restoreBackupMutation.mutateAsync({ backup, strategy: "merge" });
       
       toast.success(`Backup wiederhergestellt: ${Object.values(result).reduce((a, b) => a + b, 0)} Einträge`);
       

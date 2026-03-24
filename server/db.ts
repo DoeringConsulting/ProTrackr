@@ -26,27 +26,35 @@ export async function generateInvoiceNumber(customerId: number): Promise<string>
 
   const year = new Date().getFullYear();
   const yearPrefix = year.toString();
+  const lockKey = `invoice-number-${year}`;
 
-  // Get the last invoice number for this year
-  const lastInvoice = await db
-    .select()
-    .from(invoiceNumbers)
-    .where(eq(invoiceNumbers.year, year))
-    .orderBy(desc(invoiceNumbers.number))
-    .limit(1);
+  return await db.transaction(async (tx) => {
+    // Lock current year's sequence generation to avoid race conditions.
+    await tx.execute(sql`SELECT GET_LOCK(${lockKey}, 10)`);
+    try {
+      const lastInvoice = await tx
+        .select({ number: invoiceNumbers.number })
+        .from(invoiceNumbers)
+        .where(eq(invoiceNumbers.year, year))
+        .orderBy(desc(invoiceNumbers.number))
+        .limit(1);
 
-  const nextSequence = lastInvoice.length > 0 ? lastInvoice[0].number + 1 : 1;
-  const invoiceNumber = `${yearPrefix}-${String(nextSequence).padStart(3, '0')}`;
+      const current = Number(lastInvoice[0]?.number ?? 0);
+      const nextSequence = Number.isFinite(current) ? current + 1 : 1;
+      const invoiceNumber = `${yearPrefix}-${String(nextSequence).padStart(3, "0")}`;
 
-  // Insert the new invoice number
-  await db.insert(invoiceNumbers).values({
-    year,
-    number: nextSequence,
-    invoiceNumber,
-    customerId,
+      await tx.insert(invoiceNumbers).values({
+        year,
+        number: nextSequence,
+        invoiceNumber,
+        customerId,
+      });
+
+      return invoiceNumber;
+    } finally {
+      await tx.execute(sql`SELECT RELEASE_LOCK(${lockKey})`);
+    }
   });
-
-  return invoiceNumber;
 }
 
 export async function getInvoiceNumbers(year?: number) {

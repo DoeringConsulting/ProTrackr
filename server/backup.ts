@@ -1,18 +1,40 @@
+import { z } from "zod";
 import { getDb } from "./db";
-import { customers, timeEntries, expenses, exchangeRates, fixedCosts, documents } from "../drizzle/schema";
+import {
+  customers,
+  timeEntries,
+  expenses,
+  exchangeRates,
+  fixedCosts,
+  documents,
+} from "../drizzle/schema";
+import { inArray } from "drizzle-orm";
 
 export interface BackupData {
   version: string;
   timestamp: string;
   data: {
-    customers: any[];
-    timeEntries: any[];
-    expenses: any[];
-    exchangeRates: any[];
-    fixedCosts: any[];
-    documents: any[];
+    customers: Record<string, unknown>[];
+    timeEntries: Record<string, unknown>[];
+    expenses: Record<string, unknown>[];
+    exchangeRates: Record<string, unknown>[];
+    fixedCosts: Record<string, unknown>[];
+    documents: Record<string, unknown>[];
   };
 }
+
+const BackupSchema = z.object({
+  version: z.string().min(1),
+  timestamp: z.string().min(1),
+  data: z.object({
+    customers: z.array(z.record(z.string(), z.unknown())),
+    timeEntries: z.array(z.record(z.string(), z.unknown())),
+    expenses: z.array(z.record(z.string(), z.unknown())),
+    exchangeRates: z.array(z.record(z.string(), z.unknown())),
+    fixedCosts: z.array(z.record(z.string(), z.unknown())),
+    documents: z.array(z.record(z.string(), z.unknown())),
+  }),
+});
 
 /**
  * Creates a complete backup of all database tables
@@ -59,7 +81,10 @@ export async function createBackup(): Promise<BackupData> {
  * @param backup - Backup data to restore
  * @returns Number of records restored per table
  */
-export async function restoreBackup(backup: BackupData): Promise<{
+export async function restoreBackup(
+  backup: BackupData,
+  strategy: "merge" | "replace" = "merge"
+): Promise<{
   customers: number;
   timeEntries: number;
   expenses: number;
@@ -67,52 +92,107 @@ export async function restoreBackup(backup: BackupData): Promise<{
   fixedCosts: number;
   documents: number;
 }> {
+  const parsedBackup = BackupSchema.safeParse(backup);
+  if (!parsedBackup.success) {
+    throw new Error(`Ungültiges Backup-Format: ${parsedBackup.error.message}`);
+  }
+
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
 
-  // Note: This is a simple restore that inserts data
-  // In production, you might want to clear tables first or handle conflicts
-  
-  const results = {
-    customers: 0,
-    timeEntries: 0,
-    expenses: 0,
-    exchangeRates: 0,
-    fixedCosts: 0,
-    documents: 0,
-  };
+  const normalized = parsedBackup.data;
+  const payload = normalized.data;
 
-  if (backup.data.customers.length > 0) {
-    await db.insert(customers).values(backup.data.customers);
-    results.customers = backup.data.customers.length;
-  }
+  return await db.transaction(async (tx) => {
+    const results = {
+      customers: 0,
+      timeEntries: 0,
+      expenses: 0,
+      exchangeRates: 0,
+      fixedCosts: 0,
+      documents: 0,
+    };
 
-  if (backup.data.timeEntries.length > 0) {
-    await db.insert(timeEntries).values(backup.data.timeEntries);
-    results.timeEntries = backup.data.timeEntries.length;
-  }
+    if (strategy === "replace") {
+      await tx.delete(documents);
+      await tx.delete(expenses);
+      await tx.delete(timeEntries);
+      await tx.delete(fixedCosts);
+      await tx.delete(exchangeRates);
+      await tx.delete(customers);
+    }
 
-  if (backup.data.expenses.length > 0) {
-    await db.insert(expenses).values(backup.data.expenses);
-    results.expenses = backup.data.expenses.length;
-  }
+    if (payload.customers.length > 0) {
+      const ids = payload.customers
+        .map((row) => Number((row as Record<string, unknown>)?.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+      if (ids.length > 0) {
+        await tx.delete(customers).where(inArray(customers.id, ids));
+      }
+      await tx.insert(customers).values(payload.customers as any[]);
+      results.customers = payload.customers.length;
+    }
 
-  if (backup.data.exchangeRates.length > 0) {
-    await db.insert(exchangeRates).values(backup.data.exchangeRates);
-    results.exchangeRates = backup.data.exchangeRates.length;
-  }
+    if (payload.timeEntries.length > 0) {
+      const ids = payload.timeEntries
+        .map((row) => Number((row as Record<string, unknown>)?.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+      if (ids.length > 0) {
+        await tx.delete(timeEntries).where(inArray(timeEntries.id, ids));
+      }
+      await tx.insert(timeEntries).values(payload.timeEntries as any[]);
+      results.timeEntries = payload.timeEntries.length;
+    }
 
-  if (backup.data.fixedCosts.length > 0) {
-    await db.insert(fixedCosts).values(backup.data.fixedCosts);
-    results.fixedCosts = backup.data.fixedCosts.length;
-  }
+    if (payload.expenses.length > 0) {
+      const ids = payload.expenses
+        .map((row) => Number((row as Record<string, unknown>)?.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+      if (ids.length > 0) {
+        await tx.delete(expenses).where(inArray(expenses.id, ids));
+      }
+      await tx.insert(expenses).values(payload.expenses as any[]);
+      results.expenses = payload.expenses.length;
+    }
 
-  if (backup.data.documents.length > 0) {
-    await db.insert(documents).values(backup.data.documents);
-    results.documents = backup.data.documents.length;
-  }
+    if (payload.exchangeRates.length > 0) {
+      if (strategy === "merge") {
+        for (const row of payload.exchangeRates) {
+          await tx
+            .insert(exchangeRates)
+            .values(row as any)
+            .onDuplicateKeyUpdate({ set: row as any });
+        }
+      } else {
+        await tx.insert(exchangeRates).values(payload.exchangeRates as any[]);
+      }
+      results.exchangeRates = payload.exchangeRates.length;
+    }
 
-  return results;
+    if (payload.fixedCosts.length > 0) {
+      const ids = payload.fixedCosts
+        .map((row) => Number((row as Record<string, unknown>)?.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+      if (ids.length > 0) {
+        await tx.delete(fixedCosts).where(inArray(fixedCosts.id, ids));
+      }
+      await tx.insert(fixedCosts).values(payload.fixedCosts as any[]);
+      results.fixedCosts = payload.fixedCosts.length;
+    }
+
+    if (payload.documents.length > 0) {
+      const ids = payload.documents
+        .map((row) => Number((row as Record<string, unknown>)?.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+      if (ids.length > 0) {
+        await tx.delete(documents).where(inArray(documents.id, ids));
+      }
+      await tx.insert(documents).values(payload.documents as any[]);
+      results.documents = payload.documents.length;
+    }
+
+    return results;
+  });
 }
