@@ -3470,7 +3470,7 @@ export const appRouter = router({
 
   // Database export/import
   database: router({
-    export: adminOrMandantAdminProcedure.mutation(async ({ ctx }) => {
+    export: adminProcedure.mutation(async ({ ctx }) => {
       if (isWebAppAdmin(ctx.user)) {
         // Blind admin operation: execution allowed, domain data is not exposed.
         return { success: true, message: "Export ausgefuehrt (blind)" };
@@ -3771,7 +3771,7 @@ export const appRouter = router({
         },
       };
     }),
-    import: adminOrMandantAdminProcedure.input((val: unknown) => {
+    import: adminProcedure.input((val: unknown) => {
       return z.object({
         backup: z.any(),
         strategy: z.enum(["merge", "replace"]).optional().default("merge"),

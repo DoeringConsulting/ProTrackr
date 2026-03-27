@@ -428,6 +428,7 @@ export async function deleteDocument(id: number) {
   if (!db) throw new Error("Database not available");
   const { documents } = await import("../drizzle/schema");
   await db.delete(documents).where(eq(documents.id, id));
+  return { deleted: true };
 }
 
 // ⚠️ User queries removed (auth disabled for development)
