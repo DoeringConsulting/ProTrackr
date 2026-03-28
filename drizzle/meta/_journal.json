@@ -148,6 +148,13 @@
       "when": 1774650300000,
       "tag": "0020_fk_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1775000000000,
+      "tag": "0021_expenses_add_mileage_allowance",
+      "breakpoints": true
     }
   ]
 }

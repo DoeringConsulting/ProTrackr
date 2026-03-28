@@ -16,6 +16,7 @@ export type ExpenseCategory =
   | "flight"
   | "taxi"
   | "transport"
+  | "mileage_allowance"
   | "meal"
   | "hotel"
   | "food"
@@ -80,6 +81,11 @@ const CATEGORY_ALIASES: Record<string, ExpenseCategory> = {
   uber: "taxi",
   bolt: "taxi",
   transport: "transport",
+  kilometerpauschale: "mileage_allowance",
+  km_pauschale: "mileage_allowance",
+  mileage_allowance: "mileage_allowance",
+  zugfernverkehr: "transport",
+  fernverkehr: "transport",
   meal: "meal",
   food: "food",
   hotel: "hotel",
@@ -108,7 +114,7 @@ const CURRENCY_ALIASES: Record<string, string> = {
 const RECEIPT_EXTRACTION_GUIDE = `
 Du bist eine Extraktions-Engine für Reisekosten.
 Arbeite strikt nach diesem Gerüst:
-- category: car|train|flight|taxi|transport|meal|hotel|food|fuel|other
+- category: car|train|flight|taxi|transport|mileage_allowance|meal|hotel|food|fuel|other
 - amount: Gesamtbetrag in Hauptwährung (z. B. 123.45)
 - currency: ISO-3 Code (EUR, PLN, USD, ...)
 - date: Leistungs-/Belegdatum (YYYY-MM-DD)

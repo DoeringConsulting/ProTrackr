@@ -140,6 +140,7 @@ export const expenses = mysqlTable("expenses", {
     "flight",        // Flug
     "taxi",          // Taxi
     "transport",     // Transport (legacy, wird zu taxi migriert)
+    "mileage_allowance", // Kilometerpauschale (km * Satz)
     "hotel",         // Hotel
     "fuel",          // Tanken
     "meal",          // Bewirtung

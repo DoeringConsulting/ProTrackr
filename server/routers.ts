@@ -221,6 +221,7 @@ function tryShiftDateValue(value: unknown, scope: CopyScope): string | undefined
 
 const expenseCategoryValues = [
   "car",
+  "mileage_allowance",
   "train",
   "flight",
   "taxi",

@@ -69,10 +69,11 @@ const WORK_TYPE_LABELS = {
 
 const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   car: "Auto",
+  mileage_allowance: "Kilometerpauschale",
   train: "ÖPNV",
   flight: "Flug",
   taxi: "Taxi",
-  transport: "Transport",
+  transport: "Zug/Fernverkehr",
   meal: "Verpflegung",
   hotel: "Hotel",
   food: "Essen",
@@ -214,6 +215,8 @@ export default function TimeTracking() {
   const [tempExpenseCurrency, setTempExpenseCurrency] = useState('EUR');
   const [tempExpenseComment, setTempExpenseComment] = useState('');
   const [tempExpenseDate, setTempExpenseDate] = useState('');
+  const [tempDistanceKm, setTempDistanceKm] = useState('');
+  const [tempRatePerKm, setTempRatePerKm] = useState('');
   const [tempFlightReturnDate, setTempFlightReturnDate] = useState('');
   const [tempFlightRouteType, setTempFlightRouteType] = useState<'domestic' | 'international'>('domestic');
   const [tempFlightTravelStart, setTempFlightTravelStart] = useState('');
@@ -336,6 +339,8 @@ export default function TimeTracking() {
     setTempExpenseCurrency("EUR");
     setTempExpenseComment("");
     setTempExpenseDate(defaultDate);
+    setTempDistanceKm("");
+    setTempRatePerKm("");
     setTempFlightReturnDate("");
     setTempFlightRouteType("domestic");
     setTempFlightTravelStart("");
@@ -617,6 +622,10 @@ export default function TimeTracking() {
     tempHotelCheckInDate && Number(tempHotelNights) >= 0
       ? addDays(tempHotelCheckInDate, Number(tempHotelNights))
       : "";
+  const computedMileageAmount =
+    tempDistanceKm && tempRatePerKm
+      ? Math.round(Number(tempDistanceKm || "0") * Number(tempRatePerKm || "0") * 100) / 100
+      : null;
 
   return (
     <DashboardLayout>
@@ -873,6 +882,16 @@ export default function TimeTracking() {
                                   setTempExpenseCategory(expense.category);
                                   setTempExpenseCurrency(expense.currency || 'EUR');
                                   setTempExpenseComment(expense.comment || '');
+                                  setTempDistanceKm(
+                                    expense.distance !== null && expense.distance !== undefined
+                                      ? String(expense.distance)
+                                      : ""
+                                  );
+                                  setTempRatePerKm(
+                                    expense.rate !== null && expense.rate !== undefined
+                                      ? (Number(expense.rate) / 100).toFixed(2)
+                                      : ""
+                                  );
                                   const expenseDateKey = getDateKey(expense.date ? expense.date : day);
                                   setTempExpenseDate(expenseDateKey);
                                   setTempFlightReturnDate(
@@ -1184,8 +1203,10 @@ export default function TimeTracking() {
                   e.preventDefault();
 
                   if (!tempExpenseAmount) {
-                    toast.error('Bitte Betrag eingeben');
-                    return;
+                    if (tempExpenseCategory !== "mileage_allowance") {
+                      toast.error('Bitte Betrag eingeben');
+                      return;
+                    }
                   }
 
                   const normalizedPrimaryDate = tempExpenseDate || formatLocalDate(selectedExpenseDate!);
@@ -1195,7 +1216,13 @@ export default function TimeTracking() {
 
                   const payloadBase: any = {
                     category: tempExpenseCategory as any,
-                    amount: Math.round(parseFloat(tempExpenseAmount) * 100),
+                    amount: Math.round(
+                      parseFloat(
+                        tempExpenseCategory === "mileage_allowance"
+                          ? String(computedMileageAmount ?? 0)
+                          : tempExpenseAmount
+                      ) * 100
+                    ),
                     currency: tempExpenseCurrency,
                     comment: tempExpenseComment || undefined,
                     fullDay: tempFullDay,
@@ -1217,6 +1244,14 @@ export default function TimeTracking() {
                     payloadBase.date = hotelCheckIn;
                     payloadBase.checkInDate = hotelCheckIn;
                     payloadBase.checkOutDate = hotelCheckOut;
+                  } else if (tempExpenseCategory === "mileage_allowance") {
+                    if (!tempDistanceKm || !tempRatePerKm || !computedMileageAmount || computedMileageAmount <= 0) {
+                      toast.error("Bitte Kilometer und Kilometerpauschale eingeben");
+                      return;
+                    }
+                    payloadBase.date = normalizedPrimaryDate;
+                    payloadBase.distance = Math.round(Number(tempDistanceKm));
+                    payloadBase.rate = Math.round(Number(tempRatePerKm) * 100);
                   } else {
                     payloadBase.date = normalizedPrimaryDate;
                   }
@@ -1284,10 +1319,11 @@ export default function TimeTracking() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="car">Mietwagen</SelectItem>
+                        <SelectItem value="mileage_allowance">Kilometerpauschale</SelectItem>
                         <SelectItem value="train">ÖPNV</SelectItem>
                         <SelectItem value="flight">Flug</SelectItem>
                         <SelectItem value="taxi">Taxi</SelectItem>
-                        <SelectItem value="transport">Sonstiger Transport</SelectItem>
+                        <SelectItem value="transport">Zug/Fernverkehr</SelectItem>
                         <SelectItem value="hotel">Hotel</SelectItem>
                         <SelectItem value="food">Gastronomie</SelectItem>
                         <SelectItem value="meal">Verpflegungspauschale</SelectItem>
@@ -1297,6 +1333,42 @@ export default function TimeTracking() {
                     </Select>
                   </div>
                 </div>
+                {tempExpenseCategory === "mileage_allowance" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="expense-distance-km">Distanz (km)</Label>
+                        <Input
+                          id="expense-distance-km"
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="z.B. 150"
+                          value={tempDistanceKm}
+                          onChange={(e) => setTempDistanceKm(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="expense-rate-km">Kilometerpauschale (€/km)</Label>
+                        <Input
+                          id="expense-rate-km"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="z.B. 0.30"
+                          value={tempRatePerKm}
+                          onChange={(e) => setTempRatePerKm(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                      Berechneter Betrag:{" "}
+                      <strong>
+                        {computedMileageAmount !== null ? computedMileageAmount.toFixed(2) : "0.00"} {tempExpenseCurrency}
+                      </strong>
+                    </div>
+                  </>
+                )}
                 {tempExpenseCategory === "flight" && (
                   <>
                     <div className="space-y-2">

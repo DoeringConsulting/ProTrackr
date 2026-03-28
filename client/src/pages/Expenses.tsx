@@ -21,12 +21,15 @@ type ExpenseSortKey = "date" | "category" | "amount" | "currency" | "details" | 
 
 const CATEGORY_LABELS: Record<string, string> = {
   car: "Mietwagen",
+  mileage_allowance: "Kilometerpauschale",
   train: "ÖPNV",
   flight: "Flug",
   taxi: "Taxi",
+  transport: "Zug/Fernverkehr",
   hotel: "Hotel",
   fuel: "Kraftstoff",
   meal: "Bewirtung",
+  food: "Gastronomie",
   other: "Sonstiges",
 };
 

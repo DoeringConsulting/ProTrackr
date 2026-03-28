@@ -48,7 +48,18 @@ export type ExpenseImportRow = {
   mandantenNr: string;
   projectName: string;
   date: string;
-  category: "car" | "train" | "flight" | "taxi" | "transport" | "meal" | "hotel" | "food" | "fuel" | "other";
+  category:
+    | "car"
+    | "mileage_allowance"
+    | "train"
+    | "flight"
+    | "taxi"
+    | "transport"
+    | "meal"
+    | "hotel"
+    | "food"
+    | "fuel"
+    | "other";
   amount: number;
   currency: string;
   fullDay: "0" | "1" | "";
@@ -285,6 +296,7 @@ const REQUIRED_EXPENSE_COLUMNS = [
 const ENTRY_TYPES = new Set(["onsite", "remote", "off_duty", "business_trip"]);
 const EXPENSE_CATEGORIES = new Set([
   "car",
+  "mileage_allowance",
   "train",
   "flight",
   "taxi",

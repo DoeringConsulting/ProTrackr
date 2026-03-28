@@ -33,11 +33,12 @@ const EXPENSE_CATEGORY_LABELS: Record<
   string,
   { de: string; en: string; pl: string }
 > = {
-  car: { de: "Mietwagen", en: "Car", pl: "Auto" },
-  train: { de: "ÖPNV", en: "Train", pl: "Pociag" },
+  car: { de: "Mietwagen", en: "Rental car", pl: "Auto" },
+  train: { de: "ÖPNV", en: "Local transit", pl: "Transport lokalny" },
   flight: { de: "Flug", en: "Flight", pl: "Lot" },
   taxi: { de: "Taxi", en: "Taxi", pl: "Taxi" },
-  transport: { de: "Transport", en: "Transport", pl: "Transport" },
+  transport: { de: "Zug/Fernverkehr", en: "Long-distance rail", pl: "Pociag dalekobiezny" },
+  mileage_allowance: { de: "Kilometerpauschale", en: "Mileage allowance", pl: "Ryczalt kilometrowy" },
   hotel: { de: "Hotel", en: "Hotel", pl: "Hotel" },
   meal: { de: "Verpflegung", en: "Meal", pl: "Posilek" },
   food: { de: "Gastronomie", en: "Food", pl: "Gastronomia" },
