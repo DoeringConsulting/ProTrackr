@@ -11,12 +11,12 @@ type ExpenseCategory = "car" | "train" | "flight" | "taxi" | "transport" | "hote
 
 const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   car: "Mietwagen",
-  train: "ÖPNV",
+  train: "Zug/Fernverkehr",
   flight: "Flug",
   taxi: "Taxi",
-  transport: "Sonstiger Transport",
+  transport: "ÖPNV",
   hotel: "Hotel",
-  food: "Gastronomie",
+  food: "Lebensmittel",
   meal_allowance: "Verpflegungspauschale",
   fuel: "Kraftstoff",
   other: "Sonstiges",

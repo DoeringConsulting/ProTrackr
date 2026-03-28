@@ -142,13 +142,13 @@ function getExpenseCategoryPl(category: string) {
     hotel: "Hotel",
     flight: "Lot",
     taxi: "Taxi",
-    train: "Pociag",
+    train: "Pociag dalekobiezny",
     car: "Samochod",
-    transport: "Pociag dalekobiezny",
+    transport: "Transport lokalny (MZK)",
     mileage_allowance: "Ryczalt kilometrowy",
     fuel: "Paliwo",
     meal: "Posilek",
-    food: "Gastronomia",
+    food: "Produkty spozywcze",
     other: "Inne",
   };
   return map[category] || category;

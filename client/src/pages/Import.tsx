@@ -37,7 +37,7 @@ const AI_BATCH_MAX_FILES = 200;
 const AI_BATCH_UPLOAD_CHUNK_SIZE = 20;
 const AI_RECEIPT_SCAFFOLD = [
   "REISEKOSTEN-GERUEST (optional fuer bessere KI-Erkennung)",
-  "beleg_art: flight|hotel|taxi|train|car|transport|mileage|fuel|meal|other",
+  "beleg_art: flight|hotel|taxi|transport(ÖPNV)|train(Zug/Fernverkehr)|car|mileage|fuel|meal|food|other",
   "betrag_gesamt: 0.00",
   "waehrung: EUR|PLN|USD",
   "datum: YYYY-MM-DD",

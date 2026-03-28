@@ -23,14 +23,14 @@ type FilterPeriod = "month" | "year" | "lifetime" | "average";
 const CATEGORY_LABELS: Record<string, string> = {
   car: "Mietwagen",
   mileage_allowance: "Kilometerpauschale",
-  train: "ÖPNV",
+  train: "Zug/Fernverkehr",
   flight: "Flug",
   taxi: "Taxi",
-  transport: "Zug/Fernverkehr",
+  transport: "ÖPNV",
   hotel: "Hotel",
   fuel: "Kraftstoff",
   meal: "Bewirtung",
-  food: "Gastronomie",
+  food: "Lebensmittel",
   other: "Sonstiges",
 };
 

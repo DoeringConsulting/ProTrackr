@@ -70,13 +70,13 @@ const WORK_TYPE_LABELS = {
 const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   car: "Auto",
   mileage_allowance: "Kilometerpauschale",
-  train: "ÖPNV",
+  train: "Zug/Fernverkehr",
   flight: "Flug",
   taxi: "Taxi",
-  transport: "Zug/Fernverkehr",
+  transport: "ÖPNV",
   meal: "Verpflegung",
   hotel: "Hotel",
-  food: "Essen",
+  food: "Lebensmittel",
   fuel: "Kraftstoff",
   other: "Sonstiges",
 };
@@ -1320,12 +1320,12 @@ export default function TimeTracking() {
                       <SelectContent>
                         <SelectItem value="car">Mietwagen</SelectItem>
                         <SelectItem value="mileage_allowance">Kilometerpauschale</SelectItem>
-                        <SelectItem value="train">ÖPNV</SelectItem>
+                        <SelectItem value="train">Zug/Fernverkehr</SelectItem>
                         <SelectItem value="flight">Flug</SelectItem>
                         <SelectItem value="taxi">Taxi</SelectItem>
-                        <SelectItem value="transport">Zug/Fernverkehr</SelectItem>
+                        <SelectItem value="transport">ÖPNV</SelectItem>
                         <SelectItem value="hotel">Hotel</SelectItem>
-                        <SelectItem value="food">Gastronomie</SelectItem>
+                        <SelectItem value="food">Lebensmittel</SelectItem>
                         <SelectItem value="meal">Verpflegungspauschale</SelectItem>
                         <SelectItem value="fuel">Kraftstoff</SelectItem>
                         <SelectItem value="other">Sonstiges</SelectItem>
