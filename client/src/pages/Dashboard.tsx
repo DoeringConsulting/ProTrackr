@@ -380,10 +380,21 @@ export default function Dashboard() {
       }
     }
 
+    const revenuePln =
+      revenueEur > 0 ? convertAmountCents(revenueEur, "EUR", "PLN", rateMap) ?? revenueEur : 0;
+    const fixedCostsPln =
+      fixedCostsEur > 0
+        ? convertAmountCents(fixedCostsEur, "EUR", "PLN", rateMap) ?? fixedCostsEur
+        : 0;
+    const variableCostsPln =
+      variableCostsEur > 0
+        ? convertAmountCents(variableCostsEur, "EUR", "PLN", rateMap) ?? variableCostsEur
+        : 0;
+
     const taxResult = calculatePolishTaxResult({
-      revenueCents: revenueEur,
-      fixedCostsCents: fixedCostsEur,
-      variableCostsCents: variableCostsEur,
+      revenueCents: revenuePln,
+      fixedCostsCents: fixedCostsPln,
+      variableCostsCents: variableCostsPln,
       startDate: rangeStart,
       endDate: rangeEnd,
       profile: taxProfile
@@ -413,6 +424,16 @@ export default function Dashboard() {
       legacySettings: taxSettings,
     });
 
+    const convertPlnToTarget = (amountPlnCents: number): number => {
+      if (targetCurrency === "PLN") return amountPlnCents;
+      const converted = convertAmountCents(amountPlnCents, "PLN", targetCurrency, rateMap);
+      if (converted === null) {
+        missingRates += 1;
+        return 0;
+      }
+      return converted;
+    };
+
     if (showUnifiedCurrency) {
       const convertEurToTarget = (amountCents: number) => {
         if (targetCurrency === "EUR") return amountCents;
@@ -427,13 +448,24 @@ export default function Dashboard() {
       const unifiedData: CostSlice[] = [
         { name: "Fixkosten", value: convertEurToTarget(fixedCostsEur) / 100, color: "#048998", chartCurrency: targetCurrency },
         { name: "Reisekosten", value: convertEurToTarget(variableCostsEur) / 100, color: "#06a5b6", chartCurrency: targetCurrency },
-        { name: "ZUS", value: convertEurToTarget(taxResult.zus) / 100, color: "#036d79", chartCurrency: targetCurrency },
-        { name: "Krankenvers.", value: convertEurToTarget(taxResult.healthInsurance) / 100, color: "#dbbe76", chartCurrency: targetCurrency },
-        { name: "Steuer", value: convertEurToTarget(taxResult.tax) / 100, color: "#b98847", chartCurrency: targetCurrency },
+        { name: "ZUS", value: convertPlnToTarget(taxResult.zus) / 100, color: "#036d79", chartCurrency: targetCurrency },
+        {
+          name: "Krankenvers.",
+          value: convertPlnToTarget(taxResult.healthInsurance) / 100,
+          color: "#dbbe76",
+          chartCurrency: targetCurrency,
+        },
+        { name: "Steuer", value: convertPlnToTarget(taxResult.tax) / 100, color: "#b98847", chartCurrency: targetCurrency },
       ];
 
       return { data: unifiedData, missingRates };
     }
+
+    const zusEurCents = convertAmountCents(taxResult.zus, "PLN", "EUR", rateMap) ?? taxResult.zus;
+    const kvEurCents =
+      convertAmountCents(taxResult.healthInsurance, "PLN", "EUR", rateMap) ??
+      taxResult.healthInsurance;
+    const steuerEurCents = convertAmountCents(taxResult.tax, "PLN", "EUR", rateMap) ?? taxResult.tax;
 
     const data: CostSlice[] = [];
     const sortedFixed = Array.from(fixedByCurrencyOriginal.entries()).sort((a, b) => b[1] - a[1]);
@@ -464,14 +496,30 @@ export default function Dashboard() {
     });
 
     data.push(
-      { name: "ZUS (EUR)", value: taxResult.zus / 100, color: "#036d79", chartCurrency: "EUR" },
       {
-        name: "Krankenvers. (EUR)",
-        value: taxResult.healthInsurance / 100,
+        name: "ZUS (PLN)",
+        value: zusEurCents / 100,
+        color: "#036d79",
+        chartCurrency: "EUR",
+        originalCurrency: "PLN",
+        originalAmountCents: taxResult.zus,
+      },
+      {
+        name: "Krankenvers. (PLN)",
+        value: kvEurCents / 100,
         color: "#dbbe76",
         chartCurrency: "EUR",
+        originalCurrency: "PLN",
+        originalAmountCents: taxResult.healthInsurance,
       },
-      { name: "Steuer (EUR)", value: taxResult.tax / 100, color: "#b98847", chartCurrency: "EUR" }
+      {
+        name: "Steuer (PLN)",
+        value: steuerEurCents / 100,
+        color: "#b98847",
+        chartCurrency: "EUR",
+        originalCurrency: "PLN",
+        originalAmountCents: taxResult.tax,
+      }
     );
 
     return { data, missingRates };
