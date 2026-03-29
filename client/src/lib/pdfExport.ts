@@ -3,12 +3,29 @@ import autoTable from "jspdf-autotable";
 
 /**
  * Sanitize text for jsPDF default (WinAnsiEncoding) fonts.
- * Replaces non-breaking spaces (U+00A0) with regular spaces so that
- * jsPDF does not fall back to UCS-2 encoding, which can produce garbled
- * output (e.g. "&" or spaces between every letter) in some PDF viewers.
+ * Transliterates Polish diacritics and strips non-WinAnsi Unicode characters
+ * to prevent UCS-2 fallback which renders "&" between every letter.
  */
 function sanitizeForPdf(value: string): string {
-  return value.replace(/\u00A0/g, " ");
+  return (
+    value
+      .replace(/[Ąą]/g, (c) => (c === "Ą" ? "A" : "a"))
+      .replace(/[Ćć]/g, (c) => (c === "Ć" ? "C" : "c"))
+      .replace(/[Ęę]/g, (c) => (c === "Ę" ? "E" : "e"))
+      .replace(/[Łł]/g, (c) => (c === "Ł" ? "L" : "l"))
+      .replace(/[Ńń]/g, (c) => (c === "Ń" ? "N" : "n"))
+      .replace(/[Óó]/g, (c) => (c === "Ó" ? "O" : "o"))
+      .replace(/[Śś]/g, (c) => (c === "Ś" ? "S" : "s"))
+      .replace(/[Źź]/g, (c) => (c === "Ź" ? "Z" : "z"))
+      .replace(/[Żż]/g, (c) => (c === "Ż" ? "Z" : "z"))
+      .replace(/[\u00A0\u2002\u2003\u2007\u2009\u200A\u202F\u205F]/g, " ")
+      .replace(/[\u2018\u2019\u201A]/g, "'")
+      .replace(/[\u201C\u201D\u201E]/g, '"')
+      .replace(/\u2013/g, "-")
+      .replace(/\u2014/g, "--")
+      .replace(/\u2026/g, "...")
+      .replace(/[^\x00-\xFF]/g, "")
+  );
 }
 
 interface AccountingData {

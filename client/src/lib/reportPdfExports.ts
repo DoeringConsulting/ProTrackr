@@ -55,12 +55,43 @@ type AppliedExchangeRate = {
 
 /**
  * Sanitize text for jsPDF default (WinAnsiEncoding) fonts.
- * Replaces non-breaking spaces (U+00A0) with regular spaces so that
- * jsPDF does not fall back to UCS-2 encoding, which can produce garbled
- * output (e.g. "&" or spaces between every letter) in some PDF viewers.
+ *
+ * WinAnsiEncoding covers ASCII 0x20-0x7E plus selected chars in 0x80-0xFF
+ * (German umlauts, accented Latin chars, etc.).  Characters outside that set
+ * — Polish diacritics, non-breaking spaces, smart quotes, em/en dashes,
+ * ellipsis, etc. — cause jsPDF to fall back to UCS-2 encoding which renders
+ * every character separated by "&".
+ *
+ * This function transliterates or strips all problematic codepoints so the
+ * default Helvetica font can handle the entire string.
  */
 function sanitizeForPdf(value: string): string {
-  return value.replace(/\u00A0/g, " ");
+  return (
+    value
+      // Polish diacritics → ASCII equivalents (upper & lower)
+      .replace(/[Ąą]/g, (c) => (c === "Ą" ? "A" : "a"))
+      .replace(/[Ćć]/g, (c) => (c === "Ć" ? "C" : "c"))
+      .replace(/[Ęę]/g, (c) => (c === "Ę" ? "E" : "e"))
+      .replace(/[Łł]/g, (c) => (c === "Ł" ? "L" : "l"))
+      .replace(/[Ńń]/g, (c) => (c === "Ń" ? "N" : "n"))
+      .replace(/[Óó]/g, (c) => (c === "Ó" ? "O" : "o"))
+      .replace(/[Śś]/g, (c) => (c === "Ś" ? "S" : "s"))
+      .replace(/[Źź]/g, (c) => (c === "Ź" ? "Z" : "z"))
+      .replace(/[Żż]/g, (c) => (c === "Ż" ? "Z" : "z"))
+      // Non-breaking & special Unicode spaces → regular space
+      .replace(/[\u00A0\u2002\u2003\u2007\u2009\u200A\u202F\u205F]/g, " ")
+      // Smart quotes → straight quotes
+      .replace(/[\u2018\u2019\u201A]/g, "'")
+      .replace(/[\u201C\u201D\u201E]/g, '"')
+      // Dashes
+      .replace(/\u2013/g, "-") // en dash
+      .replace(/\u2014/g, "--") // em dash
+      // Ellipsis
+      .replace(/\u2026/g, "...")
+      // Strip any remaining non-WinAnsi characters (codepoints > 0xFF that
+      // were not already handled above).
+      .replace(/[^\x00-\xFF]/g, "")
+  );
 }
 
 /** PDF-safe formatMoney: sanitizes output for jsPDF default fonts. */
@@ -238,9 +269,9 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     body: input.entries.map((entry) => [
       formatDateDe(entry.date),
       getPolishWeekday(entry.weekday),
-      entry.projectName || "-",
-      entry.provider || "-",
-      entry.location || "-",
+      sanitizeForPdf(entry.projectName || "-"),
+      sanitizeForPdf(entry.provider || "-"),
+      sanitizeForPdf(entry.location || "-"),
       getEntryTypePl(entry.entryType || "-"),
       formatHours(entry.hours),
       formatManDays(entry.manDays),
@@ -268,9 +299,9 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     body: sortedExpenses.map((exp) => [
       formatDateDe(exp.date),
       exp.endDate ? formatDateDe(exp.endDate) : formatDateDe(exp.date),
-      getExpenseCategoryPl(exp.category),
-      `${exp.projectName || "-"} / ${exp.provider || "-"}`,
-      getExpenseDetailLabel(exp),
+      sanitizeForPdf(getExpenseCategoryPl(exp.category)),
+      sanitizeForPdf(`${exp.projectName || "-"} / ${exp.provider || "-"}`),
+      sanitizeForPdf(getExpenseDetailLabel(exp)),
       formatMoney(exp.amount, exp.currency),
       exp.amountEur === null ? "Brak kursu" : formatMoney(exp.amountEur, "EUR"),
       exp.amountPln === null ? "Brak kursu" : formatMoney(exp.amountPln, "PLN"),
@@ -278,16 +309,18 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     ]),
     styles: { fontSize: 8, overflow: "linebreak" },
     headStyles: { fillColor: [185, 136, 71] },
+    tableWidth: doc.internal.pageSize.getWidth() - 28,
+    margin: { left: 14 },
     columnStyles: {
-      0: { cellWidth: 20 },
-      1: { cellWidth: 20 },
-      2: { cellWidth: 22 },
-      3: { cellWidth: 30 },
-      4: { cellWidth: 22 },
-      5: { cellWidth: 22 },
-      6: { cellWidth: 22 },
-      7: { cellWidth: 22 },
-      8: { cellWidth: "auto" },
+      0: { cellWidth: 22 },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 25 },
+      3: { cellWidth: 35 },
+      4: { cellWidth: 40 },
+      5: { cellWidth: 25 },
+      6: { cellWidth: 25 },
+      7: { cellWidth: 25 },
+      8: { cellWidth: 50 },
     },
   });
 
@@ -586,7 +619,7 @@ export async function exportCustomerCostStatementToPDF(input: {
       formatManDays(row.manDays),
       formatMoney(row.serviceAmount, input.customerCurrency),
       formatMoney(row.travelAmount, input.customerCurrency),
-      row.travelCategories || "-",
+      sanitizeForPdf(row.travelCategories || "-"),
     ]),
     styles: { fontSize: 8 },
     headStyles: { fillColor: [3, 109, 121] },

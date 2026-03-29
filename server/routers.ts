@@ -1311,7 +1311,7 @@ export const appRouter = router({
       const sourceEndKey = formatDateKeyLocal(end);
 
       const sourceEntries = await getTimeEntries(ctx.user.id, start, end);
-      const sourceExpenses = await getAllExpenses(ctx.user.id, sourceStartKey, sourceEndKey);
+      const sourceExpenses = await getAllExpenses(ctx.user.id, start, end);
 
       if (sourceEntries.length === 0 && sourceExpenses.length === 0) {
         return {
@@ -1437,17 +1437,20 @@ export const appRouter = router({
         return [];
       }
 
+      const startDate = input.startDate ? new Date(input.startDate) : undefined;
+      const endDate = input.endDate ? new Date(input.endDate) : undefined;
+
       if (isMandantAdmin(ctx.user) && ctx.user.mandantId) {
         const mandantUsers = await listUsersByMandantId(ctx.user.mandantId);
         const result = await Promise.all(
           mandantUsers.map((user) =>
-            getAllExpenses(user.id, input.startDate, input.endDate)
+            getAllExpenses(user.id, startDate, endDate)
           )
         );
         return result.flat();
       }
 
-      return await getAllExpenses(ctx.user.id, input.startDate, input.endDate);
+      return await getAllExpenses(ctx.user.id, startDate, endDate);
     }),
     listByTimeEntry: protectedProcedure.input((val: unknown) => {
       return z.object({ timeEntryId: z.number() }).parse(val);

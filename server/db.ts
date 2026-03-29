@@ -11,6 +11,28 @@ function localDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Return the UTC ISO string for the start of `date`'s calendar day in LOCAL
+ * timezone.  Used for range-start filters on TIMESTAMP columns: the DB
+ * stores UTC, so we need the UTC instant that corresponds to local midnight.
+ *
+ * Example (Europe/Warsaw, CEST UTC+2):
+ *   localDayStartUtc(new Date("2026-03-01")) → "2026-02-28T23:00:00.000Z"
+ */
+function localDayStartUtc(date: Date): string {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString();
+}
+
+/**
+ * Return the UTC ISO string for the start of the NEXT calendar day in LOCAL
+ * timezone.  Used for exclusive range-end filters (`< nextDay`) on TIMESTAMP
+ * columns so that "endDate = March 31" excludes anything that falls on
+ * April 1 in the user's timezone.
+ */
+function localNextDayStartUtc(date: Date): string {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).toISOString();
+}
+
 let _db: ReturnType<typeof drizzle> | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
@@ -181,10 +203,10 @@ export async function getTimeEntries(userId: number, startDate?: Date, endDate?:
   const conditions = [eq(timeEntries.userId, userId)];
   
   if (startDate) {
-    conditions.push(sql`DATE(${timeEntries.date}) >= ${localDateKey(startDate)}`);
+    conditions.push(sql`${timeEntries.date} >= ${localDayStartUtc(startDate)}`);
   }
   if (endDate) {
-    conditions.push(sql`DATE(${timeEntries.date}) <= ${localDateKey(endDate)}`);
+    conditions.push(sql`${timeEntries.date} < ${localNextDayStartUtc(endDate)}`);
   }
   
   return await db.select().from(timeEntries).where(and(...conditions)).orderBy(desc(timeEntries.date));
@@ -396,18 +418,16 @@ export async function getExpensesByCustomer(userId: number, customerId: number, 
   const { expenses, timeEntries } = await import("../drizzle/schema");
   const conditions = [eq(timeEntries.userId, userId), eq(timeEntries.customerId, customerId)];
   if (startDate) {
-    const startKey = localDateKey(startDate);
     conditions.push(
-      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) >= ${startKey}`
+      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) >= ${localDayStartUtc(startDate)}`
     );
   }
   if (endDate) {
-    const endKey = localDateKey(endDate);
     conditions.push(
-      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) <= ${endKey}`
+      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
     );
   }
-  
+
   // Join expenses with timeEntries to filter by customerId
   const result = await db
     .select({
@@ -568,10 +588,10 @@ export async function getExchangeRates(filters?: {
   }
 
   if (filters?.startDate) {
-    conditions.push(sql`DATE(${exchangeRates.date}) >= ${localDateKey(filters.startDate)}`);
+    conditions.push(sql`${exchangeRates.date} >= ${localDayStartUtc(filters.startDate)}`);
   }
   if (filters?.endDate) {
-    conditions.push(sql`DATE(${exchangeRates.date}) <= ${localDateKey(filters.endDate)}`);
+    conditions.push(sql`${exchangeRates.date} < ${localNextDayStartUtc(filters.endDate)}`);
   }
   if (filters?.currency) {
     conditions.push(sql`${exchangeRates.currencyPair} LIKE ${`${filters.currency.toUpperCase()}/%`}`);
@@ -713,22 +733,22 @@ export async function createExpense(data: any) {
   return result;
 }
 
-export async function getAllExpenses(userId: number, startDate?: string, endDate?: string) {
+export async function getAllExpenses(userId: number, startDate?: Date, endDate?: Date) {
   const db = await getDb();
   if (!db) return [];
   const { expenses, timeEntries } = await import("../drizzle/schema");
-  
+
   // Build where conditions for time-entry-linked expenses
   const timeEntryConditions = [eq(timeEntries.userId, userId)];
-  
+
   if (startDate) {
     timeEntryConditions.push(
-      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) >= ${startDate}`
+      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) >= ${localDayStartUtc(startDate)}`
     );
   }
   if (endDate) {
     timeEntryConditions.push(
-      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) <= ${endDate}`
+      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
     );
   }
 
@@ -767,12 +787,12 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
   
   if (startDate) {
     standaloneConditions.push(
-      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) >= ${startDate}`
+      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) >= ${localDayStartUtc(startDate)}`
     );
   }
   if (endDate) {
     standaloneConditions.push(
-      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) <= ${endDate}`
+      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
     );
   }
 
