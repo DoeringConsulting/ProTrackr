@@ -82,22 +82,24 @@ function calculateWithRegimeAndConfig(input: {
   config: TaxConfigPl;
 }): TaxCalculationResult {
   const { revenueCents, fixedCostsCents, variableCostsCents, startDate, endDate, profile, config } = input;
+  const periodMonths = getPeriodMonthCount(startDate, endDate);
 
-  const socialBase = Math.round(config.socialMinBaseCents * getSocialBaseMultiplier(profile.zusRegime));
+  const socialBaseMonthly = Math.round(config.socialMinBaseCents * getSocialBaseMultiplier(profile.zusRegime));
   const effectiveSocialRateBp =
     config.socialContributionRateBp +
     profile.wypadkowaRateBp +
     (profile.choroboweEnabled ? config.choroboweRateBp : 0) +
     (profile.fpFsEnabled ? config.fpFsRateBp : 0);
-
-  const zus = Math.round((socialBase * effectiveSocialRateBp) / 10000);
+  const zusMonthly = Math.round((socialBaseMonthly * effectiveSocialRateBp) / 10000);
+  const zus = zusMonthly * periodMonths;
 
   const incomeBeforeHealth = revenueCents - fixedCostsCents - variableCostsCents - zus;
-  const zdrowotnaBase = Math.max(incomeBeforeHealth, config.zdrowotnaMinBaseCents);
+  const zdrowotnaMinBaseForPeriod = config.zdrowotnaMinBaseCents * periodMonths;
+  const zdrowotnaBase = Math.max(incomeBeforeHealth, zdrowotnaMinBaseForPeriod);
   const zdrowotnaRaw = Math.round((zdrowotnaBase * profile.zdrowotnaRateLiniowyBp) / 10000);
-  const healthInsurance = Math.max(zdrowotnaRaw, config.zdrowotnaMinAmountCents);
+  const zdrowotnaMinAmountForPeriod = config.zdrowotnaMinAmountCents * periodMonths;
+  const healthInsurance = Math.max(zdrowotnaRaw, zdrowotnaMinAmountForPeriod);
 
-  const periodMonths = getPeriodMonthCount(startDate, endDate);
   const deductionCapForPeriod = Math.round(
     (config.zdrowotnaDeductionLimitYearlyCents * periodMonths) / 12
   );
