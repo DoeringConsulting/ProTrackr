@@ -89,12 +89,37 @@ describe("taxEnginePl", () => {
       },
     });
 
-    expect(result.zus).toBe(119766);
-    expect(result.healthInsurance).toBe(214631);
-    expect(result.deductibleHealth).toBe(214631);
-    expect(result.taxBase).toBe(4165603);
-    expect(result.tax).toBe(791465);
-    expect(result.netProfit).toBe(3374138);
+    expect(result.zus).toBe(359298);
+    expect(result.healthInsurance).toBe(202894);
+    expect(result.deductibleHealth).toBe(202894);
+    expect(result.taxBase).toBe(3937808);
+    expect(result.tax).toBe(748184);
+    expect(result.netProfit).toBe(3189624);
+  });
+
+  it("skaliert fixe Monatskomponenten (ZUS/Minimum zdrowotna) mit Periodenlaenge", () => {
+    const oneMonth = calculatePolishTaxResult({
+      revenueCents: 0,
+      fixedCostsCents: 0,
+      variableCostsCents: 0,
+      startDate: "2026-01-01",
+      endDate: "2026-01-31",
+      profile: baseProfile,
+      config: baseConfig,
+    });
+
+    const threeMonths = calculatePolishTaxResult({
+      revenueCents: 0,
+      fixedCostsCents: 0,
+      variableCostsCents: 0,
+      startDate: "2026-01-01",
+      endDate: "2026-03-31",
+      profile: baseProfile,
+      config: baseConfig,
+    });
+
+    expect(threeMonths.zus).toBe(oneMonth.zus * 3);
+    expect(threeMonths.healthInsurance).toBe(oneMonth.healthInsurance * 3);
   });
 
   it("faellt auf Legacy-Berechnung zurueck, wenn Profil/Config fehlen", () => {
