@@ -1,6 +1,16 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+/**
+ * Sanitize text for jsPDF default (WinAnsiEncoding) fonts.
+ * Replaces non-breaking spaces (U+00A0) with regular spaces so that
+ * jsPDF does not fall back to UCS-2 encoding, which can produce garbled
+ * output (e.g. "&" or spaces between every letter) in some PDF viewers.
+ */
+function sanitizeForPdf(value: string): string {
+  return value.replace(/\u00A0/g, " ");
+}
+
 interface AccountingData {
   timeRevenue?: number;
   travelRevenueInGross?: number;
@@ -55,11 +65,11 @@ export async function exportAccountingReportToPDF(
   doc.text("Buchhaltungsbericht", 14, 20);
 
   doc.setFontSize(10);
-  doc.text(`Zeitraum: ${new Date(startDate).toLocaleDateString("de-DE")} - ${new Date(endDate).toLocaleDateString("de-DE")}`, 14, 28);
-  doc.text(`Erstellt am: ${new Date().toLocaleDateString("de-DE")}`, 14, 34);
+  doc.text(sanitizeForPdf(`Zeitraum: ${new Date(startDate).toLocaleDateString("de-DE")} - ${new Date(endDate).toLocaleDateString("de-DE")}`), 14, 28);
+  doc.text(sanitizeForPdf(`Erstellt am: ${new Date().toLocaleDateString("de-DE")}`), 14, 34);
 
   // Accounting table
-  const formatCurrency = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+  const formatCurrency = (cents: number) => sanitizeForPdf(`€${(cents / 100).toFixed(2)}`);
   const timeRevenue = data.timeRevenue ?? (data.grossRevenue - data.variableCosts);
   const travelRevenueInGross =
     data.travelRevenueInGross ?? Math.max(0, data.grossRevenue - timeRevenue);
@@ -163,14 +173,14 @@ export async function exportCustomerReportToPDF(
   doc.text("Kundenbericht", 14, 20);
 
   doc.setFontSize(12);
-  doc.text(`Projekt: ${data.customer.projectName}`, 14, 30);
-  doc.text(`Kunde: ${data.customer.provider}`, 14, 37);
+  doc.text(sanitizeForPdf(`Projekt: ${data.customer.projectName}`), 14, 30);
+  doc.text(sanitizeForPdf(`Kunde: ${data.customer.provider}`), 14, 37);
 
   doc.setFontSize(10);
-  doc.text(`Zeitraum: ${new Date(startDate).toLocaleDateString("de-DE")} - ${new Date(endDate).toLocaleDateString("de-DE")}`, 14, 44);
-  doc.text(`Erstellt am: ${new Date().toLocaleDateString("de-DE")}`, 14, 50);
+  doc.text(sanitizeForPdf(`Zeitraum: ${new Date(startDate).toLocaleDateString("de-DE")} - ${new Date(endDate).toLocaleDateString("de-DE")}`), 14, 44);
+  doc.text(sanitizeForPdf(`Erstellt am: ${new Date().toLocaleDateString("de-DE")}`), 14, 50);
 
-  const formatCurrency = (cents: number) => `€${(cents / 100).toFixed(2)}`;
+  const formatCurrency = (cents: number) => sanitizeForPdf(`€${(cents / 100).toFixed(2)}`);
   const formatHours = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;

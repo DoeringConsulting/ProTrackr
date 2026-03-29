@@ -83,15 +83,15 @@ const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
 
 // Tages-Nuancen: 1. Eintrag Basisfarbe, 2./3. Eintrag dunkler (max. 2 Nuancen).
 const PROJECT_ENTRY_TONE_CLASSES = [
-  "bg-[#dcefe4] text-[#2f4a3c] border-[#c3decf]",
-  "bg-[#cfe7d9] text-[#2a4336] border-[#b6d6c3]",
-  "bg-[#c2e0ce] text-[#243b2f] border-[#a7cdb6]",
+  "bg-[#e0f2f4] text-[#1a4a50] border-[#b8dfe4]",
+  "bg-[#c5e7eb] text-[#164045] border-[#9dd3da]",
+  "bg-[#a8dbe1] text-[#12363b] border-[#82c7d0]",
 ] as const;
 
 const EXPENSE_ENTRY_TONE_CLASSES = [
-  "bg-[#f6ead6] text-[#5b4830] border-[#ead6b8]",
-  "bg-[#f1e0c8] text-[#4f3f2b] border-[#dfc7a6]",
-  "bg-[#ebd6b9] text-[#433623] border-[#d3b992]",
+  "bg-[#f7eed8] text-[#5b4422] border-[#edd9b0]",
+  "bg-[#f0e1be] text-[#4f3b1d] border-[#e3c998]",
+  "bg-[#e8d4a4] text-[#433218] border-[#d9b97a]",
 ] as const;
 
 function getToneClass(toneClasses: readonly string[], index: number): string {

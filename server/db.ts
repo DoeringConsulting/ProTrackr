@@ -404,7 +404,7 @@ export async function getExpensesByCustomer(userId: number, customerId: number, 
   if (endDate) {
     const endKey = localDateKey(endDate);
     conditions.push(
-      sql`DATE(COALESCE(${expenses.checkInDate}, ${expenses.date})) <= ${endKey}`
+      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) <= ${endKey}`
     );
   }
   
@@ -728,10 +728,10 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
   }
   if (endDate) {
     timeEntryConditions.push(
-      sql`DATE(COALESCE(${expenses.checkInDate}, ${expenses.date})) <= ${endDate}`
+      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) <= ${endDate}`
     );
   }
-  
+
   // Get expenses linked to time entries
   const linkedExpenses = await db
     .select({
@@ -772,10 +772,10 @@ export async function getAllExpenses(userId: number, startDate?: string, endDate
   }
   if (endDate) {
     standaloneConditions.push(
-      sql`DATE(COALESCE(${expenses.checkInDate}, ${expenses.date})) <= ${endDate}`
+      sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) <= ${endDate}`
     );
   }
-  
+
   // Get standalone expenses (not linked to time entries)
   const standaloneExpenses = await db
     .select({

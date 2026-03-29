@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formatMoney } from "@/lib/currencyUtils";
+import { formatMoney as formatMoneyRaw } from "@/lib/currencyUtils";
 
 export type ReportLanguage = "de" | "en" | "pl";
 
@@ -52,6 +52,21 @@ type AppliedExchangeRate = {
   source?: string | null;
   fetchedFromArchive?: boolean;
 };
+
+/**
+ * Sanitize text for jsPDF default (WinAnsiEncoding) fonts.
+ * Replaces non-breaking spaces (U+00A0) with regular spaces so that
+ * jsPDF does not fall back to UCS-2 encoding, which can produce garbled
+ * output (e.g. "&" or spaces between every letter) in some PDF viewers.
+ */
+function sanitizeForPdf(value: string): string {
+  return value.replace(/\u00A0/g, " ");
+}
+
+/** PDF-safe formatMoney: sanitizes output for jsPDF default fonts. */
+function formatMoney(cents: number, currencyInput: string): string {
+  return sanitizeForPdf(formatMoneyRaw(cents, currencyInput));
+}
 
 function formatDateDe(value: string | Date) {
   return new Date(value).toLocaleDateString("de-DE");
@@ -189,9 +204,9 @@ export async function exportPolishBookkeepingReportToPDF(input: {
   doc.text("Zestawienie ksiegowe (PL)", 14, 14);
   doc.setFontSize(10);
   doc.text(
-    `Okres: ${new Date(input.startDate).toLocaleDateString("pl-PL")} - ${new Date(
+    sanitizeForPdf(`Okres: ${new Date(input.startDate).toLocaleDateString("pl-PL")} - ${new Date(
       input.endDate
-    ).toLocaleDateString("pl-PL")} | Doradca: ${input.advisorName}`,
+    ).toLocaleDateString("pl-PL")} | Doradca: ${input.advisorName}`),
     14,
     20
   );
@@ -259,7 +274,7 @@ export async function exportPolishBookkeepingReportToPDF(input: {
       formatMoney(exp.amount, exp.currency),
       exp.amountEur === null ? "Brak kursu" : formatMoney(exp.amountEur, "EUR"),
       exp.amountPln === null ? "Brak kursu" : formatMoney(exp.amountPln, "PLN"),
-      String(exp.comment || "-"),
+      sanitizeForPdf(String(exp.comment || "-")),
     ]),
     styles: { fontSize: 8, overflow: "linebreak" },
     headStyles: { fillColor: [185, 136, 71] },
@@ -404,12 +419,12 @@ export async function exportCustomerTimesheetToPDF(input: {
   doc.setFontSize(17);
   doc.text(t.title, 14, 16);
   doc.setFontSize(10);
-  doc.text(`Client: ${input.customerName}`, 14, 22);
-  doc.text(`Project: ${input.projectName}`, 14, 27);
+  doc.text(sanitizeForPdf(`Client: ${input.customerName}`), 14, 22);
+  doc.text(sanitizeForPdf(`Project: ${input.projectName}`), 14, 27);
   doc.text(
-    `${t.period}: ${new Date(input.startDate).toLocaleDateString("de-DE")} - ${new Date(
+    sanitizeForPdf(`${t.period}: ${new Date(input.startDate).toLocaleDateString("de-DE")} - ${new Date(
       input.endDate
-    ).toLocaleDateString("de-DE")} | ${t.consultant}: ${input.consultant}`,
+    ).toLocaleDateString("de-DE")} | ${t.consultant}: ${input.consultant}`),
     14,
     32
   );
@@ -423,7 +438,7 @@ export async function exportCustomerTimesheetToPDF(input: {
       entry.entryType,
       formatHours(entry.hours),
       formatManDays(entry.manDays),
-      entry.description || "-",
+      sanitizeForPdf(entry.description || "-"),
     ]),
     styles: { fontSize: 8 },
     headStyles: { fillColor: [4, 137, 152] },
@@ -550,14 +565,14 @@ export async function exportCustomerCostStatementToPDF(input: {
 
   const doc = new jsPDF("p", "mm", "a4");
   doc.setFontSize(17);
-  doc.text(`${t.title} (${input.customerCurrency})`, 14, 16);
+  doc.text(sanitizeForPdf(`${t.title} (${input.customerCurrency})`), 14, 16);
   doc.setFontSize(10);
-  doc.text(`Client: ${input.customerName}`, 14, 22);
-  doc.text(`Project: ${input.projectName}`, 14, 27);
+  doc.text(sanitizeForPdf(`Client: ${input.customerName}`), 14, 22);
+  doc.text(sanitizeForPdf(`Project: ${input.projectName}`), 14, 27);
   doc.text(
-    `${t.period}: ${new Date(input.startDate).toLocaleDateString("de-DE")} - ${new Date(
+    sanitizeForPdf(`${t.period}: ${new Date(input.startDate).toLocaleDateString("de-DE")} - ${new Date(
       input.endDate
-    ).toLocaleDateString("de-DE")}`,
+    ).toLocaleDateString("de-DE")}`),
     14,
     32
   );
