@@ -4,7 +4,7 @@
 HAS_NON_VERSION_CHANGES=""
 for FILE in $(git diff --cached --name-only); do
   case "$FILE" in
-    package.json|CHANGELOG.json|client/public/CHANGELOG.json|client/src/hooks/useUpdateCheck.ts|client/src/components/VersionFooter.tsx|client/index.html)
+    package.json|CHANGELOG.json|client/public/CHANGELOG.json|client/public/version.json|client/src/hooks/useUpdateCheck.ts|client/src/components/VersionFooter.tsx|client/index.html)
       ;;
     *)
       HAS_NON_VERSION_CHANGES="yes"
@@ -16,7 +16,8 @@ done
 if [ -n "$HAS_NON_VERSION_CHANGES" ]; then
   echo "[pre-commit] Auto-Version: PATCH wird erhöht"
   pnpm version:increment
-  git add package.json CHANGELOG.json client/public/CHANGELOG.json client/src/hooks/useUpdateCheck.ts client/src/components/VersionFooter.tsx client/index.html
+  node scripts/generate-version.js
+  git add package.json CHANGELOG.json client/public/CHANGELOG.json client/src/hooks/useUpdateCheck.ts client/src/components/VersionFooter.tsx client/index.html client/public/version.json
 fi
 
 npm test

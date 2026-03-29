@@ -1,5 +1,5 @@
 import {
-  calculatePolishTaxResult,
+  aggregateMonthlyTaxResults,
   type LegacyTaxSettings,
   type TaxConfigPl,
   type TaxProfilePl,
@@ -151,12 +151,42 @@ export function calculateAccountingUiData(input: {
   const totalFixedCosts = input.fixedCosts.reduce((sum, cost) => sum + cost.amount, 0);
   const variableCosts = totalExpenses;
 
-  const taxResult = calculatePolishTaxResult({
-    revenueCents: grossRevenue,
-    fixedCostsCents: totalFixedCosts,
-    variableCostsCents: variableCosts,
+  const monthlyFixedCosts = totalFixedCosts;
+
+  // Pre-assign expenses without dates to the first month of the period
+  const firstMonthKey = input.startDate.slice(0, 7);
+  const expenseIsInMonth = (expense: ExpenseLike, monthStart: string, monthEnd: string): boolean => {
+    if (!expense.date) return monthStart.slice(0, 7) === firstMonthKey;
+    return isWithinDateRange(expense.date, monthStart, monthEnd);
+  };
+
+  const taxResult = aggregateMonthlyTaxResults({
     startDate: input.startDate,
     endDate: input.endDate,
+    getMonthlyAmounts: (monthStart, monthEnd) => {
+      const monthTimeRevenue = input.timeEntries
+        .filter((entry) => isWithinDateRange(entry.date, monthStart, monthEnd))
+        .reduce((sum, entry) => sum + entry.calculatedAmount, 0);
+      const monthExpenses = input.expenses
+        .filter((expense) => expenseIsInMonth(expense, monthStart, monthEnd))
+        .reduce((sum, expense) => sum + expense.amount, 0);
+      // Travel revenue from exclusive customers for this month
+      const monthTravelRevenue = input.expenses
+        .filter((expense) => {
+          if (!expense.timeEntryId) return false;
+          if (!expenseIsInMonth(expense, monthStart, monthEnd)) return false;
+          const relatedEntry = entriesById.get(expense.timeEntryId);
+          if (!relatedEntry) return false;
+          const relatedCustomer = customersById.get(relatedEntry.customerId);
+          return relatedCustomer?.costModel === "exclusive";
+        })
+        .reduce((sum, expense) => sum + expense.amount, 0);
+      return {
+        revenueCents: monthTimeRevenue + monthTravelRevenue,
+        fixedCostsCents: monthlyFixedCosts,
+        variableCostsCents: monthExpenses,
+      };
+    },
     profile: input.taxProfile ?? null,
     config: input.taxConfig ?? null,
     legacySettings: input.legacySettings ?? null,
@@ -209,12 +239,28 @@ export function calculateDashboardCostBreakdown(input: {
   });
   const variableCosts = periodExpenses.reduce((sum, expense) => sum + expense.amount, 0);
 
-  const taxResult = calculatePolishTaxResult({
-    revenueCents: periodRevenue,
-    fixedCostsCents: totalFixed,
-    variableCostsCents: variableCosts,
+  const costFirstMonthKey = input.startDate.slice(0, 7);
+  const costExpenseIsInMonth = (expense: ExpenseLike, monthStart: string, monthEnd: string): boolean => {
+    if (!expense.date) return monthStart.slice(0, 7) === costFirstMonthKey;
+    return isWithinDateRange(expense.date, monthStart, monthEnd);
+  };
+
+  const taxResult = aggregateMonthlyTaxResults({
     startDate: input.startDate,
     endDate: input.endDate,
+    getMonthlyAmounts: (monthStart, monthEnd) => {
+      const monthRevenue = input.timeEntries
+        .filter((entry) => isWithinDateRange(entry.date, monthStart, monthEnd))
+        .reduce((sum, entry) => sum + entry.calculatedAmount, 0);
+      const monthExpenses = input.expenses
+        .filter((expense) => costExpenseIsInMonth(expense, monthStart, monthEnd))
+        .reduce((sum, expense) => sum + expense.amount, 0);
+      return {
+        revenueCents: monthRevenue,
+        fixedCostsCents: monthlyFixed,
+        variableCostsCents: monthExpenses,
+      };
+    },
     profile: input.taxProfile ?? null,
     config: input.taxConfig ?? null,
     legacySettings: input.legacySettings ?? null,

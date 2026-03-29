@@ -46,7 +46,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getPeriodMonthCount(startDate: string, endDate: string) {
+export function getPeriodMonthCount(startDate: string, endDate: string) {
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
 
@@ -212,5 +212,86 @@ export function calculatePolishTaxResult(input: {
     endDate: input.endDate,
     legacySettings: input.legacySettings,
   });
+}
+
+/**
+ * Aggregate tax results by calculating per month and summing.
+ * This gives correct ZUS/health/tax when period spans multiple months,
+ * because monthly caps and minimums are applied per month.
+ */
+export function aggregateMonthlyTaxResults(input: {
+  startDate: string;
+  endDate: string;
+  getMonthlyAmounts: (monthStart: string, monthEnd: string) => {
+    revenueCents: number;
+    fixedCostsCents: number;
+    variableCostsCents: number;
+  };
+  profile?: TaxProfilePl | null;
+  config?: TaxConfigPl | null;
+  legacySettings?: LegacyTaxSettings | null;
+}): TaxCalculationResult {
+  const { startDate, endDate, getMonthlyAmounts, profile, config, legacySettings } = input;
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return calculatePolishTaxResult({
+      revenueCents: 0, fixedCostsCents: 0, variableCostsCents: 0,
+      startDate, endDate, profile, config, legacySettings,
+    });
+  }
+
+  let totalZus = 0;
+  let totalHealth = 0;
+  let totalTax = 0;
+  let totalTaxBase = 0;
+  let totalDeductibleHealth = 0;
+  let totalNetProfit = 0;
+  let source: "regime_config" | "legacy" = "legacy";
+
+  const current = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+
+  while (current <= endMonth) {
+    const y = current.getFullYear();
+    const m = current.getMonth();
+    const monthStart = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    const monthEnd = `${y}-${String(m + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+    const amounts = getMonthlyAmounts(monthStart, monthEnd);
+
+    const monthResult = calculatePolishTaxResult({
+      revenueCents: amounts.revenueCents,
+      fixedCostsCents: amounts.fixedCostsCents,
+      variableCostsCents: amounts.variableCostsCents,
+      startDate: monthStart,
+      endDate: monthEnd,
+      profile,
+      config,
+      legacySettings,
+    });
+
+    totalZus += monthResult.zus;
+    totalHealth += monthResult.healthInsurance;
+    totalTax += monthResult.tax;
+    totalTaxBase += monthResult.taxBase;
+    totalDeductibleHealth += monthResult.deductibleHealth;
+    totalNetProfit += monthResult.netProfit;
+    source = monthResult.source;
+
+    current.setMonth(current.getMonth() + 1);
+  }
+
+  return {
+    zus: totalZus,
+    healthInsurance: totalHealth,
+    taxBase: totalTaxBase,
+    tax: totalTax,
+    netProfit: totalNetProfit,
+    deductibleHealth: totalDeductibleHealth,
+    source,
+  };
 }
 

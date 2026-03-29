@@ -16,7 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { calculatePolishTaxResult } from "@/lib/taxEnginePl";
+import { aggregateMonthlyTaxResults } from "@/lib/taxEnginePl";
 import {
   formatLocalDate,
   getDateKey,
@@ -391,12 +391,38 @@ export default function Dashboard() {
         ? convertAmountCents(variableCostsEur, "EUR", "PLN", rateMap) ?? variableCostsEur
         : 0;
 
-    const taxResult = calculatePolishTaxResult({
-      revenueCents: revenuePln,
-      fixedCostsCents: fixedCostsPln,
-      variableCostsCents: variableCostsPln,
+    const taxResult = aggregateMonthlyTaxResults({
       startDate: rangeStart,
       endDate: rangeEnd,
+      getMonthlyAmounts: (monthStart, monthEnd) => {
+        let monthRevenueEur = 0;
+        for (const entry of timeEntriesDetailed) {
+          if (!isWithinDateRange(entry.date, monthStart, monthEnd)) continue;
+          const eur = toEur(entry.calculatedAmount, entry.sourceCurrency);
+          if (eur !== null) monthRevenueEur += eur;
+        }
+        let monthVariableEur = 0;
+        for (const expense of expensesDetailed) {
+          if (!isWithinDateRange(expense.date, monthStart, monthEnd)) continue;
+          const eur = toEur(expense.amount, expense.sourceCurrency);
+          if (eur !== null) monthVariableEur += eur;
+        }
+        const monthFixedEur = fixedCostsDetailed.reduce((sum, cost) => {
+          const eur = toEur(cost.amount, cost.sourceCurrency);
+          return eur !== null ? sum + eur : sum;
+        }, 0);
+        const revPln = convertAmountCents(monthRevenueEur, "EUR", "PLN", rateMap);
+        const fixPln = convertAmountCents(monthFixedEur, "EUR", "PLN", rateMap);
+        const varPln = convertAmountCents(monthVariableEur, "EUR", "PLN", rateMap);
+        if (revPln === null || fixPln === null || varPln === null) {
+          missingRates += 1;
+        }
+        return {
+          revenueCents: revPln ?? 0,
+          fixedCostsCents: fixPln ?? 0,
+          variableCostsCents: varPln ?? 0,
+        };
+      },
       profile: taxProfile
         ? {
             taxCalculationMode: taxProfile.taxCalculationMode,
@@ -461,11 +487,15 @@ export default function Dashboard() {
       return { data: unifiedData, missingRates };
     }
 
-    const zusEurCents = convertAmountCents(taxResult.zus, "PLN", "EUR", rateMap) ?? taxResult.zus;
-    const kvEurCents =
-      convertAmountCents(taxResult.healthInsurance, "PLN", "EUR", rateMap) ??
-      taxResult.healthInsurance;
-    const steuerEurCents = convertAmountCents(taxResult.tax, "PLN", "EUR", rateMap) ?? taxResult.tax;
+    const zusEurRaw = convertAmountCents(taxResult.zus, "PLN", "EUR", rateMap);
+    const zusEurCents = zusEurRaw ?? taxResult.zus;
+    const kvEurRaw = convertAmountCents(taxResult.healthInsurance, "PLN", "EUR", rateMap);
+    const kvEurCents = kvEurRaw ?? taxResult.healthInsurance;
+    const steuerEurRaw = convertAmountCents(taxResult.tax, "PLN", "EUR", rateMap);
+    const steuerEurCents = steuerEurRaw ?? taxResult.tax;
+    if (zusEurRaw === null || kvEurRaw === null || steuerEurRaw === null) {
+      missingRates += 1;
+    }
 
     const data: CostSlice[] = [];
     const sortedFixed = Array.from(fixedByCurrencyOriginal.entries()).sort((a, b) => b[1] - a[1]);
@@ -500,7 +530,7 @@ export default function Dashboard() {
         name: "ZUS (PLN)",
         value: zusEurCents / 100,
         color: "#036d79",
-        chartCurrency: "EUR",
+        chartCurrency: "PLN",
         originalCurrency: "PLN",
         originalAmountCents: taxResult.zus,
       },
@@ -508,7 +538,7 @@ export default function Dashboard() {
         name: "Krankenvers. (PLN)",
         value: kvEurCents / 100,
         color: "#dbbe76",
-        chartCurrency: "EUR",
+        chartCurrency: "PLN",
         originalCurrency: "PLN",
         originalAmountCents: taxResult.healthInsurance,
       },
@@ -516,7 +546,7 @@ export default function Dashboard() {
         name: "Steuer (PLN)",
         value: steuerEurCents / 100,
         color: "#b98847",
-        chartCurrency: "EUR",
+        chartCurrency: "PLN",
         originalCurrency: "PLN",
         originalAmountCents: taxResult.tax,
       }

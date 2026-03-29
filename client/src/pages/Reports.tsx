@@ -13,7 +13,7 @@ import { trpc } from "@/lib/trpc";
 import { FileText, Download, Calculator } from "lucide-react";
 import { exportAccountingReportToPDF, exportCustomerReportToPDF } from "@/lib/pdfExport";
 import { exportAccountingReportToExcel, exportCustomerReportToExcel } from "@/lib/excelExport";
-import { calculatePolishTaxResult } from "@/lib/taxEnginePl";
+import { aggregateMonthlyTaxResults, getPeriodMonthCount } from "@/lib/taxEnginePl";
 import {
   exportCustomerCostStatementToPDF,
   exportCustomerTimesheetToPDF,
@@ -330,21 +330,54 @@ export default function Reports() {
       return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
     }, 0);
     const grossRevenuePln = timeRevenuePln + travelRevenueInGrossPln;
-    const totalFixedCostsPln = fixedCostsDetailed.reduce(
+    const periodMonthCount = getPeriodMonthCount(startDate, endDate);
+    const monthlyFixedCostsPln = fixedCostsDetailed.reduce(
       (sum, cost) => sum + convertAmountToPlnForTax(cost.amount, cost.sourceCurrency),
       0
     );
+    const totalFixedCostsPln = monthlyFixedCostsPln * periodMonthCount;
     const variableCostsPln = expensesDetailed.reduce(
       (sum, expense) => sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency),
       0
     );
 
-    const taxResultPln = calculatePolishTaxResult({
-      revenueCents: grossRevenuePln,
-      fixedCostsCents: totalFixedCostsPln,
-      variableCostsCents: variableCostsPln,
+    const isInMonth = (value: string | Date | null | undefined, ms: string, me: string): boolean => {
+      if (!value) return false;
+      const key = toDateKey(value);
+      if (!key) return false;
+      return key >= ms && key <= me;
+    };
+
+    const taxResultPln = aggregateMonthlyTaxResults({
       startDate,
       endDate,
+      getMonthlyAmounts: (monthStart, monthEnd) => {
+        let monthRevenuePln = 0;
+        for (const entry of timeEntriesDetailed) {
+          if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
+          monthRevenuePln += convertAmountToPlnForTax(entry.calculatedAmount, entry.sourceCurrency);
+        }
+        // Add travel revenue from exclusive customers
+        for (const expense of expensesDetailed) {
+          if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
+          if (!expense.timeEntryId) continue;
+          const relatedEntry = entriesById.get(expense.timeEntryId);
+          if (!relatedEntry) continue;
+          const relatedCustomer = customersById.get(relatedEntry.customerId);
+          if (relatedCustomer?.costModel !== "exclusive") continue;
+          monthRevenuePln += convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
+        }
+        let monthVariablePln = 0;
+        for (const expense of expensesDetailed) {
+          if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
+          monthVariablePln += convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
+        }
+        return {
+          revenueCents: monthRevenuePln,
+          fixedCostsCents: monthlyFixedCostsPln,
+          variableCostsCents: monthVariablePln,
+        };
+      },
       profile: mappedTaxProfile,
       config: mappedTaxConfig,
       legacySettings: taxSettings,
@@ -374,7 +407,7 @@ export default function Reports() {
 
     const fixedCostsByCurrency = aggregateByCurrency(
       fixedCostsDetailed.map((cost) => ({
-        amount: cost.amount,
+        amount: cost.amount * periodMonthCount,
         currency: cost.sourceCurrency,
       }))
     );
