@@ -127,21 +127,24 @@ function calculateWithLegacySettings(input: {
   revenueCents: number;
   fixedCostsCents: number;
   variableCostsCents: number;
+  startDate: string;
+  endDate: string;
   legacySettings?: LegacyTaxSettings | null;
 }): TaxCalculationResult {
-  const { revenueCents, fixedCostsCents, variableCostsCents, legacySettings } = input;
+  const { revenueCents, fixedCostsCents, variableCostsCents, startDate, endDate, legacySettings } = input;
+  const periodMonths = getPeriodMonthCount(startDate, endDate);
 
   const zusRate =
     legacySettings?.zusType === "percentage" ? legacySettings.zusValue / 10000 : 0.1952;
-  const zusFixed = legacySettings?.zusType === "fixed" ? legacySettings.zusValue : 0;
+  const zusFixed = legacySettings?.zusType === "fixed" ? legacySettings.zusValue * periodMonths : 0;
   const healthRate =
     legacySettings?.healthInsuranceType === "percentage"
       ? legacySettings.healthInsuranceValue / 10000
       : 0.09;
-  const healthFixed = legacySettings?.healthInsuranceType === "fixed" ? legacySettings.healthInsuranceValue : 0;
+  const healthFixed = legacySettings?.healthInsuranceType === "fixed" ? legacySettings.healthInsuranceValue * periodMonths : 0;
   const taxRate =
     legacySettings?.taxType === "percentage" ? legacySettings.taxValue / 10000 : 0.19;
-  const taxFixed = legacySettings?.taxType === "fixed" ? legacySettings.taxValue : 0;
+  const taxFixed = legacySettings?.taxType === "fixed" ? legacySettings.taxValue * periodMonths : 0;
 
   const zus = legacySettings?.zusType === "fixed" ? zusFixed : Math.round(revenueCents * zusRate);
   const healthInsurance =
@@ -205,6 +208,8 @@ export function calculatePolishTaxResult(input: {
     revenueCents: input.revenueCents,
     fixedCostsCents: input.fixedCostsCents,
     variableCostsCents: input.variableCostsCents,
+    startDate: input.startDate,
+    endDate: input.endDate,
     legacySettings: input.legacySettings,
   });
 }

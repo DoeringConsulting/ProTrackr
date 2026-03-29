@@ -3,6 +3,14 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { invoiceNumbers, customers } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
+/** Format a Date as YYYY-MM-DD using local timezone (avoids UTC off-by-one near midnight). */
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 let _db: ReturnType<typeof drizzle> | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
@@ -173,10 +181,10 @@ export async function getTimeEntries(userId: number, startDate?: Date, endDate?:
   const conditions = [eq(timeEntries.userId, userId)];
   
   if (startDate) {
-    conditions.push(sql`DATE(${timeEntries.date}) >= ${startDate.toISOString().split('T')[0]}`);
+    conditions.push(sql`DATE(${timeEntries.date}) >= ${localDateKey(startDate)}`);
   }
   if (endDate) {
-    conditions.push(sql`DATE(${timeEntries.date}) <= ${endDate.toISOString().split('T')[0]}`);
+    conditions.push(sql`DATE(${timeEntries.date}) <= ${localDateKey(endDate)}`);
   }
   
   return await db.select().from(timeEntries).where(and(...conditions)).orderBy(desc(timeEntries.date));
@@ -388,13 +396,13 @@ export async function getExpensesByCustomer(userId: number, customerId: number, 
   const { expenses, timeEntries } = await import("../drizzle/schema");
   const conditions = [eq(timeEntries.userId, userId), eq(timeEntries.customerId, customerId)];
   if (startDate) {
-    const startKey = startDate.toISOString().slice(0, 10);
+    const startKey = localDateKey(startDate);
     conditions.push(
       sql`DATE(COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date})) >= ${startKey}`
     );
   }
   if (endDate) {
-    const endKey = endDate.toISOString().slice(0, 10);
+    const endKey = localDateKey(endDate);
     conditions.push(
       sql`DATE(COALESCE(${expenses.checkInDate}, ${expenses.date})) <= ${endKey}`
     );
@@ -560,10 +568,10 @@ export async function getExchangeRates(filters?: {
   }
 
   if (filters?.startDate) {
-    conditions.push(sql`DATE(${exchangeRates.date}) >= ${filters.startDate.toISOString().split("T")[0]}`);
+    conditions.push(sql`DATE(${exchangeRates.date}) >= ${localDateKey(filters.startDate)}`);
   }
   if (filters?.endDate) {
-    conditions.push(sql`DATE(${exchangeRates.date}) <= ${filters.endDate.toISOString().split("T")[0]}`);
+    conditions.push(sql`DATE(${exchangeRates.date}) <= ${localDateKey(filters.endDate)}`);
   }
   if (filters?.currency) {
     conditions.push(sql`${exchangeRates.currencyPair} LIKE ${`${filters.currency.toUpperCase()}/%`}`);
@@ -598,7 +606,7 @@ export async function getExchangeRateOnOrBeforeDate(currencyPair: string, date: 
   const db = await getDb();
   if (!db) return null;
   const { exchangeRates } = await import("../drizzle/schema");
-  const dateKey = date.toISOString().split("T")[0];
+  const dateKey = localDateKey(date);
 
   const result = await db
     .select()

@@ -1,6 +1,28 @@
 {
   "versions": [
     {
+      "version": "1.0.84",
+      "date": "2026-03-29",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Version Update",
+          "description": "Neue Version mit Verbesserungen und Fehlerbehebungen"
+        }
+      ]
+    },
+    {
+      "version": "1.0.83",
+      "date": "2026-03-29",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Version Update",
+          "description": "Neue Version mit Verbesserungen und Fehlerbehebungen"
+        }
+      ]
+    },
+    {
       "version": "1.0.82",
       "date": "2026-03-24",
       "changes": [

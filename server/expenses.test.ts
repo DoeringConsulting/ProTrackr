@@ -11,7 +11,7 @@ function createAuthContext(): { ctx: TrpcContext } {
     email: "test@example.com",
     name: "Test User",
     loginMethod: "manus",
-    role: "user",
+    role: "admin",
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -36,11 +36,10 @@ describe("expenses", () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
-    // First create a customer and time entry
-    const randomId = Math.floor(Math.random() * 1000000);
-    await caller.customers.create({
+    // First create a customer and time entry — mandatenNr is auto-assigned
+    const customerResult = await caller.customers.create({
       provider: "Test Provider",
-      mandatenNr: `EXP${randomId}`,
+      mandatenNr: "ignored",
       projectName: "Test Project",
       location: "Test Location",
       onsiteRate: 100000,
@@ -50,15 +49,10 @@ describe("expenses", () => {
       costModel: "exclusive",
     });
 
-    const customers = await caller.customers.list();
-    const customer = customers.find(c => c.mandatenNr === `EXP${randomId}`);
-    
-    if (!customer) {
-      throw new Error("Customer not found");
-    }
+    expect(customerResult?.id).toBeDefined();
 
     const timeEntry = await caller.timeEntries.create({
-      customerId: customer.id,
+      customerId: customerResult!.id,
       date: "2026-01-20",
       weekday: "Mo/Pn",
       projectName: "Test Project",
@@ -87,11 +81,10 @@ describe("expenses", () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Create customer and time entry first
-    const randomId = Math.floor(Math.random() * 1000000);
-    await caller.customers.create({
+    // Create customer and time entry first — mandatenNr is auto-assigned
+    const customer2Result = await caller.customers.create({
       provider: "Test Provider",
-      mandatenNr: `EXP2${randomId}`,
+      mandatenNr: "ignored",
       projectName: "Test Project 2",
       location: "Test Location",
       onsiteRate: 100000,
@@ -101,15 +94,10 @@ describe("expenses", () => {
       costModel: "exclusive",
     });
 
-    const customers = await caller.customers.list();
-    const customer = customers.find(c => c.mandatenNr === `EXP2${randomId}`);
-    
-    if (!customer) {
-      throw new Error("Customer not found");
-    }
+    expect(customer2Result?.id).toBeDefined();
 
     const timeEntry = await caller.timeEntries.create({
-      customerId: customer.id,
+      customerId: customer2Result!.id,
       date: "2026-01-21",
       weekday: "Di/Wt",
       projectName: "Test Project 2",

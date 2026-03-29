@@ -6,7 +6,8 @@ describe("Settings API Tests", () => {
   const mockUser = {
     id: 1,
     email: "test@doering-consulting.eu",
-    displayName: "Test User",
+    name: "Test User",
+    mandantId: 1,
     role: "admin",
   };
   const caller = appRouter.createCaller({ 

@@ -11,7 +11,7 @@ function createAuthContext(): { ctx: TrpcContext } {
     email: "test@example.com",
     name: "Test User",
     loginMethod: "manus",
-    role: "user",
+    role: "admin",
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),

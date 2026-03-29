@@ -11,7 +11,7 @@ function createAuthContext(): { ctx: TrpcContext } {
     email: "test@example.com",
     name: "Test User",
     loginMethod: "manus",
-    role: "user",
+    role: "admin",
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -36,11 +36,10 @@ describe("timeEntries", () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
-    // First create a customer
-    const randomId = Math.floor(Math.random() * 1000000);
+    // First create a customer — mandatenNr is auto-assigned by the router
     const customerResult = await caller.customers.create({
       provider: "Test Provider",
-      mandatenNr: `TEST${randomId}`,
+      mandatenNr: "ignored",
       projectName: "Test Project",
       location: "Test Location",
       onsiteRate: 100000,
@@ -50,17 +49,11 @@ describe("timeEntries", () => {
       costModel: "exclusive",
     });
 
-    // Get the customer ID from the result
-    const customers = await caller.customers.list();
-    const customer = customers.find(c => c.mandatenNr === `TEST${randomId}`);
-    
-    if (!customer) {
-      throw new Error("Customer not found");
-    }
+    expect(customerResult?.id).toBeDefined();
 
     // Create time entry
     const timeEntry = await caller.timeEntries.create({
-      customerId: customer.id,
+      customerId: customerResult!.id,
       date: "2026-01-15",
       weekday: "Mi/Śr",
       projectName: "Test Project",

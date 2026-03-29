@@ -259,10 +259,21 @@ export async function exportPolishBookkeepingReportToPDF(input: {
       formatMoney(exp.amount, exp.currency),
       exp.amountEur === null ? "Brak kursu" : formatMoney(exp.amountEur, "EUR"),
       exp.amountPln === null ? "Brak kursu" : formatMoney(exp.amountPln, "PLN"),
-      exp.comment || "-",
+      String(exp.comment || "-"),
     ]),
-    styles: { fontSize: 8 },
+    styles: { fontSize: 8, overflow: "linebreak" },
     headStyles: { fillColor: [185, 136, 71] },
+    columnStyles: {
+      0: { cellWidth: 20 },
+      1: { cellWidth: 20 },
+      2: { cellWidth: 22 },
+      3: { cellWidth: 30 },
+      4: { cellWidth: 22 },
+      5: { cellWidth: 22 },
+      6: { cellWidth: 22 },
+      7: { cellWidth: 22 },
+      8: { cellWidth: "auto" },
+    },
   });
 
   const sumStartY = (doc as any).lastAutoTable.finalY + 6;

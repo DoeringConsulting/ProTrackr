@@ -10,7 +10,7 @@ function createAuthContext(): { ctx: TrpcContext } {
     mandantId: 1,
     email: "test@example.com",
     displayName: "Test User",
-    role: "user",
+    role: "admin",
   };
 
   const ctx: TrpcContext = {
