@@ -119,9 +119,21 @@ async function startServer() {
     legacyHeaders: false,
     message: { error: "Zu viele Registrierungsversuche." },
   });
+  const changePasswordLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Zu viele Passwort-Aenderungsversuche. Bitte in 15 Minuten erneut versuchen." },
+    keyGenerator: (req) => {
+      const userId = (req as any).user?.id ?? "anon";
+      return `${req.ip}:${userId}`;
+    },
+  });
   app.use("/api/auth/login", loginLimiter);
   app.use("/api/auth/forgot-password", passwordResetLimiter);
   app.use("/api/auth/reset-password", passwordResetLimiter);
+  app.use("/api/auth/change-password", changePasswordLimiter);
   app.use("/api/auth/register", registerLimiter);
 
   // Auth-Routen: /api/auth/login, /api/auth/logout, /api/auth/me, /api/auth/register

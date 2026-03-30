@@ -1068,7 +1068,7 @@ export const appRouter = router({
     delete: mandantAdminProcedure.input((val: unknown) => {
       return z.object({ id: z.number() }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { deleteCustomer, getCustomerById } = await import("./db");
+      const { archiveCustomer, getCustomerById } = await import("./db");
       const customer = await getCustomerById(input.id);
       if (!customer) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Kunde nicht gefunden" });
@@ -1076,7 +1076,7 @@ export const appRouter = router({
       if (!(await canAccessCustomerOwnedData(ctx.user, { userId: customer.userId ?? null }))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
       }
-      await deleteCustomer(input.id);
+      await archiveCustomer(input.id);
       return { success: true };
     }),
     archive: mandantAdminProcedure.input((val: unknown) => {
@@ -2883,6 +2883,149 @@ export const appRouter = router({
       }
 
       return created;
+    }),
+    update: protectedProcedure.input((val: unknown) => {
+      return z.object({
+        id: z.number().int().positive(),
+        name: z.string().trim().min(2).max(255).optional(),
+        mandantNr: z
+          .string()
+          .trim()
+          .min(2)
+          .max(50)
+          .regex(/^[A-Za-z0-9._-]+$/, "mandantNr darf nur A-Z, 0-9, . _ - enthalten")
+          .optional(),
+      }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      if (!isGlobalSetupAdmin(ctx.user)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Nur General-Admins duerfen Mandanten bearbeiten",
+        });
+      }
+
+      const { updateMandant, findMandantById, findMandantByName, findMandantByNr } = await import("./db-mandanten");
+
+      const existing = await findMandantById(input.id);
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Mandant nicht gefunden" });
+      }
+
+      if (input.mandantNr && input.mandantNr !== existing.mandantNr) {
+        const byNr = await findMandantByNr(input.mandantNr);
+        if (byNr) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Mandant mit dieser Mandantennummer existiert bereits",
+          });
+        }
+      }
+
+      if (input.name && input.name !== existing.name) {
+        const byName = await findMandantByName(input.name);
+        if (byName) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Mandant mit diesem Namen existiert bereits",
+          });
+        }
+      }
+
+      const updated = await updateMandant(input.id, {
+        name: input.name,
+        mandantNr: input.mandantNr,
+      });
+
+      return updated;
+    }),
+    archive: protectedProcedure.input((val: unknown) => {
+      return z.object({ id: z.number().int().positive() }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      if (!isGlobalSetupAdmin(ctx.user)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Nur General-Admins duerfen Mandanten archivieren",
+        });
+      }
+
+      const { findMandantById, archiveMandant } = await import("./db-mandanten");
+
+      const existing = await findMandantById(input.id);
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Mandant nicht gefunden" });
+      }
+
+      await archiveMandant(input.id);
+      return { success: true };
+    }),
+    lock: protectedProcedure.input((val: unknown) => {
+      return z.object({ id: z.number().int().positive() }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      if (!isGlobalSetupAdmin(ctx.user)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Nur General-Admins duerfen Mandanten sperren",
+        });
+      }
+
+      const { findMandantById, lockMandant } = await import("./db-mandanten");
+
+      const existing = await findMandantById(input.id);
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Mandant nicht gefunden" });
+      }
+
+      await lockMandant(input.id);
+      return { success: true };
+    }),
+    restore: protectedProcedure.input((val: unknown) => {
+      return z.object({ id: z.number().int().positive() }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      if (!isGlobalSetupAdmin(ctx.user)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Nur General-Admins duerfen Mandanten wiederherstellen",
+        });
+      }
+
+      const { findMandantById, restoreMandant } = await import("./db-mandanten");
+
+      const existing = await findMandantById(input.id);
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Mandant nicht gefunden" });
+      }
+
+      await restoreMandant(input.id);
+      return { success: true };
+    }),
+    delete: protectedProcedure.input((val: unknown) => {
+      return z.object({ id: z.number().int().positive() }).parse(val);
+    }).mutation(async ({ ctx, input }) => {
+      if (!isGlobalSetupAdmin(ctx.user)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Nur General-Admins duerfen Mandanten loeschen",
+        });
+      }
+
+      const { findMandantById, deleteMandant } = await import("./db-mandanten");
+      const { countUsersByMandantId } = await import("./db-mandanten");
+
+      const existing = await findMandantById(input.id);
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Mandant nicht gefunden" });
+      }
+
+      const userCount = await countUsersByMandantId(input.id);
+      if (userCount > 0) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `Mandant hat noch ${userCount} Benutzer. Bitte zuerst alle Benutzer entfernen.`,
+        });
+      }
+
+      await deleteMandant(input.id);
+      return { success: true };
     }),
   }),
 

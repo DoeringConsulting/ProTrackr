@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Building2, Pencil, RotateCcw, Shield, Trash2, UserPlus, UserX } from "lucide-react";
+import { Archive, Building2, Lock, Pencil, RotateCcw, Shield, Trash2, UserPlus, UserX } from "lucide-react";
 
 type AuthUser = {
   id: number;
@@ -33,6 +33,9 @@ type MandantItem = {
   id: number;
   name: string;
   mandantNr: string;
+  status?: "active" | "archived" | "locked";
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
 };
 
 type ManagedUser = {
@@ -101,6 +104,21 @@ export default function AccountTab() {
   const [editRole, setEditRole] = useState<"user" | "mandant_admin" | "webapp_admin">("user");
   const [editMandantId, setEditMandantId] = useState("");
   const [editPassword, setEditPassword] = useState("");
+
+  // Password change (all users)
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Mandant CRUD dialogs
+  const [isEditMandantOpen, setIsEditMandantOpen] = useState(false);
+  const [isArchiveMandantOpen, setIsArchiveMandantOpen] = useState(false);
+  const [isLockMandantOpen, setIsLockMandantOpen] = useState(false);
+  const [isRestoreMandantOpen, setIsRestoreMandantOpen] = useState(false);
+  const [isDeleteMandantOpen, setIsDeleteMandantOpen] = useState(false);
+  const [selectedMandant, setSelectedMandant] = useState<MandantItem | null>(null);
+  const [editMandantName, setEditMandantName] = useState("");
+  const [editMandantNr, setEditMandantNr] = useState("");
 
   useEffect(() => {
     const loadMe = async () => {
@@ -245,6 +263,27 @@ export default function AccountTab() {
     },
   });
 
+  const updateMandantMutation = trpc.mandantenAdmin.update.useMutation({
+    onSuccess: () => { utils.mandantenAdmin.list.invalidate(); toast.success("Mandant erfolgreich aktualisiert"); setIsEditMandantOpen(false); setSelectedMandant(null); },
+    onError: (error) => { toast.error(`Fehler: ${error.message}`); },
+  });
+  const archiveMandantMutation = trpc.mandantenAdmin.archive.useMutation({
+    onSuccess: () => { utils.mandantenAdmin.list.invalidate(); toast.success("Mandant wurde archiviert"); setIsArchiveMandantOpen(false); setSelectedMandant(null); },
+    onError: (error) => { toast.error(`Fehler: ${error.message}`); },
+  });
+  const lockMandantMutation = trpc.mandantenAdmin.lock.useMutation({
+    onSuccess: () => { utils.mandantenAdmin.list.invalidate(); toast.success("Mandant wurde gesperrt"); setIsLockMandantOpen(false); setSelectedMandant(null); },
+    onError: (error) => { toast.error(`Fehler: ${error.message}`); },
+  });
+  const restoreMandantMutation = trpc.mandantenAdmin.restore.useMutation({
+    onSuccess: () => { utils.mandantenAdmin.list.invalidate(); toast.success("Mandant wiederhergestellt"); setIsRestoreMandantOpen(false); setSelectedMandant(null); },
+    onError: (error) => { toast.error(`Fehler: ${error.message}`); },
+  });
+  const deleteMandantMutation = trpc.mandantenAdmin.delete.useMutation({
+    onSuccess: () => { utils.mandantenAdmin.list.invalidate(); toast.success("Mandant wurde geloescht"); setIsDeleteMandantOpen(false); setSelectedMandant(null); },
+    onError: (error) => { toast.error(`Fehler: ${error.message}`); },
+  });
+
   const handleCreateUser = () => {
     if (!email || !password) {
       toast.error("E-Mail und Passwort sind Pflichtfelder");
@@ -284,6 +323,43 @@ export default function AccountTab() {
       name: trimmedName,
       mandantNr: trimmedNr,
     });
+  };
+
+  function validatePassword(pw: string): string | null {
+    if (pw.length < 12) return "Min. 12 Zeichen erforderlich";
+    if (!/[A-Z]/.test(pw)) return "Mind. ein Grossbuchstabe erforderlich";
+    if (!/[a-z]/.test(pw)) return "Mind. ein Kleinbuchstabe erforderlich";
+    if (!/[0-9]/.test(pw)) return "Mind. eine Ziffer erforderlich";
+    if (!/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?\/~`]/.test(pw)) return "Mind. ein Sonderzeichen erforderlich";
+    const forbidden = ["password","passwort","admin","login","user","benutzer","test","hello","welcome","willkommen","qwerty","abc123","letmein","master","secret","access","server","system","change","default","pass","word","1234","0000"];
+    const lower = pw.toLowerCase();
+    for (const w of forbidden) { if (lower.includes(w)) return `Passwort darf "${w}" nicht enthalten`; }
+    return null;
+  }
+
+  const handleChangePassword = async () => {
+    if (!currentPassword) { toast.error("Bitte aktuelles Passwort eingeben"); return; }
+    if (!newPassword) { toast.error("Bitte neues Passwort eingeben"); return; }
+    if (newPassword !== confirmPassword) { toast.error("Neue Passwoerter stimmen nicht ueberein"); return; }
+    const err = validatePassword(newPassword);
+    if (err) { toast.error(err); return; }
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.message || "Fehler beim Passwort aendern");
+        return;
+      }
+      toast.success("Passwort erfolgreich geaendert");
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+    } catch {
+      toast.error("Netzwerkfehler beim Passwort aendern");
+    }
   };
 
   const openEditDialog = (user: ManagedUser) => {
@@ -335,24 +411,40 @@ export default function AccountTab() {
     );
   }
 
-  if (!canManageUsers) {
-    return (
+  return (
+    <div className="space-y-6">
+      {/* Password change - visible to ALL authenticated users */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Kein Zugriff
+            <Lock className="h-5 w-5" />
+            Passwort aendern
           </CardTitle>
           <CardDescription>
-            Die Benutzerverwaltung ist nur fuer Mandanten-Admins und WebApp-Admins verfuegbar.
+            Aendern Sie Ihr eigenes Passwort.
           </CardDescription>
         </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="current-password">Aktuelles Passwort</Label>
+            <Input id="current-password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Aktuelles Passwort eingeben" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-password-self">Neues Passwort</Label>
+            <Input id="new-password-self" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min. 12 Zeichen" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-password">Neues Passwort bestaetigen</Label>
+            <Input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Neues Passwort wiederholen" />
+          </div>
+          <div className="rounded-md border p-3 text-sm text-muted-foreground">
+            Anforderungen: Min. 12 Zeichen, mind. 1 Grossbuchstabe, 1 Kleinbuchstabe, 1 Ziffer, 1 Sonderzeichen. Keine gaengigen Woerter.
+          </div>
+          <Button onClick={handleChangePassword}>Passwort aendern</Button>
+        </CardContent>
       </Card>
-    );
-  }
 
-  return (
-    <div className="space-y-6">
+      {canManageUsers && (<>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Konto-Verwaltung</h2>
@@ -410,16 +502,51 @@ export default function AccountTab() {
                     <TableHead>ID</TableHead>
                     <TableHead>Mandant</TableHead>
                     <TableHead>Mandant-Nr</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(mandanten as MandantItem[]).map((mandant) => (
+                  {(mandanten as MandantItem[]).map((mandant) => {
+                    const mStatus = mandant.status || "active";
+                    return (
                     <TableRow key={mandant.id}>
                       <TableCell>{mandant.id}</TableCell>
                       <TableCell>{mandant.name}</TableCell>
                       <TableCell>{mandant.mandantNr}</TableCell>
+                      <TableCell>
+                        <Badge variant={mStatus === "active" ? "default" : mStatus === "locked" ? "destructive" : "secondary"}>
+                          {mStatus === "active" ? "Aktiv" : mStatus === "archived" ? "Archiviert" : "Gesperrt"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => { setSelectedMandant(mandant); setEditMandantName(mandant.name); setEditMandantNr(mandant.mandantNr); setIsEditMandantOpen(true); }}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          {mStatus === "active" && (
+                            <>
+                              <Button size="sm" variant="ghost" onClick={() => { setSelectedMandant(mandant); setIsArchiveMandantOpen(true); }}>
+                                <Archive className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => { setSelectedMandant(mandant); setIsLockMandantOpen(true); }}>
+                                <Lock className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          {mStatus !== "active" && (
+                            <Button size="sm" variant="ghost" onClick={() => { setSelectedMandant(mandant); setIsRestoreMandantOpen(true); }}>
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { setSelectedMandant(mandant); setIsDeleteMandantOpen(true); }}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -886,6 +1013,93 @@ export default function AccountTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Mandant Edit Dialog */}
+      <Dialog open={isEditMandantOpen} onOpenChange={setIsEditMandantOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mandant bearbeiten</DialogTitle>
+            <DialogDescription>Name und Mandantennummer aktualisieren.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-mandant-name">Mandantenname *</Label>
+              <Input id="edit-mandant-name" value={editMandantName} onChange={(e) => setEditMandantName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-mandant-nr">Mandantennummer *</Label>
+              <Input id="edit-mandant-nr" value={editMandantNr} onChange={(e) => setEditMandantNr(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditMandantOpen(false)}>Abbrechen</Button>
+            <Button onClick={() => selectedMandant && updateMandantMutation.mutate({ id: selectedMandant.id, name: editMandantName.trim(), mandantNr: editMandantNr.trim() })} disabled={updateMandantMutation.isPending}>
+              {updateMandantMutation.isPending ? "Speichere..." : "Speichern"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isArchiveMandantOpen} onOpenChange={setIsArchiveMandantOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mandant archivieren?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedMandant ? `Der Mandant "${selectedMandant.name}" wird archiviert. Benutzer koennen sich nicht mehr anmelden.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={() => selectedMandant && archiveMandantMutation.mutate({ id: selectedMandant.id })}>Archivieren</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isLockMandantOpen} onOpenChange={setIsLockMandantOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mandant sperren?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedMandant ? `Der Mandant "${selectedMandant.name}" wird gesperrt. Benutzer koennen sich nicht mehr anmelden.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={() => selectedMandant && lockMandantMutation.mutate({ id: selectedMandant.id })}>Sperren</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isRestoreMandantOpen} onOpenChange={setIsRestoreMandantOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mandant wiederherstellen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedMandant ? `Der Mandant "${selectedMandant.name}" wird wieder auf aktiv gesetzt.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={() => selectedMandant && restoreMandantMutation.mutate({ id: selectedMandant.id })}>Wiederherstellen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isDeleteMandantOpen} onOpenChange={setIsDeleteMandantOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mandant endgueltig loeschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedMandant ? `Der Mandant "${selectedMandant.name}" wird unwiderruflich geloescht. Dies ist nur moeglich wenn keine Benutzer zugeordnet sind.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => selectedMandant && deleteMandantMutation.mutate({ id: selectedMandant.id })}>Endgueltig loeschen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      </>)}
     </div>
   );
 }

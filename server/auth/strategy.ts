@@ -22,7 +22,13 @@ passport.use(
         if (!mandant) {
           return done(null, false, { message: "Ungültiger Mandant" });
         }
-        
+        if (mandant.status === "archived") {
+          return done(null, false, { message: "Mandant ist archiviert. Kein Login moeglich." });
+        }
+        if (mandant.status === "locked") {
+          return done(null, false, { message: "Mandant ist gesperrt. Kein Login moeglich." });
+        }
+
         const user = await findUserByEmailAndMandant(email, mandant.id);
         if (!user) {
           return done(null, false, { message: "Ungültige Anmeldedaten" });

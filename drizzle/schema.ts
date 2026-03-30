@@ -7,6 +7,7 @@ export const mandanten = mysqlTable("mandanten", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   mandantNr: varchar("mandantNr", { length: 50 }).notNull().unique(),
+  status: mysqlEnum("status", ["active", "archived", "locked"]).default("active").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

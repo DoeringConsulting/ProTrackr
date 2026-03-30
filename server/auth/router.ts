@@ -132,6 +132,22 @@ authRouter.post("/forgot-password", async (req: Request, res: Response) => {
         detail: "Pruefen Sie Mandanten-Nr oder Mandantenname.",
       });
     }
+    if (resolvedMandant.status === "archived") {
+      return res.status(403).json({
+        error: "Passwort-Reset-Mail konnte nicht versendet werden",
+        reason: "Mandant ist archiviert. Kein Login oder Passwort-Reset moeglich.",
+        code: "MANDANT_ARCHIVED",
+        detail: "Bitte wenden Sie sich an den WebApp-Administrator.",
+      });
+    }
+    if (resolvedMandant.status === "locked") {
+      return res.status(403).json({
+        error: "Passwort-Reset-Mail konnte nicht versendet werden",
+        reason: "Mandant ist gesperrt. Kein Login oder Passwort-Reset moeglich.",
+        code: "MANDANT_LOCKED",
+        detail: "Bitte wenden Sie sich an den WebApp-Administrator.",
+      });
+    }
 
     const user = await findUserByEmailAndMandant(email, resolvedMandant.id);
     if (!user) {
@@ -253,6 +269,86 @@ authRouter.post("/reset-password", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("[Auth] Reset-password error:", err);
     return res.status(500).json({ error: "Passwort konnte nicht zurueckgesetzt werden" });
+  }
+});
+
+// POST /api/auth/change-password (authenticated user changes own password)
+authRouter.post("/change-password", async (req: Request, res: Response) => {
+  try {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ error: "Nicht angemeldet" });
+    }
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword?: string;
+      newPassword?: string;
+    };
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Aktuelles und neues Passwort sind erforderlich" });
+    }
+
+    // Password validation
+    if (newPassword.length < 12) {
+      return res.status(400).json({ error: "Passwort muss mindestens 12 Zeichen haben" });
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({ error: "Passwort muss mindestens einen Grossbuchstaben enthalten" });
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      return res.status(400).json({ error: "Passwort muss mindestens einen Kleinbuchstaben enthalten" });
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      return res.status(400).json({ error: "Passwort muss mindestens eine Ziffer enthalten" });
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?\/~`]/.test(newPassword)) {
+      return res.status(400).json({ error: "Passwort muss mindestens ein Sonderzeichen enthalten" });
+    }
+
+    const commonWords = [
+      "password", "passwort", "admin", "login", "user", "benutzer", "test",
+      "hello", "welcome", "willkommen", "qwerty", "abc123", "letmein",
+      "master", "monkey", "dragon", "shadow", "sunshine", "princess",
+      "football", "soccer", "baseball", "michael", "jennifer", "thomas",
+      "charlie", "robert", "daniel", "secret", "access", "server", "system",
+      "change", "default", "temp", "pass", "word", "name", "date", "year",
+      "1234", "0000",
+    ];
+    const lowerPassword = newPassword.toLowerCase();
+    for (const word of commonWords) {
+      if (lowerPassword.includes(word)) {
+        return res.status(400).json({
+          error: `Passwort darf keine gaengigen Woerter enthalten ('${word}')`,
+        });
+      }
+    }
+
+    const user = await findUserById((req.user as any).id);
+    if (!user) {
+      return res.status(404).json({ error: "Benutzerkonto nicht gefunden" });
+    }
+    const accountStatus = resolveAccountStatus(user);
+    if (accountStatus !== "active") {
+      return res.status(403).json({ error: "Konto ist nicht aktiv. Passwort kann nicht geaendert werden." });
+    }
+    if (!user.passwordHash) {
+      return res.status(400).json({ error: "Kein bestehendes Passwort gesetzt" });
+    }
+
+    const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isCurrentValid) {
+      return res.status(401).json({ error: "Aktuelles Passwort ist falsch" });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ error: "Neues Passwort darf nicht mit dem aktuellen Passwort identisch sein" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await updateUserPasswordHash(user.id, passwordHash);
+
+    return res.json({ success: true, message: "Passwort erfolgreich geaendert" });
+  } catch (err) {
+    console.error("[Auth] Change-password error:", err);
+    return res.status(500).json({ error: "Passwort konnte nicht geaendert werden" });
   }
 });
 
