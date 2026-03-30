@@ -21,3 +21,6 @@ if [ -n "$HAS_NON_VERSION_CHANGES" ]; then
 fi
 
 npm test
+
+echo "[pre-commit] Production-Build wird erstellt..."
+pnpm build
