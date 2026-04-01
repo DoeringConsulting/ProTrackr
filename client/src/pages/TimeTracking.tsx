@@ -566,14 +566,19 @@ export default function TimeTracking() {
       }
 
       if (expense.category === "hotel") {
-        if (dateStr < checkInDate || dateStr >= checkOutDate) {
+        if (dateStr < checkInDate || dateStr > checkOutDate) {
           return [];
         }
+        const subLabel = dateStr === checkInDate
+          ? "Check-in"
+          : dateStr === checkOutDate
+            ? "Check-out"
+            : "Hotelnacht";
         return [
           {
             ...baseItem,
             _showAmount: dateStr === checkInDate,
-            _subLabel: dateStr === checkInDate ? "Check-in" : "Hotelnacht",
+            _subLabel: subLabel,
           },
         ];
       }
