@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "version": "1.1.0",
+      "date": "2026-04-02",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Onsite/Remote Stundenaufschlüsselung",
+          "description": "Alle Berichte zeigen jetzt Stunden und Manntage aufgeschlüsselt nach Onsite und Remote"
+        },
+        {
+          "type": "feature",
+          "title": "Vollständige Dreisprachigkeit (DE/EN/PL)",
+          "description": "Alle Berichte reinsprachig in Deutsch, Englisch oder Polnisch — keine Sprachmischung mehr"
+        },
+        {
+          "type": "improvement",
+          "title": "Buchhaltungsberichte ausschließlich auf Polnisch",
+          "description": "Buchhaltungsbericht und Kundenbericht für die Buchhaltung werden nun ausschließlich in polnischer Sprache erstellt"
+        }
+      ]
+    },
+    {
       "version": "1.0.94",
       "date": "2026-04-01",
       "changes": [

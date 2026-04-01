@@ -648,6 +648,9 @@ export default function Reports() {
 
   const handleExportCustomerTimesheet = async () => {
     if (!customerData) return;
+    const onsiteEntries = customerData.entries.filter((e) => e.entryType === "onsite");
+    const remoteEntries = customerData.entries.filter((e) => e.entryType === "remote");
+
     await exportCustomerTimesheetToPDF({
       language: reportLanguage,
       startDate,
@@ -665,6 +668,10 @@ export default function Reports() {
       })),
       totalHours: customerData.totalHours,
       totalManDays: customerData.totalManDays,
+      onsiteHours: onsiteEntries.reduce((sum, e) => sum + e.hours, 0),
+      onsiteManDays: onsiteEntries.reduce((sum, e) => sum + e.manDays, 0),
+      remoteHours: remoteEntries.reduce((sum, e) => sum + e.hours, 0),
+      remoteManDays: remoteEntries.reduce((sum, e) => sum + e.manDays, 0),
       appliedExchangeRates: appliedExchangeRatesForUi,
     });
     toast.success("Stundennachweis wurde erstellt");
@@ -1126,7 +1133,8 @@ export default function Reports() {
                               customerData,
                               startDate,
                               endDate,
-                              appliedExchangeRatesForUi
+                              appliedExchangeRatesForUi,
+                              reportLanguage
                             )
                           }
                           disabled={reportRatesQuery.isLoading}

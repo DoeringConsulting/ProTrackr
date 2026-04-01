@@ -210,6 +210,16 @@ function getEntryTypePl(entryType: string) {
   return map[entryType] || entryType;
 }
 
+function getEntryTypeByLanguage(entryType: string, language: ReportLanguage) {
+  const map: Record<string, Record<ReportLanguage, string>> = {
+    onsite: { de: "Vor Ort", en: "Onsite", pl: "Stacjonarnie" },
+    remote: { de: "Remote", en: "Remote", pl: "Zdalnie" },
+    off_duty: { de: "Abwesend", en: "Off duty", pl: "Wolne" },
+    business_trip: { de: "Dienstreise", en: "Business trip", pl: "Podroz sluzbowa" },
+  };
+  return map[entryType]?.[language] || entryType;
+}
+
 async function savePdfWithFallback(doc: jsPDF, filename: string) {
   try {
     const { saveFileToLocal } = await import("@/lib/fileSystem");
@@ -324,11 +334,24 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     },
   });
 
+  // Calculate onsite/remote breakdown from entries
+  const onsiteEntries = input.entries.filter((e) => e.entryType === "onsite");
+  const remoteEntries = input.entries.filter((e) => e.entryType === "remote");
+  const onsiteHours = onsiteEntries.reduce((sum, e) => sum + e.hours, 0);
+  const onsiteManDays = onsiteEntries.reduce((sum, e) => sum + e.manDays, 0);
+  const remoteHours = remoteEntries.reduce((sum, e) => sum + e.hours, 0);
+  const remoteManDays = remoteEntries.reduce((sum, e) => sum + e.manDays, 0);
+
   const sumStartY = (doc as any).lastAutoTable.finalY + 6;
   autoTable(doc, {
     startY: sumStartY,
     head: [["Podsumowanie", "Wartosc"]],
     body: [
+      ["Godziny stacjonarnie (hh:mm)", formatHours(onsiteHours)],
+      ["Man-days stacjonarnie", formatManDays(onsiteManDays)],
+      ["Godziny zdalnie (hh:mm)", formatHours(remoteHours)],
+      ["Man-days zdalnie", formatManDays(remoteManDays)],
+      ["", ""],
       ["Suma godzin (hh:mm)", formatHours(input.summary.totalHoursMinutes)],
       ["Suma man-days", formatManDays(input.summary.totalManDays)],
       ["Przychod (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
@@ -404,11 +427,17 @@ export async function exportCustomerTimesheetToPDF(input: {
   }>;
   totalHours: number;
   totalManDays: number;
+  onsiteHours: number;
+  onsiteManDays: number;
+  remoteHours: number;
+  remoteManDays: number;
   appliedExchangeRates?: AppliedExchangeRate[];
 }) {
   const t = {
     de: {
       title: "Stundennachweis",
+      client: "Kunde",
+      project: "Projekt",
       period: "Zeitraum",
       consultant: "Berater",
       date: "Datum",
@@ -418,10 +447,19 @@ export async function exportCustomerTimesheetToPDF(input: {
       md: "Manntage",
       desc: "Tätigkeit",
       total: "Gesamt",
+      onsite: "Vor Ort",
+      remote: "Remote",
       page: "Seite",
+      exchangeRates: "Angewendete Wechselkurse",
+      rate: "Kurs",
+      rateDate: "Kursdatum",
+      rateSource: "Quelle",
+      noRate: "k.A.",
     },
     en: {
       title: "Timesheet",
+      client: "Client",
+      project: "Project",
       period: "Period",
       consultant: "Consultant",
       date: "Date",
@@ -431,10 +469,19 @@ export async function exportCustomerTimesheetToPDF(input: {
       md: "Man-days",
       desc: "Activity",
       total: "Total",
+      onsite: "Onsite",
+      remote: "Remote",
       page: "Page",
+      exchangeRates: "Applied exchange rates",
+      rate: "Rate",
+      rateDate: "Rate date",
+      rateSource: "Source",
+      noRate: "n/a",
     },
     pl: {
       title: "Ewidencja godzin",
+      client: "Klient",
+      project: "Projekt",
       period: "Okres",
       consultant: "Doradca",
       date: "Data",
@@ -444,7 +491,14 @@ export async function exportCustomerTimesheetToPDF(input: {
       md: "Man-days",
       desc: "Zakres pracy",
       total: "Suma",
+      onsite: "Stacjonarnie",
+      remote: "Zdalnie",
       page: "Strona",
+      exchangeRates: "Zastosowane kursy walut",
+      rate: "Kurs",
+      rateDate: "Data kursu",
+      rateSource: "Zrodlo",
+      noRate: "Brak kursu",
     },
   }[input.language];
 
@@ -452,8 +506,8 @@ export async function exportCustomerTimesheetToPDF(input: {
   doc.setFontSize(17);
   doc.text(t.title, 14, 16);
   doc.setFontSize(10);
-  doc.text(sanitizeForPdf(`Client: ${input.customerName}`), 14, 22);
-  doc.text(sanitizeForPdf(`Project: ${input.projectName}`), 14, 27);
+  doc.text(sanitizeForPdf(`${t.client}: ${input.customerName}`), 14, 22);
+  doc.text(sanitizeForPdf(`${t.project}: ${input.projectName}`), 14, 27);
   doc.text(
     sanitizeForPdf(`${t.period}: ${new Date(input.startDate).toLocaleDateString("de-DE")} - ${new Date(
       input.endDate
@@ -468,7 +522,7 @@ export async function exportCustomerTimesheetToPDF(input: {
     body: input.entries.map((entry) => [
       formatDateDe(entry.date),
       getWeekdayByLanguage(entry.weekday, input.language),
-      entry.entryType,
+      getEntryTypeByLanguage(entry.entryType, input.language),
       formatHours(entry.hours),
       formatManDays(entry.manDays),
       sanitizeForPdf(entry.description || "-"),
@@ -484,6 +538,11 @@ export async function exportCustomerTimesheetToPDF(input: {
     startY: (doc as any).lastAutoTable.finalY + 4,
     head: [[t.total, ""]],
     body: [
+      [`${t.hours} ${t.onsite} (hh:mm)`, formatHours(input.onsiteHours)],
+      [`${t.md} ${t.onsite}`, formatManDays(input.onsiteManDays)],
+      [`${t.hours} ${t.remote} (hh:mm)`, formatHours(input.remoteHours)],
+      [`${t.md} ${t.remote}`, formatManDays(input.remoteManDays)],
+      ["", ""],
       [`${t.hours} (hh:mm)`, formatHours(input.totalHours)],
       [t.md, formatManDays(input.totalManDays)],
     ],
@@ -503,16 +562,16 @@ export async function exportCustomerTimesheetToPDF(input: {
 
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 4,
-    head: [["Applied exchange rates", "Rate", "Rate date", "Source"]],
+    head: [[t.exchangeRates, t.rate, t.rateDate, t.rateSource]],
     body:
       normalizedRates.length > 0
         ? normalizedRates.map((item) => [
             item.pair,
-            item.rate === null ? "n/a" : item.rate.toFixed(6),
+            item.rate === null ? t.noRate : item.rate.toFixed(6),
             formatRateDate(item.date),
             String(item.source || "NBP"),
           ])
-        : [["-", "n/a", "-", "-"]],
+        : [["-", t.noRate, "-", "-"]],
     styles: { fontSize: 8 },
     headStyles: { fillColor: [2, 90, 100] },
   });
@@ -560,6 +619,8 @@ export async function exportCustomerCostStatementToPDF(input: {
   const t = {
     de: {
       title: "Kostenaufstellung",
+      client: "Kunde",
+      project: "Projekt",
       period: "Zeitraum",
       date: "Datum",
       hours: "Stunden",
@@ -569,9 +630,16 @@ export async function exportCustomerCostStatementToPDF(input: {
       travelTypes: "Reisearten",
       total: "Gesamt",
       page: "Seite",
+      exchangeRates: "Angewendete Wechselkurse",
+      rate: "Kurs",
+      rateDate: "Kursdatum",
+      rateSource: "Quelle",
+      noRate: "k.A.",
     },
     en: {
       title: "Cost Statement",
+      client: "Client",
+      project: "Project",
       period: "Period",
       date: "Date",
       hours: "Hours",
@@ -581,9 +649,16 @@ export async function exportCustomerCostStatementToPDF(input: {
       travelTypes: "Travel Types",
       total: "Total",
       page: "Page",
+      exchangeRates: "Applied exchange rates",
+      rate: "Rate",
+      rateDate: "Rate date",
+      rateSource: "Source",
+      noRate: "n/a",
     },
     pl: {
       title: "Zestawienie kosztow",
+      client: "Klient",
+      project: "Projekt",
       period: "Okres",
       date: "Data",
       hours: "Godziny",
@@ -593,6 +668,11 @@ export async function exportCustomerCostStatementToPDF(input: {
       travelTypes: "Rodzaje kosztow",
       total: "Suma",
       page: "Strona",
+      exchangeRates: "Zastosowane kursy walut",
+      rate: "Kurs",
+      rateDate: "Data kursu",
+      rateSource: "Zrodlo",
+      noRate: "Brak kursu",
     },
   }[input.language];
 
@@ -600,8 +680,8 @@ export async function exportCustomerCostStatementToPDF(input: {
   doc.setFontSize(17);
   doc.text(sanitizeForPdf(`${t.title} (${input.customerCurrency})`), 14, 16);
   doc.setFontSize(10);
-  doc.text(sanitizeForPdf(`Client: ${input.customerName}`), 14, 22);
-  doc.text(sanitizeForPdf(`Project: ${input.projectName}`), 14, 27);
+  doc.text(sanitizeForPdf(`${t.client}: ${input.customerName}`), 14, 22);
+  doc.text(sanitizeForPdf(`${t.project}: ${input.projectName}`), 14, 27);
   doc.text(
     sanitizeForPdf(`${t.period}: ${new Date(input.startDate).toLocaleDateString("de-DE")} - ${new Date(
       input.endDate
@@ -652,16 +732,16 @@ export async function exportCustomerCostStatementToPDF(input: {
 
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 4,
-    head: [["Applied exchange rates", "Rate", "Rate date", "Source"]],
+    head: [[t.exchangeRates, t.rate, t.rateDate, t.rateSource]],
     body:
       normalizedRates.length > 0
         ? normalizedRates.map((item) => [
             item.pair,
-            item.rate === null ? "n/a" : item.rate.toFixed(6),
+            item.rate === null ? t.noRate : item.rate.toFixed(6),
             formatRateDate(item.date),
             String(item.source || "NBP"),
           ])
-        : [["-", "n/a", "-", "-"]],
+        : [["-", t.noRate, "-", "-"]],
     styles: { fontSize: 8 },
     headStyles: { fillColor: [2, 90, 100] },
   });
