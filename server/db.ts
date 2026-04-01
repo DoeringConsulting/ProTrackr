@@ -424,7 +424,7 @@ export async function getExpensesByCustomer(userId: number, customerId: number, 
   }
   if (endDate) {
     conditions.push(
-      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
+      sql`COALESCE(${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
     );
   }
 
@@ -748,7 +748,7 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
   }
   if (endDate) {
     timeEntryConditions.push(
-      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
+      sql`COALESCE(${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
     );
   }
 
@@ -792,7 +792,7 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
   }
   if (endDate) {
     standaloneConditions.push(
-      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
+      sql`COALESCE(${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
     );
   }
 

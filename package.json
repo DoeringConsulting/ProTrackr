@@ -1,6 +1,6 @@
 {
   "name": "project-billing-app",
-  "version": "1.0.92",
+  "version": "1.0.93",
   "type": "module",
   "license": "MIT",
   "scripts": {

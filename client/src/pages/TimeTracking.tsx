@@ -566,7 +566,7 @@ export default function TimeTracking() {
       }
 
       if (expense.category === "hotel") {
-        if (dateStr < checkInDate || dateStr > checkOutDate) {
+        if (dateStr < checkInDate || dateStr >= checkOutDate) {
           return [];
         }
         return [
