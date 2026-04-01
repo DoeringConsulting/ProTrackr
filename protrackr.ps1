@@ -1,9 +1,10 @@
 # ProTrackr Service Manager
-# Usage: protrackr.ps1 [-Action] <Start|Stop|Status|Restart|Recover|Watchdog>
+# Usage: protrackr.ps1 [-Action] <Start|Stop|Status|Restart|Recover|Watchdog> [-Open]
 param(
   [Parameter(Position = 0)]
   [ValidateSet("Start", "Stop", "Status", "Restart", "Recover", "Watchdog")]
-  [string]$Action = "Status"
+  [string]$Action = "Status",
+  [switch]$Open
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,6 +81,10 @@ function Start-ProTrackr {
   }
   Write-Status "Gestartet (PID: $($started.ProcessId -join ', '))" "OK"
   Show-Listeners $started
+  if ($Open) {
+    $url = Get-ListenerUrl $started
+    if ($url) { Start-Process $url }
+  }
 }
 
 function Stop-ProTrackr {
@@ -99,14 +104,19 @@ function Stop-ProTrackr {
   Write-Status "Gestoppt" "OK"
 }
 
-function Show-Listeners($procs) {
+function Get-ListenerUrl($procs) {
   try {
-    $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-      Where-Object { $_.OwningProcess -in $procs.ProcessId }
-    foreach ($l in ($listeners | Sort-Object LocalPort -Unique)) {
-      Write-Status "http://localhost:$($l.LocalPort)/" "OK"
-    }
+    $listener = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+      Where-Object { $_.OwningProcess -in $procs.ProcessId } |
+      Sort-Object LocalPort | Select-Object -First 1
+    if ($listener) { return "http://localhost:$($listener.LocalPort)/" }
   } catch {}
+  return $null
+}
+
+function Show-Listeners($procs) {
+  $url = Get-ListenerUrl $procs
+  if ($url) { Write-Status $url "OK" }
 }
 
 function Show-Status {
