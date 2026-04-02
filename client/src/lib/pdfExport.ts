@@ -192,8 +192,11 @@ export async function exportCustomerReportToPDF(
       summary: "Zusammenfassung",
       costModel: "Abrechnungsmodell",
       totalHours: "Gesamtstunden (hh:mm)",
+      totalHoursDecimal: "Gesamtstunden (dezimal)",
       onsiteHours: "Stunden Vor Ort (hh:mm)",
+      onsiteHoursDecimal: "Stunden Vor Ort (dezimal)",
       remoteHours: "Stunden Remote (hh:mm)",
+      remoteHoursDecimal: "Stunden Remote (dezimal)",
       manDays: "Manntage",
       onsiteManDays: "Manntage Vor Ort",
       remoteManDays: "Manntage Remote",
@@ -224,8 +227,11 @@ export async function exportCustomerReportToPDF(
       summary: "Summary",
       costModel: "Cost model",
       totalHours: "Total hours (hh:mm)",
+      totalHoursDecimal: "Total hours (decimal)",
       onsiteHours: "Hours Onsite (hh:mm)",
+      onsiteHoursDecimal: "Hours Onsite (decimal)",
       remoteHours: "Hours Remote (hh:mm)",
+      remoteHoursDecimal: "Hours Remote (decimal)",
       manDays: "Man-days",
       onsiteManDays: "Man-days Onsite",
       remoteManDays: "Man-days Remote",
@@ -256,8 +262,11 @@ export async function exportCustomerReportToPDF(
       summary: "Podsumowanie",
       costModel: "Model rozliczen",
       totalHours: "Suma godzin (hh:mm)",
+      totalHoursDecimal: "Suma godzin (dziesietne)",
       onsiteHours: "Godziny stacjonarnie (hh:mm)",
+      onsiteHoursDecimal: "Godziny stacjonarnie (dziesietne)",
       remoteHours: "Godziny zdalnie (hh:mm)",
+      remoteHoursDecimal: "Godziny zdalnie (dziesietne)",
       manDays: "Man-days",
       onsiteManDays: "Man-days stacjonarnie",
       remoteManDays: "Man-days zdalnie",
@@ -302,6 +311,7 @@ export async function exportCustomerReportToPDF(
     return `${hours}:${mins.toString().padStart(2, "0")}h`;
   };
   const formatManDays = (manDays: number) => (manDays / 1000).toFixed(3);
+  const formatDecimalHours = (minutes: number) => (minutes / 60).toFixed(5);
 
   // Onsite/Remote breakdown
   const onsiteEntries = data.entries.filter((e) => e.entryType === "onsite");
@@ -322,11 +332,14 @@ export async function exportCustomerReportToPDF(
     body: [
       [t.costModel, data.customer.costModel ?? "n/a"],
       [t.onsiteHours, formatHours(onsiteHrs)],
+      [t.onsiteHoursDecimal, formatDecimalHours(onsiteHrs)],
       [t.onsiteManDays, formatManDays(onsiteMd)],
       [t.remoteHours, formatHours(remoteHrs)],
+      [t.remoteHoursDecimal, formatDecimalHours(remoteHrs)],
       [t.remoteManDays, formatManDays(remoteMd)],
       ["", ""],
       [t.totalHours, formatHours(data.totalHours)],
+      [t.totalHoursDecimal, formatDecimalHours(data.totalHours)],
       [t.manDays, formatManDays(data.totalManDays)],
       [t.serviceValue, formatCurrency(data.totalAmount)],
       [t.travelTotal, formatCurrency(data.totalExpenses)],

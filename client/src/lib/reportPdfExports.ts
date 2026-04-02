@@ -109,6 +109,10 @@ function formatHours(minutes: number) {
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
+function formatDecimalHours(minutes: number) {
+  return (minutes / 60).toFixed(5);
+}
+
 function formatManDays(value: number) {
   return (value / 1000).toFixed(3);
 }
@@ -348,11 +352,14 @@ export async function exportPolishBookkeepingReportToPDF(input: {
     head: [["Podsumowanie", "Wartosc"]],
     body: [
       ["Godziny stacjonarnie (hh:mm)", formatHours(onsiteHours)],
+      ["Godziny stacjonarnie (dziesietne)", formatDecimalHours(onsiteHours)],
       ["Man-days stacjonarnie", formatManDays(onsiteManDays)],
       ["Godziny zdalnie (hh:mm)", formatHours(remoteHours)],
+      ["Godziny zdalnie (dziesietne)", formatDecimalHours(remoteHours)],
       ["Man-days zdalnie", formatManDays(remoteManDays)],
       ["", ""],
       ["Suma godzin (hh:mm)", formatHours(input.summary.totalHoursMinutes)],
+      ["Suma godzin (dziesietne)", formatDecimalHours(input.summary.totalHoursMinutes)],
       ["Suma man-days", formatManDays(input.summary.totalManDays)],
       ["Przychod (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
       ["Koszty podrozy (EUR)", formatMoney(input.summary.travelEur, "EUR")],
@@ -449,6 +456,7 @@ export async function exportCustomerTimesheetToPDF(input: {
       total: "Gesamt",
       onsite: "Vor Ort",
       remote: "Remote",
+      hoursDecimal: "Stunden (dezimal)",
       page: "Seite",
       exchangeRates: "Angewendete Wechselkurse",
       rate: "Kurs",
@@ -471,6 +479,7 @@ export async function exportCustomerTimesheetToPDF(input: {
       total: "Total",
       onsite: "Onsite",
       remote: "Remote",
+      hoursDecimal: "Hours (decimal)",
       page: "Page",
       exchangeRates: "Applied exchange rates",
       rate: "Rate",
@@ -493,6 +502,7 @@ export async function exportCustomerTimesheetToPDF(input: {
       total: "Suma",
       onsite: "Stacjonarnie",
       remote: "Zdalnie",
+      hoursDecimal: "Godziny (dziesietne)",
       page: "Strona",
       exchangeRates: "Zastosowane kursy walut",
       rate: "Kurs",
@@ -539,11 +549,14 @@ export async function exportCustomerTimesheetToPDF(input: {
     head: [[t.total, ""]],
     body: [
       [`${t.hours} ${t.onsite} (hh:mm)`, formatHours(input.onsiteHours)],
+      [`${t.hoursDecimal} ${t.onsite}`, formatDecimalHours(input.onsiteHours)],
       [`${t.md} ${t.onsite}`, formatManDays(input.onsiteManDays)],
       [`${t.hours} ${t.remote} (hh:mm)`, formatHours(input.remoteHours)],
+      [`${t.hoursDecimal} ${t.remote}`, formatDecimalHours(input.remoteHours)],
       [`${t.md} ${t.remote}`, formatManDays(input.remoteManDays)],
       ["", ""],
       [`${t.hours} (hh:mm)`, formatHours(input.totalHours)],
+      [`${t.hoursDecimal}`, formatDecimalHours(input.totalHours)],
       [t.md, formatManDays(input.totalManDays)],
     ],
     styles: { fontSize: 9 },
