@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,8 +19,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { TrendingUp, RefreshCw, Plus } from "lucide-react";
-import { useState } from "react";
+import { TrendingUp, RefreshCw, Plus, Info } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const CURRENCIES = [
@@ -36,20 +37,60 @@ function normalizeStoredRate(rawRate: number) {
   return rawRate > 100 ? rawRate / 10000 : rawRate;
 }
 
+function formatDateTime(iso: string | Date | null | undefined) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso as any).toLocaleString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function todayLocalIso() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export default function ExchangeRatesTab() {
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
   const [manualRate, setManualRate] = useState("");
+  const [manualDate, setManualDate] = useState(todayLocalIso());
   const [filterCurrency, setFilterCurrency] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   const utils = trpc.useUtils();
-  
+
   // Fetch exchange rates with optional filters
   const { data: exchangeRates, isLoading } = trpc.exchangeRatesManagement.list.useQuery({
     currency: filterCurrency !== "all" ? filterCurrency : undefined,
     startDate: startDate || undefined,
     endDate: endDate || undefined,
+  });
+
+  // Account settings hold the global "use manual rate for reports" toggle.
+  const { data: accountSettings } = trpc.accountSettings.get.useQuery();
+  const [useManualOverride, setUseManualOverride] = useState(false);
+  useEffect(() => {
+    setUseManualOverride(Number(accountSettings?.useManualExchangeRate ?? 0) === 1);
+  }, [accountSettings?.useManualExchangeRate]);
+
+  const accountSettingsMutation = trpc.accountSettings.upsert.useMutation({
+    onSuccess: () => {
+      utils.accountSettings.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Fehler beim Speichern: ${error.message}`);
+    },
   });
 
   // Mutation to update exchange rates from NBP
@@ -85,12 +126,35 @@ export default function ExchangeRatesTab() {
       toast.error("Bitte gültigen Wechselkurs eingeben");
       return;
     }
+    if (!manualDate) {
+      toast.error("Bitte ein Datum für den Kurs angeben");
+      return;
+    }
+    if (selectedCurrency === "PLN") {
+      toast.error("PLN ist Basiswährung — kein Wechselkurs nötig");
+      return;
+    }
 
     await createManualRateMutation.mutateAsync({
       currencyPair: `${selectedCurrency}/PLN`,
       rate: parseFloat(manualRate),
-      date: new Date().toISOString().split('T')[0],
+      date: manualDate,
     });
+  };
+
+  const handleToggleManualOverride = async (checked: boolean) => {
+    setUseManualOverride(checked);
+    try {
+      await accountSettingsMutation.mutateAsync({ useManualExchangeRate: checked });
+      toast.success(
+        checked
+          ? "Berichte verwenden ab sofort den manuellen Wechselkurs"
+          : "Berichte verwenden ab sofort den automatischen NBP-Kurs"
+      );
+    } catch {
+      // onError handler shows toast; revert local state
+      setUseManualOverride(!checked);
+    }
   };
 
   return (
@@ -110,12 +174,13 @@ export default function ExchangeRatesTab() {
             NBP-Kurse aktualisieren
           </CardTitle>
           <CardDescription>
-            Aktuelle Wechselkurse von der Narodowy Bank Polski (NBP) abrufen
+            Aktuelle Wechselkurse von der Narodowy Bank Polski (NBP) abrufen — automatisch
+            der Kurs des letzten Werktages
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button 
-            onClick={handleUpdateFromNBP} 
+          <Button
+            onClick={handleUpdateFromNBP}
             disabled={updateFromNBPMutation.isPending}
             className="w-full sm:w-auto"
           >
@@ -133,11 +198,11 @@ export default function ExchangeRatesTab() {
             Manuellen Wechselkurs eingeben
           </CardTitle>
           <CardDescription>
-            Überschreiben Sie NBP-Kurse mit eigenen Werten (z.B. für Wochenenden)
+            Hinterlegen Sie einen eigenen Kurs (z.B. für Wochenenden oder spezielle Vereinbarungen).
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label htmlFor="currency">Währung</Label>
               <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
@@ -154,6 +219,15 @@ export default function ExchangeRatesTab() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="manual-date">Datum</Label>
+              <Input
+                id="manual-date"
+                type="date"
+                value={manualDate}
+                onChange={(e) => setManualDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="rate">Kurs (1 {selectedCurrency} = X PLN)</Label>
               <Input
                 id="rate"
@@ -166,13 +240,33 @@ export default function ExchangeRatesTab() {
             </div>
             <div className="space-y-2">
               <Label>&nbsp;</Label>
-              <Button 
-                onClick={handleCreateManualRate} 
+              <Button
+                onClick={handleCreateManualRate}
                 disabled={createManualRateMutation.isPending}
                 className="w-full"
               >
                 Speichern
               </Button>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Checkbox
+              id="use-manual"
+              checked={useManualOverride}
+              onCheckedChange={(checked) => handleToggleManualOverride(Boolean(checked))}
+              disabled={accountSettingsMutation.isPending}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="use-manual" className="cursor-pointer">
+                Manuellen Wechselkurs für alle Berichte verwenden
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Häkchen gesetzt — alle Berichte (Buchhaltungs-, Kunden-, PDF-, Excel-Export)
+                verwenden den jeweils zuletzt manuell hinterlegten Kurs pro Währungspaar.
+                Häkchen entfernt — Berichte holen den NBP-Kurs des letzten Werktages
+                automatisch.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -186,7 +280,9 @@ export default function ExchangeRatesTab() {
             Wechselkurs-Historie
           </CardTitle>
           <CardDescription>
-            Alle gespeicherten Wechselkurse (Darstellung: 1 PLN = x X und 1 X = x PLN)
+            Maximal 20 Einträge — ältere werden automatisch entfernt. Bei mehrfacher
+            Abfrage am selben Tag wird ein neuer Eintrag nur dann angelegt, wenn sich
+            der Kurs tatsächlich geändert hat (z.B. nach NBP-Tagesveröffentlichung).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -246,7 +342,8 @@ export default function ExchangeRatesTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Datum</TableHead>
+                    <TableHead>NBP-Datum</TableHead>
+                    <TableHead>Abgefragt am</TableHead>
                     <TableHead>Währungspaar</TableHead>
                     <TableHead className="text-right">Kurs (1 PLN = x X)</TableHead>
                     <TableHead className="text-right">Kurs (1 X = x PLN)</TableHead>
@@ -260,10 +357,13 @@ export default function ExchangeRatesTab() {
                     const normalizedRate = normalizeStoredRate(rate.rate);
                     const plnToForeign = normalizedRate > 0 ? 1 / normalizedRate : 0;
                     const foreignToPln = normalizedRate;
-                    
+
                     return (
                       <TableRow key={rate.id}>
                         <TableCell>{new Date(rate.date).toLocaleDateString('de-DE')}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {formatDateTime(rate.queriedAt ?? rate.createdAt)}
+                        </TableCell>
                         <TableCell className="font-medium">{rate.currencyPair}</TableCell>
                         <TableCell className="text-right font-mono">
                           {plnToForeign.toFixed(4)} {baseCurrency}
@@ -273,8 +373,8 @@ export default function ExchangeRatesTab() {
                         </TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                            rate.source === 'NBP' 
-                              ? 'bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] ring-1 ring-inset ring-[var(--badge-inclusive-text)]/20' 
+                            rate.source === 'NBP'
+                              ? 'bg-[var(--badge-inclusive-bg)] text-[var(--badge-inclusive-text)] ring-1 ring-inset ring-[var(--badge-inclusive-text)]/20'
                               : 'bg-[var(--badge-exclusive-bg)] text-[var(--badge-exclusive-text)] ring-1 ring-inset ring-[var(--badge-exclusive-text)]/20'
                           }`}>
                             {rate.source}
@@ -294,6 +394,11 @@ export default function ExchangeRatesTab() {
               </Table>
             </div>
           )}
+          <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5" />
+            NBP veröffentlicht die Tabelle A einmal pro Werktag (~12:00 Uhr polnischer Zeit).
+            Abfragen davor liefern den Kurs vom Vortag, danach den Tageskurs.
+          </p>
         </CardContent>
       </Card>
     </div>

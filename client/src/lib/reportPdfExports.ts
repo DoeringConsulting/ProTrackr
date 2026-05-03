@@ -49,7 +49,10 @@ type AppliedExchangeRate = {
   pair: string;
   rate: number | null;
   date?: string | null;
+  queriedAt?: string | null;
   source?: string | null;
+  isManual?: boolean;
+  // Backwards-compat alias kept for older callers; not rendered any more.
   fetchedFromArchive?: boolean;
 };
 

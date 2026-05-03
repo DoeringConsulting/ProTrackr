@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { invoiceNumbers, customers } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -543,30 +543,71 @@ export async function updateExpenseAiAnalysis(id: number, data: any) {
   await db.update(expenseAiAnalyses).set(data).where(eq(expenseAiAnalyses.id, id));
 }
 
+// Maximum number of exchange rate rows kept per scope (userId). Older rows are
+// pruned automatically after each insert. The user's `Wechselkurse` tab displays
+// both global (NBP, userId=0) and the user's own manual rates side by side, so
+// the cap is applied independently per scope to keep ~20 visible total per source.
+const EXCHANGE_RATE_HISTORY_CAP = 20;
+
 // Exchange rate queries
+//
+// Stores a fetched/manual rate with intra-day deduplication:
+//   - If the most recent row for (currencyPair, userId, effective date) has the
+//     same rate → only refresh `queriedAt` (no new history entry).
+//   - Otherwise → INSERT a new row, recording when it was fetched.
+// After insert, prunes anything beyond EXCHANGE_RATE_HISTORY_CAP (oldest by
+// queriedAt is dropped).
 export async function createExchangeRate(data: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { exchangeRates } = await import("../drizzle/schema");
   const userId = typeof data.userId === "number" ? data.userId : 0;
-  const payload = { ...data, userId };
-  
-  // Check if rate already exists for this date and currency pair
+  const isManual =
+    typeof data.isManual === "number"
+      ? data.isManual
+      : String(data.source || "").toLowerCase() === "manual"
+        ? 1
+        : 0;
+  const payload = { ...data, userId, isManual };
+  const now = new Date();
+
+  // Check if a row with the same effective date already exists for this scope.
   const existing = await getExchangeRateByDate(data.currencyPair, data.date, userId);
-  
-  if (existing) {
-    // Update existing rate
+
+  if (existing && Number(existing.rate) === Number(data.rate)) {
+    // Same effective date AND same rate — just refresh queriedAt to indicate the
+    // most recent verification time without polluting the history.
     await db.update(exchangeRates)
-      .set(payload)
-      .where(and(
-        eq(exchangeRates.currencyPair, data.currencyPair),
-        eq(exchangeRates.date, data.date),
-        eq(exchangeRates.userId, userId)
-      ));
-  } else {
-    // Insert new rate
-    await db.insert(exchangeRates).values(payload);
+      .set({ queriedAt: now })
+      .where(eq(exchangeRates.id, existing.id));
+    return;
   }
+
+  // Either no row yet or rate differs (NBP intra-day adjustment) → insert new.
+  await db.insert(exchangeRates).values({ ...payload, queriedAt: now });
+  await pruneExchangeRateHistory(userId);
+}
+
+/**
+ * Keeps only the most recent EXCHANGE_RATE_HISTORY_CAP rows for the given scope
+ * (by queriedAt desc), deleting anything older.
+ */
+async function pruneExchangeRateHistory(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const { exchangeRates } = await import("../drizzle/schema");
+
+  const rows = await db
+    .select({ id: exchangeRates.id })
+    .from(exchangeRates)
+    .where(eq(exchangeRates.userId, userId))
+    .orderBy(desc(exchangeRates.queriedAt))
+    .limit(1000);
+
+  if (rows.length <= EXCHANGE_RATE_HISTORY_CAP) return;
+  const idsToDelete = rows.slice(EXCHANGE_RATE_HISTORY_CAP).map(r => r.id);
+  if (idsToDelete.length === 0) return;
+  await db.delete(exchangeRates).where(inArray(exchangeRates.id, idsToDelete));
 }
 
 export async function getExchangeRates(filters?: {
@@ -875,31 +916,60 @@ export async function upsertAccountSettings(userId: number, data: any) {
   return await getAccountSettings(userId);
 }
 
-// Manual exchange rate management
+// Manual / automatic exchange rate upsert. Delegates to `createExchangeRate`
+// which handles dedup (same date+rate → only bump queriedAt) and history cap.
 export async function upsertExchangeRate(data: any) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const { exchangeRates } = await import("../drizzle/schema");
-  const isManual = String(data.source || "").toLowerCase() === "manual" ? 1 : 0;
   const userId = typeof data.userId === "number" ? data.userId : 0;
-  const payload = { ...data, userId };
-  
-  // Check if rate exists for this date and currency pair
-  const existing = await getExchangeRateByDate(data.currencyPair, data.date, userId);
-  
-  if (existing) {
-    await db.update(exchangeRates)
-      .set({ ...payload, isManual })
-      .where(and(
-        eq(exchangeRates.currencyPair, data.currencyPair),
-        eq(exchangeRates.date, data.date),
-        eq(exchangeRates.userId, userId)
-      ));
-  } else {
-    await db.insert(exchangeRates).values({ ...payload, isManual });
-  }
-  
+  const isManual = String(data.source || "").toLowerCase() === "manual" ? 1 : 0;
+  await createExchangeRate({ ...data, userId, isManual });
   return await getExchangeRateByDate(data.currencyPair, data.date, userId);
+}
+
+/**
+ * Returns the most recent NBP (global, userId=0) rate for the given pair, or
+ * null if none has been stored yet. Used as a cache short-circuit so we avoid
+ * hammering the NBP API on every Reports page load.
+ */
+export async function getLatestNbpExchangeRate(currencyPair: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const { exchangeRates } = await import("../drizzle/schema");
+
+  const result = await db
+    .select()
+    .from(exchangeRates)
+    .where(and(
+      eq(exchangeRates.currencyPair, currencyPair),
+      eq(exchangeRates.userId, 0),
+      eq(exchangeRates.isManual, 0)
+    ))
+    .orderBy(desc(exchangeRates.queriedAt))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+/**
+ * Returns the most recent manual rate (any date) for the given scope. Used when
+ * the user has activated the "use manual rate for reports" override.
+ */
+export async function getLatestManualExchangeRate(currencyPair: string, userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { exchangeRates } = await import("../drizzle/schema");
+
+  const result = await db
+    .select()
+    .from(exchangeRates)
+    .where(and(
+      eq(exchangeRates.currencyPair, currencyPair),
+      eq(exchangeRates.userId, userId),
+      eq(exchangeRates.isManual, 1)
+    ))
+    .orderBy(desc(exchangeRates.date), desc(exchangeRates.queriedAt))
+    .limit(1);
+
+  return result[0] || null;
 }
 
 export async function deleteExchangeRate(currencyPair: string, date: Date) {

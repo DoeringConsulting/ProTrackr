@@ -97,20 +97,13 @@ export default function Reports() {
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
   const historyRateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
-  const reportLastDate = useMemo(() => {
-    const keys: string[] = [];
-    for (const entry of timeEntries as any[]) {
-      const key = toDateKey(entry?.date);
-      if (key) keys.push(key);
-    }
-    for (const expense of expenses as any[]) {
-      const key = toDateKey(expense?.checkOutDate || expense?.checkInDate || expense?.date);
-      if (key) keys.push(key);
-    }
-    if (keys.length === 0) return endDate;
-    keys.sort((a, b) => a.localeCompare(b, "de"));
-    return keys[keys.length - 1] ?? endDate;
-  }, [timeEntries, expenses, endDate]);
+  // Polish VAT rule: the rate of the last working day before invoice/report
+  // issuance is used. The server resolves this against today; we just need a
+  // stable cache key here.
+  const reportCreatedAtKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }, []);
   const reportPairs = useMemo(() => {
     const currencies = new Set<string>(["EUR", "PLN", targetCurrency]);
     for (const customer of customers as any[]) {
@@ -130,10 +123,10 @@ export default function Reports() {
   }, [customers, expenses, fixedCosts, targetCurrency]);
   const reportRatesQuery = trpc.exchangeRatesManagement.resolveForReportDate.useQuery(
     {
-      date: reportLastDate,
+      date: reportCreatedAtKey,
       pairs: reportPairs.length > 0 ? reportPairs : ["EUR/PLN"],
     },
-    { enabled: Boolean(reportLastDate) }
+    { enabled: true }
   );
   const reportRateMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -153,8 +146,9 @@ export default function Reports() {
             pair: String(entry.pair).toUpperCase(),
             rate: typeof entry?.rate === "number" ? entry.rate : null,
             date: typeof entry?.date === "string" ? entry.date : null,
+            queriedAt: typeof entry?.queriedAt === "string" ? entry.queriedAt : null,
             source: String(entry?.source || "NBP"),
-            fetchedFromArchive: Boolean(entry?.fetchedFromArchive),
+            isManual: Boolean(entry?.isManual),
           },
         ])
       ),
@@ -512,13 +506,14 @@ export default function Reports() {
         return {
           pair,
           rate: typeof meta?.rate === "number" ? meta.rate : reportRateMap.get(pair) ?? null,
-          date: meta?.date ?? reportLastDate ?? null,
+          date: meta?.date ?? null,
+          queriedAt: meta?.queriedAt ?? null,
           source: meta?.source ?? "NBP",
-          fetchedFromArchive: Boolean(meta?.fetchedFromArchive),
+          isManual: Boolean(meta?.isManual),
         };
       })
       .sort((a, b) => a.pair.localeCompare(b.pair, "de"));
-  }, [timeEntriesDetailed, expensesDetailedAll, reportRateMap, reportRateMetaByPair, reportLastDate]);
+  }, [timeEntriesDetailed, expensesDetailedAll, reportRateMap, reportRateMetaByPair]);
 
   const handleExportPolishBookkeepingReport = async () => {
     const dateKeyOf = (value: string | Date) => {
@@ -622,9 +617,10 @@ export default function Reports() {
         return {
           pair,
           rate: typeof meta?.rate === "number" ? meta.rate : reportRateMap.get(pair) ?? null,
-          date: meta?.date ?? reportLastDate ?? null,
+          date: meta?.date ?? null,
+          queriedAt: meta?.queriedAt ?? null,
           source: meta?.source ?? "NBP",
-          fetchedFromArchive: Boolean(meta?.fetchedFromArchive),
+          isManual: Boolean(meta?.isManual),
         };
       })
       .sort((a, b) => a.pair.localeCompare(b.pair, "pl"));
@@ -1318,19 +1314,37 @@ export default function Reports() {
                 <div className="mt-4 rounded border p-3 text-sm">
                   <p className="font-medium mb-2">Angewendete Wechselkurse</p>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Referenzdatum für Berichte: {new Date(reportLastDate).toLocaleDateString("de-DE")}
-                    {reportRatesQuery.isLoading ? " (Kurse werden geladen...)" : ""}
+                    Berichterstellung: {new Date(reportCreatedAtKey).toLocaleDateString("de-DE")}
+                    {reportRatesQuery.isLoading ? " · Kurse werden geladen…" : ""}
                   </p>
                   {appliedExchangeRatesForUi.length === 0 ? (
                     <p className="text-muted-foreground">Keine Wechselkurse erforderlich (nur Basiswährung).</p>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-1 text-muted-foreground">
-                      {appliedExchangeRatesForUi.map((entry) => (
-                        <p key={entry.pair}>
-                          {entry.pair}: {entry.rate === null ? "Kurs fehlt" : entry.rate.toFixed(6)} ·{" "}
-                          {entry.date ? `Datum ${new Date(entry.date).toLocaleDateString("de-DE")}` : "Datum -"}
-                        </p>
-                      ))}
+                    <div className="grid grid-cols-1 gap-1 text-muted-foreground">
+                      {appliedExchangeRatesForUi.map((entry) => {
+                        const nbpDate = entry.date
+                          ? new Date(`${entry.date}T00:00:00`).toLocaleDateString("de-DE")
+                          : "—";
+                        const queriedAt = entry.queriedAt
+                          ? new Date(entry.queriedAt).toLocaleString("de-DE", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : null;
+                        const sourceLabel = entry.isManual ? "Manueller Kurs" : "NBP-Datum";
+                        return (
+                          <p key={entry.pair}>
+                            <span className="font-medium text-foreground">{entry.pair}:</span>{" "}
+                            {entry.rate === null ? "Kurs fehlt" : entry.rate.toFixed(6)}
+                            {" · "}
+                            {sourceLabel} {nbpDate}
+                            {queriedAt ? ` · abgefragt ${queriedAt}` : ""}
+                          </p>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

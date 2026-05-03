@@ -2815,10 +2815,15 @@ export const appRouter = router({
         bankName: z.string().optional(),
         iban: z.string().optional(),
         swift: z.string().optional(),
+        useManualExchangeRate: z.union([z.boolean(), z.number()]).optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { upsertAccountSettings } = await import("./db");
-      return await upsertAccountSettings(ctx.user.id, input);
+      const payload: Record<string, any> = { ...input };
+      if (typeof input.useManualExchangeRate !== "undefined") {
+        payload.useManualExchangeRate = input.useManualExchangeRate ? 1 : 0;
+      }
+      return await upsertAccountSettings(ctx.user.id, payload);
     }),
   }),
 
@@ -3456,89 +3461,126 @@ export const appRouter = router({
     }),
     resolveForReportDate: protectedProcedure.input((val: unknown) => {
       return z.object({
-        date: z.string(),
+        // Optional. Reserved for future use; the rate selection is always
+        // anchored on the report-creation date (today), per Polish VAT law:
+        // "ostatni dzień roboczy poprzedzający dzień wystawienia faktury".
+        date: z.string().optional(),
         pairs: z.array(z.string()).min(1).max(25),
       }).parse(val);
     }).query(async ({ ctx, input }) => {
       if (isWebAppAdmin(ctx.user)) return [];
       const {
         createExchangeRate,
-        getExchangeRateByDate,
-        getExchangeRateOnOrBeforeDate,
+        getAccountSettings,
+        getLatestManualExchangeRate,
+        getLatestNbpExchangeRate,
       } = await import("./db");
       const { fetchNBPExchangeRateWithMeta } = await import("./nbp");
-
-      const targetDate = new Date(input.date);
-      if (Number.isNaN(targetDate.getTime())) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Ungültiges Berichtsdatum" });
-      }
 
       const normalizePair = (raw: string) => String(raw || "").trim().toUpperCase();
       const normalizedPairs = Array.from(new Set(input.pairs.map(normalizePair))).filter(pair =>
         /^[A-Z]{3}\/PLN$/.test(pair)
       );
 
+      // Manual override: when the user has flipped the global toggle, every pair
+      // resolves to their latest manual entry instead of going to NBP.
+      const settings = await getAccountSettings(ctx.user.id);
+      const useManualOverride = Number(settings?.useManualExchangeRate ?? 0) === 1;
+
+      // Polish VAT/PIT rule: the rate of the last working day BEFORE the
+      // invoice/report issuance date. Start from "yesterday" — the NBP fallback
+      // (404 → previous day, up to 7 attempts) handles weekends/holidays.
+      const now = new Date();
+      const referenceDate = new Date(now);
+      referenceDate.setDate(referenceDate.getDate() - 1);
+
+      // Cache window: consider an existing NBP rate "fresh" if it was queried
+      // within the last 12 hours. NBP publishes table A around 12:00 PL time,
+      // so a 12-hour window guarantees we re-fetch at least once on either side
+      // of the daily publish window.
+      const FRESH_WINDOW_MS = 12 * 60 * 60 * 1000;
+
       const results: Array<{
         pair: string;
         rate: number | null;
         date: string | null;
+        queriedAt: string | null;
         source: string;
-        fetchedFromArchive: boolean;
+        isManual: boolean;
       }> = [];
+
+      const buildResult = (
+        rateRow: any,
+        opts: { isManual: boolean; sourceLabel: string }
+      ) => ({
+        pair: String(rateRow.currencyPair).toUpperCase(),
+        rate: Number(rateRow.rate) > 100 ? Number(rateRow.rate) / 10000 : Number(rateRow.rate),
+        date: new Date(rateRow.date as any).toISOString().slice(0, 10),
+        queriedAt: new Date(rateRow.queriedAt as any).toISOString(),
+        source: opts.sourceLabel,
+        isManual: opts.isManual,
+      });
 
       for (const pair of normalizedPairs) {
         try {
-          let resolved: any | null = null;
-          // 1) Benutzer-Override am Datum
-          resolved = await getExchangeRateByDate(pair, targetDate, ctx.user.id);
-          // 2) Global am Datum
-          if (!resolved) resolved = await getExchangeRateByDate(pair, targetDate, 0);
-          // 3) Benutzer-Override <= Datum
-          if (!resolved) resolved = await getExchangeRateOnOrBeforeDate(pair, targetDate, ctx.user.id);
-          // 4) Global <= Datum
-          if (!resolved) resolved = await getExchangeRateOnOrBeforeDate(pair, targetDate, 0);
-
-          let fetchedFromArchive = false;
-          if (!resolved) {
-            const baseCurrency = pair.split("/")[0];
-            const archived = await fetchNBPExchangeRateWithMeta(baseCurrency, targetDate);
-            const effectiveDate = new Date(`${archived.effectiveDate}T00:00:00`);
-            await createExchangeRate({
-              date: effectiveDate,
-              currencyPair: pair,
-              rate: Math.round(archived.rate * 10000),
-              source: "NBP",
-              userId: 0,
-            });
-            resolved = await getExchangeRateByDate(pair, effectiveDate, 0);
-            fetchedFromArchive = true;
+          if (useManualOverride) {
+            const manual = await getLatestManualExchangeRate(pair, ctx.user.id);
+            if (manual) {
+              results.push(buildResult(manual, { isManual: true, sourceLabel: "Manual" }));
+              continue;
+            }
+            // No manual rate stored yet — fall through to NBP lookup.
           }
 
-          const normalizedRate =
-            typeof resolved?.rate === "number"
-              ? (resolved.rate > 100 ? resolved.rate / 10000 : resolved.rate)
-              : null;
-          const dateValue = resolved?.date ? new Date(resolved.date) : null;
-          const dateIso =
-            dateValue && !Number.isNaN(dateValue.getTime())
-              ? dateValue.toISOString().slice(0, 10)
-              : null;
+          // Fast path: if we already have a fresh NBP rate, return it without
+          // hitting the upstream API. This keeps Reports snappy and respects
+          // the 20-row history cap.
+          const cached = await getLatestNbpExchangeRate(pair);
+          if (cached?.queriedAt) {
+            const queriedAtMs = new Date(cached.queriedAt as any).getTime();
+            if (now.getTime() - queriedAtMs < FRESH_WINDOW_MS) {
+              results.push(buildResult(cached, { isManual: false, sourceLabel: String(cached.source ?? "NBP") }));
+              continue;
+            }
+          }
+
+          const baseCurrency = pair.split("/")[0];
+          const archived = await fetchNBPExchangeRateWithMeta(baseCurrency, referenceDate);
+          const effectiveDate = new Date(`${archived.effectiveDate}T00:00:00`);
+          const rateInt = Math.round(archived.rate * 10000);
+          await createExchangeRate({
+            date: effectiveDate,
+            currencyPair: pair,
+            rate: rateInt,
+            source: "NBP",
+            userId: 0,
+            isManual: 0,
+          });
 
           results.push({
             pair,
-            rate: normalizedRate,
-            date: dateIso,
-            source: String(resolved?.source ?? "NBP"),
-            fetchedFromArchive,
+            rate: archived.rate,
+            date: archived.effectiveDate,
+            queriedAt: new Date().toISOString(),
+            source: "NBP",
+            isManual: false,
           });
         } catch {
-          results.push({
-            pair,
-            rate: null,
-            date: targetDate.toISOString().slice(0, 10),
-            source: "NBP",
-            fetchedFromArchive: false,
-          });
+          // Fall back to whatever we have stored so the report still works
+          // when NBP is unreachable.
+          const fallback = await getLatestNbpExchangeRate(pair);
+          if (fallback) {
+            results.push(buildResult(fallback, { isManual: false, sourceLabel: String(fallback.source ?? "NBP") }));
+          } else {
+            results.push({
+              pair,
+              rate: null,
+              date: null,
+              queriedAt: null,
+              source: "NBP",
+              isManual: false,
+            });
+          }
         }
       }
 
@@ -3570,24 +3612,32 @@ export const appRouter = router({
         currencies: z.array(z.string()),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { fetchNBPExchangeRate } = await import("./nbp");
+      const { fetchNBPExchangeRateWithMeta } = await import("./nbp");
       const { upsertExchangeRate } = await import("./db");
       if (isWebAppAdmin(ctx.user)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
       }
-      
+
+      // Anchor on yesterday and let NBP's 404-fallback walk back to the last
+      // working day with a published rate (Polish VAT rule: rate of last
+      // working day before invoice issuance).
+      const referenceDate = new Date();
+      referenceDate.setDate(referenceDate.getDate() - 1);
+
       const results = [];
       for (const currency of input.currencies) {
+        if (currency.toUpperCase() === "PLN") continue;
         try {
-          const rate = await fetchNBPExchangeRate(currency);
+          const { rate, effectiveDate } = await fetchNBPExchangeRateWithMeta(currency, referenceDate);
           await upsertExchangeRate({
-            date: new Date(),
+            date: new Date(`${effectiveDate}T00:00:00`),
             currencyPair: `${currency}/PLN`,
             rate: Math.round(rate * 10000),
             source: "NBP",
             userId: 0,
+            isManual: 0,
           });
-          results.push({ currency, success: true, rate });
+          results.push({ currency, success: true, rate, effectiveDate });
         } catch (error: any) {
           results.push({ currency, success: false, error: error.message });
         }

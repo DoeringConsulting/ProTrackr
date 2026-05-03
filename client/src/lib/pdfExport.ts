@@ -67,7 +67,9 @@ type AppliedExchangeRate = {
   pair: string;
   rate: number | null;
   date?: string | null;
+  queriedAt?: string | null;
   source?: string | null;
+  isManual?: boolean;
 };
 
 export async function exportAccountingReportToPDF(

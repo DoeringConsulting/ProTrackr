@@ -225,16 +225,21 @@ export type InsertExpenseAiAnalysis = typeof expenseAiAnalyses.$inferInsert;
  */
 export const exchangeRates = mysqlTable("exchangeRates", {
   id: int("id").autoincrement().primaryKey(),
+  // NBP effective date — the date the rate is valid for (last working day)
   date: timestamp("date").notNull(),
   currencyPair: varchar("currencyPair", { length: 10 }).notNull().default("EUR/PLN"),
   userId: int("userId").notNull().default(0), // 0 = global/NBP, >0 = user-specific manual
   rate: int("rate").notNull(), // stored as ten-thousandths (e.g., 42369 = 4.2369)
   source: varchar("source", { length: 50 }).notNull().default("NBP"),
   isManual: int("isManual").default(0).notNull(), // 0 = auto, 1 = manual override
+  // Timestamp when this rate was actually queried/created. NBP publishes once per day
+  // around 12:00 PL time; queriedAt distinguishes rates fetched before vs. after.
+  queriedAt: timestamp("queriedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
-  // Unique per date+pair+scope (global scope = userId 0, user scope = userId > 0)
-  dateCurrencyUserUnique: uniqueIndex("date_currency_user_unique").on(table.date, table.currencyPair, table.userId),
+  // Look-up index — no longer unique (we allow multiple rows per same effective
+  // date if the rate changes intra-day, e.g. before/after NBP publish).
+  dateCurrencyUserIdx: index("date_currency_user_idx").on(table.date, table.currencyPair, table.userId),
 }));
 
 export type ExchangeRate = typeof exchangeRates.$inferSelect;
@@ -342,6 +347,9 @@ export const accountSettings = mysqlTable("accountSettings", {
   bankName: varchar("bankName", { length: 255 }),
   iban: varchar("iban", { length: 50 }),
   swift: varchar("swift", { length: 20 }),
+  // Global override: when 1, all reports use the latest manually entered rate
+  // for each currency pair instead of the auto-fetched NBP rate.
+  useManualExchangeRate: int("useManualExchangeRate").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
