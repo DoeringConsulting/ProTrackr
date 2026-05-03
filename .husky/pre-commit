@@ -1,14 +1,8 @@
 #!/usr/bin/env sh
-
-# Debug: capture what we can see at pre-commit time
-GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)"
-COMMIT_MSG_FILE="${GIT_DIR}/COMMIT_EDITMSG"
-echo "[pre-commit DEBUG] git-dir=${GIT_DIR}"
-echo "[pre-commit DEBUG] msg-file exists=$([ -f "$COMMIT_MSG_FILE" ] && echo yes || echo no)"
-if [ -f "$COMMIT_MSG_FILE" ]; then
-  echo "[pre-commit DEBUG] first non-comment line: [$(grep -v '^#' "$COMMIT_MSG_FILE" | sed -n '/[^[:space:]]/p' | head -n 1)]"
-fi
-echo "[pre-commit DEBUG] env-passed message: [${HUSKY_GIT_PARAMS:-${GIT_COMMIT_MSG:-<unset>}}]"
-
+# Tests run early so a broken codebase fails before the user finishes the
+# commit. Version bump + build are deferred to post-commit because git's index
+# is locked between pre-commit and the actual commit creation, so any
+# version-bump hook that runs earlier cannot include its own changes in the
+# resulting commit.
 echo "[pre-commit] Unit-Tests werden ausgeführt..."
 npx vitest run server/taxEnginePl.test.ts server/uiValidationReportsDashboard.test.ts

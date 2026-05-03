@@ -1,0 +1,93 @@
+#!/usr/bin/env sh
+# post-commit auto-bumps the version based on the conventional-commit prefix
+# of the just-created commit, then amends the commit to fold in the bumped
+# files and the rebuilt production bundle.
+#
+# Why post-commit:
+#   - pre-commit cannot see the new commit message (.git/COMMIT_EDITMSG holds
+#     the PREVIOUS message at that point).
+#   - prepare-commit-msg can see the message but its `git add`s are too late
+#     because git has already snapshotted the index for the new tree.
+#   - post-commit runs after the commit exists, so we can read the message
+#     via `git log -1` and `git commit --amend` cleanly.
+#
+# Re-entry is prevented by a marker file (.git/.../AUTOVERSION_AMENDING) that
+# the hook checks at start.
+
+GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)"
+MARKER="${GIT_DIR}/AUTOVERSION_AMENDING"
+
+# Already amending — bail out to avoid infinite recursion.
+if [ -f "$MARKER" ]; then
+  rm -f "$MARKER"
+  exit 0
+fi
+
+# Inspect the just-created commit. Skip merges (more than one parent) so we
+# don't double-bump merged history.
+PARENTS=$(git log -1 --pretty=%P)
+case "$PARENTS" in
+  *' '*) exit 0 ;;
+esac
+
+# Skip if this commit only touches version-bearing files (e.g. a manual
+# version fix-up commit), so we don't double-bump.
+HAS_NON_VERSION=""
+for FILE in $(git show --pretty=format: --name-only HEAD | grep -v '^$'); do
+  case "$FILE" in
+    package.json|CHANGELOG.json|client/public/CHANGELOG.json|client/public/version.json|client/src/hooks/useUpdateCheck.ts|client/src/components/VersionFooter.tsx|client/index.html)
+      ;;
+    *)
+      HAS_NON_VERSION="yes"
+      break
+      ;;
+  esac
+done
+if [ -z "$HAS_NON_VERSION" ]; then
+  exit 0
+fi
+
+# Determine bump level from the just-committed message subject.
+COMMIT_MSG_SUBJECT=$(git log -1 --pretty=%s)
+COMMIT_MSG_BODY=$(git log -1 --pretty=%B)
+
+if [ -n "$BUMP_LEVEL" ]; then
+  LEVEL="$BUMP_LEVEL"
+else
+  LEVEL=""
+  case "$COMMIT_MSG_BODY" in
+    *"BREAKING CHANGE"*|*"BREAKING-CHANGE"*) LEVEL="major" ;;
+  esac
+  if [ -z "$LEVEL" ]; then
+    case "$COMMIT_MSG_SUBJECT" in
+      feat\!:*|fix\!:*|refactor\!:*|perf\!:*|build\!:*|chore\!:*|feat\(*\)\!:*|fix\(*\)\!:*|refactor\(*\)\!:*|perf\(*\)\!:*|build\(*\)\!:*|chore\(*\)\!:*)
+        LEVEL="major" ;;
+      feat:*|feat\(*\):*)
+        LEVEL="minor" ;;
+      *)
+        LEVEL="patch" ;;
+    esac
+  fi
+fi
+
+echo "[post-commit] Auto-Version-Bump (${LEVEL}) — subject: ${COMMIT_MSG_SUBJECT}"
+node scripts/increment-version.mjs "$LEVEL" || exit 1
+node scripts/generate-version.js || exit 1
+
+echo "[post-commit] Production-Build wird erstellt..."
+npx vite build && npx esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist || exit 1
+
+git add \
+  package.json \
+  CHANGELOG.json \
+  client/public/CHANGELOG.json \
+  client/src/hooks/useUpdateCheck.ts \
+  client/src/components/VersionFooter.tsx \
+  client/index.html \
+  client/public/version.json
+
+# Amend the just-made commit to fold in the bumped/built files. The marker
+# file makes the recursive post-commit invocation exit immediately. We use
+# --no-verify on the amend itself so pre-commit doesn't re-run tests/build.
+touch "$MARKER"
+git commit --amend --no-edit --no-verify >/dev/null
