@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+# Skip version-bump bookkeeping when ONLY version files are staged (e.g. an
+# explicit version-only commit).
 HAS_NON_VERSION_CHANGES=""
 for FILE in $(git diff --cached --name-only); do
   case "$FILE" in
@@ -13,8 +15,41 @@ for FILE in $(git diff --cached --name-only); do
 done
 
 if [ -n "$HAS_NON_VERSION_CHANGES" ]; then
-  echo "[pre-commit] Sync version across all files"
-  node scripts/sync-version.mjs
+  # Determine bump level from the conventional-commit prefix of the message
+  # being committed. Reads the commit message via $HUSKY_GIT_PARAMS / fallback
+  # to .git/COMMIT_EDITMSG (which is populated for `git commit -m "..."` BEFORE
+  # the pre-commit hook runs). Editor-mode commits without a conventional
+  # prefix fall back to "patch".
+  GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)"
+  COMMIT_MSG_FILE="${GIT_DIR}/COMMIT_EDITMSG"
+  COMMIT_MSG=""
+  if [ -n "$BUMP_LEVEL" ]; then
+    LEVEL="$BUMP_LEVEL"
+  elif [ -f "$COMMIT_MSG_FILE" ]; then
+    # First non-comment, non-empty line of the prepared message
+    COMMIT_MSG=$(grep -v '^#' "$COMMIT_MSG_FILE" | sed -n '/[^[:space:]]/p' | head -n 1)
+  fi
+
+  if [ -z "$LEVEL" ]; then
+    case "$COMMIT_MSG" in
+      *"BREAKING CHANGE"*|*"BREAKING-CHANGE"*)
+        LEVEL="major"
+        ;;
+      # Conventional types with `!` indicate a breaking change.
+      feat\!:*|fix\!:*|refactor\!:*|perf\!:*|build\!:*|chore\!:*|feat\(*\)\!:*|fix\(*\)\!:*|refactor\(*\)\!:*|perf\(*\)\!:*|build\(*\)\!:*|chore\(*\)\!:*)
+        LEVEL="major"
+        ;;
+      feat:*|feat\(*\):*)
+        LEVEL="minor"
+        ;;
+      *)
+        LEVEL="patch"
+        ;;
+    esac
+  fi
+
+  echo "[pre-commit] Auto-Version-Bump (${LEVEL})"
+  node scripts/increment-version.mjs "$LEVEL"
   node scripts/generate-version.js
   git add package.json CHANGELOG.json client/public/CHANGELOG.json client/src/hooks/useUpdateCheck.ts client/src/components/VersionFooter.tsx client/index.html client/public/version.json
 fi
