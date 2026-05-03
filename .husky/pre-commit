@@ -1,7 +1,14 @@
 #!/usr/bin/env sh
 
-# Tests run here so we fail fast even before the user finishes typing a
-# commit message. The version bump and build are deferred to
-# prepare-commit-msg (which runs after the message is known).
+# Debug: capture what we can see at pre-commit time
+GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)"
+COMMIT_MSG_FILE="${GIT_DIR}/COMMIT_EDITMSG"
+echo "[pre-commit DEBUG] git-dir=${GIT_DIR}"
+echo "[pre-commit DEBUG] msg-file exists=$([ -f "$COMMIT_MSG_FILE" ] && echo yes || echo no)"
+if [ -f "$COMMIT_MSG_FILE" ]; then
+  echo "[pre-commit DEBUG] first non-comment line: [$(grep -v '^#' "$COMMIT_MSG_FILE" | sed -n '/[^[:space:]]/p' | head -n 1)]"
+fi
+echo "[pre-commit DEBUG] env-passed message: [${HUSKY_GIT_PARAMS:-${GIT_COMMIT_MSG:-<unset>}}]"
+
 echo "[pre-commit] Unit-Tests werden ausgeführt..."
 npx vitest run server/taxEnginePl.test.ts server/uiValidationReportsDashboard.test.ts
