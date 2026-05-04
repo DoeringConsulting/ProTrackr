@@ -23,6 +23,21 @@ if [ -f "$MARKER" ]; then
   exit 0
 fi
 
+# Branch gate: auto-bump, build and server-restart make sense ONLY for
+# release-grade commits on main. Feature branches (nas-setup, fix/foo,
+# experiment/*, etc.) must stay version-stable and must NOT hijack the
+# locally running production server. Without this gate, every commit on a
+# feature branch would:
+#   - move the version forward (polluting the freeze point)
+#   - rebuild dist/ on top of the wrong source
+#   - restart the production server with feature-branch code
+# Tests still run via pre-commit on every branch (safety net).
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  echo "[post-commit] Branch '${CURRENT_BRANCH}' ist nicht main — kein Bump/Build/Restart."
+  exit 0
+fi
+
 # Inspect the just-created commit. Skip merges (more than one parent) so we
 # don't double-bump merged history.
 PARENTS=$(git log -1 --pretty=%P)
