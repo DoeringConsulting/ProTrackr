@@ -91,3 +91,12 @@ git add \
 # --no-verify on the amend itself so pre-commit doesn't re-run tests/build.
 touch "$MARKER"
 git commit --amend --no-edit --no-verify >/dev/null
+
+# Restart the local production server so it picks up the freshly built dist/.
+# (Node loads the bundle once at startup, so without a restart the running
+# server keeps serving the old version even though the new artifacts exist.)
+# We don't gate on success — a restart failure shouldn't fail the commit.
+if [ -f "protrackr.ps1" ]; then
+  echo "[post-commit] Server-Restart (Hot-Swap auf neue Version)..."
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "protrackr.ps1" Restart 2>&1 | tail -3 || true
+fi
