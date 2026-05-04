@@ -95,8 +95,14 @@ git commit --amend --no-edit --no-verify >/dev/null
 # Restart the local production server so it picks up the freshly built dist/.
 # (Node loads the bundle once at startup, so without a restart the running
 # server keeps serving the old version even though the new artifacts exist.)
-# We don't gate on success — a restart failure shouldn't fail the commit.
+#
+# We detach the restart entirely (no stdin/stdout/stderr ties to the parent
+# bash) so the calling shell — typically a `git commit` subshell from an
+# editor or terminal — does NOT wait on the long-running Node child process.
+# Without this, every commit leaves a "still running" zombie shell behind
+# until the server itself shuts down.
 if [ -f "protrackr.ps1" ]; then
-  echo "[post-commit] Server-Restart (Hot-Swap auf neue Version)..."
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "protrackr.ps1" Restart 2>&1 | tail -3 || true
+  echo "[post-commit] Server-Restart (detached)..."
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','protrackr.ps1','Restart'" </dev/null >/dev/null 2>&1 &
+  disown 2>/dev/null || true
 fi
