@@ -214,6 +214,40 @@ Bei Befehlen, die der User im Web-Terminal ausführt, wird der **gesamte Output*
 
 ---
 
+## 2026-05-04 — Phase 0.10: Hook-Bereinigung & Branch-Rekonstruktion (parallele Session)
+
+**Was:**
+Die parallele Session hat den Branch saniert, nachdem der Initial-Commit dieser Session (`6352135`, lokal verworfen) durch die main-Hooks Pollution-Files mitgezogen hatte:
+
+1. **Auf `main` Bug-Fix für die post-commit-Hooks**: Auto-Version-Bump, Production-Build und Server-Restart laufen ab jetzt **nur noch auf main**, nicht mehr auf Feature-Branches wie `nas-setup`. Commit: `f114132 fix: gate post-commit auto-bump+build+restart to main branch only`.
+2. **Branch `nas-setup` auf origin sauber rekonstruiert** mit:
+   - `main@f114132` als Basis (Hook-Gate-Fix bereits enthalten)
+   - + nur 1 zusätzliche Datei: `NAS_SETUP_HISTORY.md` (diese Datei)
+   - Resultat-HEAD: `7fa4fed`
+3. **Lokaler Klon `developing_path` synchronisiert** via:
+   ```bash
+   git fetch origin
+   git reset --hard origin/nas-setup
+   ```
+
+**Warum:**
+Der initiale Phase-0.9-Commit dieser Session hatte 7 ungewollte Pollution-Files: Auto-Version-Bump (`1.3.2 → 1.3.3`), CHANGELOG-Bump, neuer Production-Build — alle ausgelöst durch die main-Hooks, die zu dem Zeitpunkt nicht zwischen Branches unterschieden. Außerdem hatte der Server-Restart-Hook den Notebook-Server auf `localhost:3001` mit nas-setup-Code "gehijackt", was die parallele main-Arbeit gestört hätte.
+
+**Ergebnis:**
+- Lokaler `nas-setup` HEAD = `origin/nas-setup` HEAD = `7fa4fed` ✓ (verifiziert via `rev-parse`)
+- Log zeigt exakt die 3 erwarteten Commits:
+  - `7fa4fed docs: add NAS_SETUP_HISTORY.md — Phase 0 (Vorbereitung & Klaerung)`
+  - `f114132 fix: gate post-commit auto-bump+build+restart to main branch only`
+  - `d2f2458 fix: detach server-restart so commits don't leave zombie shells`
+- Working Tree clean (nur `.claude/settings.local.json` als untracked, irrelevant).
+- Notebook-Server auf `localhost:3001` läuft jetzt auf v1.3.3 (main-Code) — saubere Trennung wiederhergestellt.
+- Künftige Commits auf `nas-setup` lösen **weder Bump noch Build noch Restart** aus — nur Tests laufen weiter als Sicherheitsnetz.
+
+**Konsequenz für die weitere Arbeit:**
+Ab jetzt kann auf `nas-setup` ohne Pollution committet werden. Phase 1 (Implementations-Dateien) kann beginnen.
+
+---
+
 # Phase 1 — Implementations-Dateien (folgt)
 
 > Geplante Dateien im Branch `nas-setup`:
