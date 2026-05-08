@@ -9,7 +9,7 @@ Alle Befehle sind fuer PowerShell gedacht.
 
 - Cloud-Agent-Pfad: `/workspace` (nur Cloud)
 - Lokaler Windows-Pfad: `C:\Projects\ProTrackr_developing_path`
-- Browser-URL lokal: `http://localhost:3000`
+- Browser-URL lokal: `http://localhost:3001`
 
 ---
 
@@ -83,7 +83,7 @@ notepad .env
 
 ```env
 NODE_ENV=development
-PORT=3000
+PORT=3001
 
 SESSION_SECRET=HIER_EIN_LANGES_SECRET
 JWT_SECRET=HIER_EIN_LANGES_SECRET
@@ -211,7 +211,7 @@ $hash
 ### Pruefen, ob App lauscht
 
 ```powershell
-Test-NetConnection 127.0.0.1 -Port 3000
+Test-NetConnection 127.0.0.1 -Port 3001
 ```
 
 ### Pruefen, ob MySQL lauscht
@@ -220,11 +220,11 @@ Test-NetConnection 127.0.0.1 -Port 3000
 Test-NetConnection 127.0.0.1 -Port 3306
 ```
 
-### Prozess auf Port 3000 hart stoppen
+### Prozess auf Port 3001 hart stoppen
 
 ```powershell
-$pid3000 = (Get-NetTCPConnection -LocalPort 3000 -State Listen).OwningProcess
-Stop-Process -Id $pid3000 -Force
+$pid3001 = (Get-NetTCPConnection -LocalPort 3001 -State Listen).OwningProcess
+Stop-Process -Id $pid3001 -Force
 ```
 
 ---
@@ -253,8 +253,8 @@ setlocal
 cd /d C:\Projects\ProTrackr_developing_path
 if not exist logs mkdir logs
 
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr /R /C:":3000 .*LISTENING"') do (
-  echo [%date% %time%] Port 3000 already in use, skip start>> logs\app.log
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /R /C:":3001 .*LISTENING"') do (
+  echo [%date% %time%] Port 3001 already in use, skip start>> logs\app.log
   exit /b 0
 )
 
@@ -263,14 +263,14 @@ echo [%date% %time%] Starting ProTrackr>> logs\app.log
 call "$node" dist\index.js >> logs\app.log 2>&1
 echo [%date% %time%] ProTrackr exited with code %errorlevel%>> logs\app.log
 endlocal
-"@ | Set-Content -Encoding ASCII "C:\Projects\ProTrackr_developing_path\start-protrackr.cmd"
+"@ | Set-Content -Encoding ASCII "C:\Projects\ProTrackr_developing_path\protrackr.cmd"
 ```
 
 ### Task anlegen (Admin empfohlen)
 
 ```powershell
 schtasks /Delete /TN "ProTrackr-App" /F 2>$null
-schtasks /Create /TN "ProTrackr-App" /SC ONLOGON /DELAY 0000:20 /TR "cmd /c C:\Projects\ProTrackr_developing_path\start-protrackr.cmd" /RL HIGHEST /F
+schtasks /Create /TN "ProTrackr-App" /SC ONLOGON /DELAY 0000:20 /TR "cmd /c C:\Projects\ProTrackr_developing_path\protrackr.cmd" /RL HIGHEST /F
 ```
 
 ### Task testen
@@ -278,7 +278,7 @@ schtasks /Create /TN "ProTrackr-App" /SC ONLOGON /DELAY 0000:20 /TR "cmd /c C:\P
 ```powershell
 schtasks /Run /TN "ProTrackr-App"
 Start-Sleep -Seconds 5
-Test-NetConnection 127.0.0.1 -Port 3000
+Test-NetConnection 127.0.0.1 -Port 3001
 ```
 
 ### Task deaktivieren/aktivieren
@@ -309,6 +309,6 @@ Danach App neu starten (manuell oder via Task).
 
 1. `Get-Service MySQL84 | Select Name,Status`
 2. `Test-NetConnection 127.0.0.1 -Port 3306`
-3. `Test-NetConnection 127.0.0.1 -Port 3000`
-4. Falls 3000 = False: `pnpm start` oder Task erneut ausfuehren
+3. `Test-NetConnection 127.0.0.1 -Port 3001`
+4. Falls 3001 = False: `pnpm start` oder Task erneut ausfuehren
 5. Browser hard refresh: `Strg + F5`
