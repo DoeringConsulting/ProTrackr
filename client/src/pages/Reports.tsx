@@ -713,6 +713,7 @@ export default function Reports() {
         totalManDays: timeEntries.reduce((sum, entry) => sum + entry.manDays, 0),
         revenueEur,
         travelEur,
+        provisionEur: accountingData.provisionTotal,
       },
       appliedExchangeRates,
     });
