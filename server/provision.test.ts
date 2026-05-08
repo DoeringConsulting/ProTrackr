@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateProvisionCents,
+  getCustomerVisibleAmount,
+  getCustomerVisibleRate,
   provisionConfigFromCustomer,
   type ProvisionConfig,
   type ProvisionEntryContext,
@@ -160,6 +162,39 @@ describe("calculateProvisionCents — type=two_rate", () => {
       { ...baseEntry, rate: 100000 }
     );
     expect(result).toBe(0);
+  });
+});
+
+describe("getCustomerVisibleRate / getCustomerVisibleAmount — customer-facing values", () => {
+  it("disabled provision: visible rate equals stored rate", () => {
+    const cfg = { ...baseCfg, enabled: false };
+    expect(getCustomerVisibleRate(cfg, "onsite", 100000)).toBe(100000);
+    expect(getCustomerVisibleAmount(cfg, "onsite", 100000, 2, 200000)).toBe(200000);
+  });
+
+  it("deduction-mode: visible rate equals stored rate (customer already sees brutto)", () => {
+    const cfg = { ...baseCfg, mode: "deduction" as const, type: "percentage" as const, valueBp: 1000 };
+    expect(getCustomerVisibleRate(cfg, "onsite", 110000)).toBe(110000);
+    expect(getCustomerVisibleAmount(cfg, "onsite", 110000, 2, 220000)).toBe(220000);
+  });
+
+  it("surcharge percentage: visible rate = stored × (1 + bp/10000)", () => {
+    const cfg = { ...baseCfg, mode: "surcharge" as const, type: "percentage" as const, valueBp: 1000 };
+    // 100.000 → 110.000 (User-Netto + 10% Aufschlag)
+    expect(getCustomerVisibleRate(cfg, "onsite", 100000)).toBe(110000);
+    // amount: visibleRate * manDays
+    expect(getCustomerVisibleAmount(cfg, "onsite", 100000, 1, 100000)).toBe(110000);
+  });
+
+  it("surcharge fixed unit=day: visible rate = stored + valueCents", () => {
+    const cfg = { ...baseCfg, mode: "surcharge" as const, type: "fixed" as const, valueCents: 10000, unit: "day" as const };
+    expect(getCustomerVisibleRate(cfg, "onsite", 100000)).toBe(110000);
+  });
+
+  it("surcharge two_rate: visible rate = userRate field (which stores customer-brutto in surcharge mode)", () => {
+    const cfg = { ...baseCfg, mode: "surcharge" as const, type: "two_rate" as const, userRate: 110000, userRateRemote: 100000 };
+    expect(getCustomerVisibleRate(cfg, "onsite", 100000)).toBe(110000);
+    expect(getCustomerVisibleRate(cfg, "remote", 90000)).toBe(100000);
   });
 });
 

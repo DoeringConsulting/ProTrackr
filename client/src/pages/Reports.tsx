@@ -505,8 +505,28 @@ export default function Reports() {
 
     if (!customer) return null;
 
+    // Customer-facing amounts: in deduction-mode entry.amountEur is already
+    // the customer-brutto value; in surcharge-mode we need to add the per-day
+    // provision so the customer sees the rate they actually pay (without the
+    // provision being separately labelled — that's the whole point of the
+    // surcharge mode).
+    const provisionCfg = provisionConfigFromCustomer(customer as any);
+    const customerVisibleAmountEur = (entry: any): number => {
+      const stored = entry.amountEur ?? 0;
+      if (!provisionCfg.enabled || provisionCfg.mode === "deduction") return stored;
+      // surcharge: add provision per day, converted to EUR using same rate map
+      const provisionCents = calculateProvisionCents(provisionCfg, {
+        entryType: (entry.entryType ?? "onsite") as "onsite" | "remote",
+        hoursMinutes: Number(entry.hours ?? 0),
+        manDays: Number(entry.manDays ?? 0),
+        rate: Number(entry.rate ?? 0),
+      });
+      const provisionEur = convertToEur(provisionCents, customer.onsiteRateCurrency || "EUR") ?? 0;
+      return stored + provisionEur;
+    };
+
     const totalHours = customerEntries.reduce((sum, entry) => sum + entry.hours, 0);
-    const totalAmount = customerEntries.reduce((sum, entry) => sum + (entry.amountEur ?? 0), 0); // EUR
+    const totalAmount = customerEntries.reduce((sum, entry) => sum + customerVisibleAmountEur(entry), 0);
     const totalManDays = customerEntries.reduce((sum, entry) => sum + entry.manDays, 0);
 
     // Calculate expenses for this customer

@@ -97,6 +97,60 @@ export function calculateProvisionCents(
 }
 
 /**
+ * Returns the rate the customer is supposed to see (in cents per day),
+ * NEVER the user-net rate. In deduction-mode customer.onsiteRate is already
+ * the customer-facing brutto rate; in surcharge-mode it stores the user-net
+ * rate and we have to add the per-day provision on top.
+ *
+ * Used in customer-facing reports (PDF / Excel / on-screen Kundenbericht)
+ * to ensure the customer always sees what they actually pay, regardless
+ * of how provision is configured internally.
+ */
+export function getCustomerVisibleRate(
+  cfg: ProvisionConfig,
+  entryType: "onsite" | "remote",
+  storedRate: number,
+): number {
+  if (!cfg.enabled) return storedRate;
+  if (cfg.mode === "deduction") return storedRate; // already customer-brutto
+
+  // surcharge-mode: storedRate is user-netto, customer pays storedRate + delta/day
+  switch (cfg.type) {
+    case "percentage":
+      return Math.round(storedRate + (storedRate * cfg.valueBp) / 10000);
+    case "fixed":
+      // For unit=day we add the flat daily amount; for unit=hour we approximate
+      // a daily uplift as 8h × hourly cents (no per-customer day-hours info here).
+      return cfg.unit === "day"
+        ? storedRate + cfg.valueCents
+        : storedRate + cfg.valueCents * 8;
+    case "two_rate": {
+      // surcharge two_rate: provisionUserRate stores the customer-brutto already
+      const target = entryType === "onsite" ? cfg.userRate : cfg.userRateRemote;
+      return target > 0 ? target : storedRate;
+    }
+  }
+}
+
+/**
+ * Returns the customer-visible total amount (in cents) for a given time-entry.
+ * Identical to entry.calculatedAmount in deduction-mode; in surcharge-mode it
+ * adds the provision per day so the customer-facing total includes the
+ * provision they pay — without the line being separately labelled.
+ */
+export function getCustomerVisibleAmount(
+  cfg: ProvisionConfig,
+  entryType: "onsite" | "remote",
+  storedRate: number,
+  manDays: number,
+  storedAmount: number,
+): number {
+  if (!cfg.enabled || cfg.mode === "deduction") return storedAmount;
+  const visibleRate = getCustomerVisibleRate(cfg, entryType, storedRate);
+  return Math.round(visibleRate * manDays);
+}
+
+/**
  * Convenience adapter — turns a raw `customers` row (as returned by drizzle)
  * into the strongly-typed `ProvisionConfig` for `calculateProvisionCents`.
  */
