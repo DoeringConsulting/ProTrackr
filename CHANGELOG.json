@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "version": "1.8.1",
+      "date": "2026-05-08",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Patch release",
+          "description": "Neue Version mit Änderungen und Fehlerbehebungen."
+        }
+      ]
+    },
+    {
       "version": "1.8.0",
       "date": "2026-05-08",
       "changes": [
