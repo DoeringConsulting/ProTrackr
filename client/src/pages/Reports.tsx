@@ -28,6 +28,10 @@ import {
   formatMoney,
   type SupportedCurrency,
 } from "@/lib/currencyUtils";
+import {
+  calculateProvisionCents,
+  provisionConfigFromCustomer,
+} from "@/lib/provision";
 
 const EXPENSE_CATEGORY_LABELS: Record<
   string,
@@ -324,6 +328,33 @@ export default function Reports() {
       return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
     }, 0);
     const grossRevenuePln = timeRevenuePln + travelRevenueInGrossPln;
+
+    // ── Provision an Vermittler ────────────────────────────────────────
+    // Pro Time-Entry abgeleitete Größe (nicht persistiert), aggregiert in
+    // PLN (für Steuer) und in Original-Währung (für die Anzeige aufgeschlüsselt
+    // pro Währung wie Fixkosten / Variable Kosten).
+    let provisionTotalPln = 0;
+    const provisionByCurrencyMap = new Map<string, number>();
+    for (const entry of timeEntriesDetailed) {
+      const customer = customersById.get(entry.customerId);
+      if (!customer) continue;
+      const cfg = provisionConfigFromCustomer(customer as any);
+      if (!cfg.enabled) continue;
+      const provisionCents = calculateProvisionCents(cfg, {
+        entryType: (entry.entryType ?? "onsite") as "onsite" | "remote",
+        hoursMinutes: Number(entry.hours ?? 0),
+        manDays: Number(entry.manDays ?? 0) / 1000, // DB stores thousandths
+        rate: Number(entry.rate ?? 0),
+      });
+      if (provisionCents <= 0) continue;
+      const provCurrency = String(customer.onsiteRateCurrency || "EUR").toUpperCase();
+      provisionByCurrencyMap.set(
+        provCurrency,
+        (provisionByCurrencyMap.get(provCurrency) ?? 0) + provisionCents
+      );
+      provisionTotalPln += convertAmountToPlnForTax(provisionCents, provCurrency);
+    }
+    const provisionByCurrency = provisionByCurrencyMap;
     const periodMonthCount = getPeriodMonthCount(startDate, endDate);
     const monthlyFixedCostsPln = fixedCostsDetailed.reduce(
       (sum, cost) => sum + convertAmountToPlnForTax(cost.amount, cost.sourceCurrency),
@@ -366,10 +397,33 @@ export default function Reports() {
           if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
           monthVariablePln += convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
         }
+        // Provision an Vermittler ist ebenfalls eine Betriebsausgabe und
+        // mindert die Steuerbasis. Wir berechnen sie pro Monat aus den
+        // Time-Entries, deren Datum im Monat liegt.
+        let monthProvisionPln = 0;
+        for (const entry of timeEntriesDetailed) {
+          if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
+          const customer = customersById.get(entry.customerId);
+          if (!customer) continue;
+          const cfg = provisionConfigFromCustomer(customer as any);
+          if (!cfg.enabled) continue;
+          const provisionCents = calculateProvisionCents(cfg, {
+            entryType: (entry.entryType ?? "onsite") as "onsite" | "remote",
+            hoursMinutes: Number(entry.hours ?? 0),
+            manDays: Number(entry.manDays ?? 0) / 1000,
+            rate: Number(entry.rate ?? 0),
+          });
+          if (provisionCents > 0) {
+            const provCurrency = String(customer.onsiteRateCurrency || "EUR").toUpperCase();
+            monthProvisionPln += convertAmountToPlnForTax(provisionCents, provCurrency);
+          }
+        }
         return {
           revenueCents: monthRevenuePln,
           fixedCostsCents: monthlyFixedCostsPln,
-          variableCostsCents: monthVariablePln,
+          // Provision wird wie eine variable Kostenposition behandelt — sie
+          // mindert die Steuerbasis genauso wie Reisekosten.
+          variableCostsCents: monthVariablePln + monthProvisionPln,
         };
       },
       profile: mappedTaxProfile,
@@ -392,6 +446,7 @@ export default function Reports() {
     const grossRevenue = convertPlnResultToEur(grossRevenuePln);
     const totalFixedCosts = convertPlnResultToEur(totalFixedCostsPln);
     const variableCosts = convertPlnResultToEur(variableCostsPln);
+    const provisionTotal = convertPlnResultToEur(provisionTotalPln);
     const zus = convertPlnResultToEur(taxResultPln.zus);
     const healthInsurance = convertPlnResultToEur(taxResultPln.healthInsurance);
     const deductibleHealth = convertPlnResultToEur(taxResultPln.deductibleHealth);
@@ -424,6 +479,8 @@ export default function Reports() {
       grossRevenue,
       totalFixedCosts,
       variableCosts,
+      provisionTotal,
+      provisionByCurrency,
       zus,
       healthInsurance,
       deductibleHealth,
@@ -888,6 +945,7 @@ export default function Reports() {
                         travelRevenueInGross: accountingData.travelRevenueInGross,
                         fixedCosts: fixedCosts.map(fc => ({ category: fc.category, amount: fc.amount })),
                         variableCosts: accountingData.variableCosts,
+                        provisionTotal: accountingData.provisionTotal,
                         zus: accountingData.zus,
                         healthInsurance: accountingData.healthInsurance,
                         tax: accountingData.tax,
@@ -1000,6 +1058,16 @@ export default function Reports() {
                           : renderCurrencyBadges(accountingData.variableCostsByCurrency)}
                       </TableCell>
                     </TableRow>
+                    {accountingData.provisionTotal > 0 && (
+                      <TableRow className="border-t-2">
+                        <TableCell className="font-semibold">Provision (Vermittler)</TableCell>
+                        <TableCell className="text-right font-semibold text-red-600">
+                          {showUnifiedCurrency
+                            ? formatCalculatedCurrencyNegative(accountingData.provisionTotal)
+                            : renderCurrencyBadges(accountingData.provisionByCurrency)}
+                        </TableCell>
+                      </TableRow>
+                    )}
                     <TableRow className="border-t-2">
                       <TableCell className="font-semibold">ZUS (Sozialversicherung)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">

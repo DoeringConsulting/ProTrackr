@@ -4,7 +4,7 @@ import {
   provisionConfigFromCustomer,
   type ProvisionConfig,
   type ProvisionEntryContext,
-} from "./lib/provision";
+} from "../client/src/lib/provision";
 
 const baseCfg: ProvisionConfig = {
   enabled: true,
