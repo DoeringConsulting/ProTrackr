@@ -53,6 +53,15 @@ type CustomerFormData = {
   city: string;
   country: string;
   vatId: string;
+  // Provision an Vermittler — siehe drizzle/schema.ts customers
+  provisionEnabled: boolean;
+  provisionMode: "deduction" | "surcharge";
+  provisionType: "percentage" | "fixed" | "two_rate";
+  provisionValuePercent: string;       // UI shows "10" for 10%; converted to bp on save
+  provisionValueAmount: string;        // UI shows "100.00"; converted to cents on save
+  provisionUnit: "hour" | "day";
+  provisionUserRate: string;           // UI shows "900.00" (onsite); cents on save
+  provisionUserRateRemote: string;     // UI shows "900.00" (remote); cents on save
 };
 
 const initialFormData: CustomerFormData = {
@@ -75,6 +84,14 @@ const initialFormData: CustomerFormData = {
   city: "",
   country: "",
   vatId: "",
+  provisionEnabled: false,
+  provisionMode: "deduction",
+  provisionType: "percentage",
+  provisionValuePercent: "",
+  provisionValueAmount: "",
+  provisionUnit: "day",
+  provisionUserRate: "",
+  provisionUserRateRemote: "",
 };
 
 function parseMandatenNumberSequence(mandatenNr: string | null | undefined): number | null {
@@ -189,6 +206,63 @@ export default function Customers() {
       return;
     }
 
+    // Build provision payload only when enabled. Validation:
+    //   - percentage: 0–100
+    //   - fixed: ≥ 0
+    //   - two_rate (deduction): userRate ≤ onsiteRate (otherwise the implied
+    //     provision would be negative — defensive UX, server clamps anyway)
+    let provisionPayload: Record<string, any> = { provisionEnabled: false };
+    if (formData.provisionEnabled) {
+      provisionPayload = {
+        provisionEnabled: true,
+        provisionMode: formData.provisionMode,
+        provisionType: formData.provisionType,
+      };
+      if (formData.provisionType === "percentage") {
+        const pct = parseFloat(formData.provisionValuePercent || "0");
+        if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+          toast.error("Provisions-Prozentwert muss zwischen 0 und 100 liegen");
+          return;
+        }
+        provisionPayload.provisionValueBp = Math.round(pct * 100); // 10 → 1000 bp
+      } else if (formData.provisionType === "fixed") {
+        const amount = parseFloat(formData.provisionValueAmount || "0");
+        if (!Number.isFinite(amount) || amount < 0) {
+          toast.error("Provisions-Festbetrag muss ≥ 0 sein");
+          return;
+        }
+        provisionPayload.provisionValueCents = Math.round(amount * 100);
+        provisionPayload.provisionUnit = formData.provisionUnit;
+      } else if (formData.provisionType === "two_rate") {
+        const userRateOnsite = parseFloat(formData.provisionUserRate || "0");
+        const userRateRemote = parseFloat(formData.provisionUserRateRemote || "0");
+        const onsiteCustomerRate = parseFloat(formData.onsiteRate || "0");
+        const remoteCustomerRate = parseFloat(formData.remoteRate || "0");
+        if (formData.provisionMode === "deduction") {
+          if (userRateOnsite > onsiteCustomerRate) {
+            toast.error("User-Onsite-Satz darf den Kunden-Onsite-Satz nicht übersteigen (Abzug-Modus)");
+            return;
+          }
+          if (userRateRemote > remoteCustomerRate) {
+            toast.error("User-Remote-Satz darf den Kunden-Remote-Satz nicht übersteigen (Abzug-Modus)");
+            return;
+          }
+        } else {
+          // surcharge: provisionUserRate stores the customer-brutto, must be ≥ user-net (= onsiteRate)
+          if (userRateOnsite < onsiteCustomerRate) {
+            toast.error("Kunden-Onsite-Satz (inkl. Provision) muss ≥ User-Onsite-Satz sein (Aufschlag-Modus)");
+            return;
+          }
+          if (userRateRemote < remoteCustomerRate) {
+            toast.error("Kunden-Remote-Satz (inkl. Provision) muss ≥ User-Remote-Satz sein (Aufschlag-Modus)");
+            return;
+          }
+        }
+        provisionPayload.provisionUserRate = Math.round(userRateOnsite * 100);
+        provisionPayload.provisionUserRateRemote = Math.round(userRateRemote * 100);
+      }
+    }
+
     const baseData = {
       provider: formData.provider,
       projectName: formData.projectName,
@@ -208,6 +282,7 @@ export default function Customers() {
       city: formData.city || undefined,
       country: formData.country || undefined,
       vatId: formData.vatId || undefined,
+      ...provisionPayload,
     };
 
     if (editingCustomer) {
@@ -247,6 +322,27 @@ export default function Customers() {
       city: customer.city || "",
       country: customer.country || "",
       vatId: customer.vatId || "",
+      // Provision-Felder zurück zur Form (cents → decimal, bp → percent)
+      provisionEnabled: Number(customer.provisionEnabled ?? 0) === 1,
+      provisionMode: (customer.provisionMode ?? "deduction") as "deduction" | "surcharge",
+      provisionType: (customer.provisionType ?? "percentage") as "percentage" | "fixed" | "two_rate",
+      provisionValuePercent:
+        customer.provisionType === "percentage"
+          ? (Number(customer.provisionValueBp ?? 0) / 100).toFixed(2)
+          : "",
+      provisionValueAmount:
+        customer.provisionType === "fixed"
+          ? (Number(customer.provisionValueCents ?? 0) / 100).toFixed(2)
+          : "",
+      provisionUnit: (customer.provisionUnit ?? "day") as "hour" | "day",
+      provisionUserRate:
+        customer.provisionType === "two_rate"
+          ? (Number(customer.provisionUserRate ?? 0) / 100).toFixed(2)
+          : "",
+      provisionUserRateRemote:
+        customer.provisionType === "two_rate"
+          ? (Number(customer.provisionUserRateRemote ?? 0) / 100).toFixed(2)
+          : "",
     });
     setIsDialogOpen(true);
   };
@@ -519,6 +615,185 @@ export default function Customers() {
                         <SelectItem value="inclusive">Inclusive (Pauschalsatz)</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Provision an Vermittler — optional, default deaktiviert. */}
+                  <div className="pt-6 border-t mt-2">
+                    <div className="flex items-start gap-3 mb-2">
+                      <input
+                        id="provisionEnabled"
+                        type="checkbox"
+                        checked={formData.provisionEnabled}
+                        onChange={(e) =>
+                          setFormData({ ...formData, provisionEnabled: e.target.checked })
+                        }
+                        className="mt-1 h-4 w-4 cursor-pointer accent-primary"
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor="provisionEnabled" className="cursor-pointer text-base font-semibold">
+                          Provision an Vermittler aktiviert
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Optional: nur einschalten wenn an einen Vermittler Provision gezahlt wird.
+                          Erscheint im Buchhaltungsbericht als Kostenposition; im Kundenbericht
+                          niemals sichtbar.
+                        </p>
+                      </div>
+                    </div>
+
+                    {formData.provisionEnabled && (
+                      <div className="space-y-4 mt-4 pl-7">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="provisionMode">Modus</Label>
+                            <Select
+                              value={formData.provisionMode}
+                              onValueChange={(value: "deduction" | "surcharge") =>
+                                setFormData({ ...formData, provisionMode: value })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="deduction">Abzug vom Kundensatz</SelectItem>
+                                <SelectItem value="surcharge">Aufschlag oben drauf</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              {formData.provisionMode === "deduction"
+                                ? "Kundensatz oben enthält Provision. User behält den Rest."
+                                : "Kundensatz oben ist User-Netto. Provision kommt zusätzlich oben drauf."}
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="provisionType">Berechnung</Label>
+                            <Select
+                              value={formData.provisionType}
+                              onValueChange={(value: "percentage" | "fixed" | "two_rate") =>
+                                setFormData({ ...formData, provisionType: value })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="percentage">Prozentual</SelectItem>
+                                <SelectItem value="fixed">Fester Betrag</SelectItem>
+                                <SelectItem value="two_rate">Zwei Sätze</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {formData.provisionType === "percentage" && (
+                          <div className="space-y-2">
+                            <Label htmlFor="provisionValuePercent">Provisions-Anteil</Label>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                id="provisionValuePercent"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="100"
+                                placeholder="z.B. 10"
+                                value={formData.provisionValuePercent}
+                                onChange={(e) =>
+                                  setFormData({ ...formData, provisionValuePercent: e.target.value })
+                                }
+                                className="max-w-[160px]"
+                              />
+                              <span className="text-sm text-muted-foreground">%</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {formData.provisionType === "fixed" && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="provisionValueAmount">
+                                Festbetrag ({formData.onsiteRateCurrency})
+                              </Label>
+                              <Input
+                                id="provisionValueAmount"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="z.B. 100.00"
+                                value={formData.provisionValueAmount}
+                                onChange={(e) =>
+                                  setFormData({ ...formData, provisionValueAmount: e.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="provisionUnit">Pro</Label>
+                              <Select
+                                value={formData.provisionUnit}
+                                onValueChange={(value: "hour" | "day") =>
+                                  setFormData({ ...formData, provisionUnit: value })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="day">Tag</SelectItem>
+                                  <SelectItem value="hour">Stunde</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
+
+                        {formData.provisionType === "two_rate" && (
+                          <div className="space-y-3 rounded-md bg-muted/40 p-3">
+                            <p className="text-xs text-muted-foreground">
+                              {formData.provisionMode === "deduction"
+                                ? "Kundensatz (oben eingetragen) = was Kunde zahlt. User-Satz hier = was du behältst."
+                                : "User-Satz (oben eingetragen) = was du behältst. Kunden-Satz hier = was Kunde zahlt (inkl. Provision)."}
+                            </p>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="provisionUserRate">
+                                  {formData.provisionMode === "deduction" ? "User-Onsite-Satz" : "Kunden-Onsite-Satz"}
+                                  {" "}({formData.onsiteRateCurrency}/Tag)
+                                </Label>
+                                <Input
+                                  id="provisionUserRate"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="z.B. 900.00"
+                                  value={formData.provisionUserRate}
+                                  onChange={(e) =>
+                                    setFormData({ ...formData, provisionUserRate: e.target.value })
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="provisionUserRateRemote">
+                                  {formData.provisionMode === "deduction" ? "User-Remote-Satz" : "Kunden-Remote-Satz"}
+                                  {" "}({formData.remoteRateCurrency}/Tag)
+                                </Label>
+                                <Input
+                                  id="provisionUserRateRemote"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="z.B. 800.00"
+                                  value={formData.provisionUserRateRemote}
+                                  onChange={(e) =>
+                                    setFormData({ ...formData, provisionUserRateRemote: e.target.value })
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Billing Address Section */}
