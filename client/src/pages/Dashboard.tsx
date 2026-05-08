@@ -103,12 +103,18 @@ export default function Dashboard() {
     startDate: rangeStart,
     endDate: rangeEnd,
   });
-  const { data: expenses = [] } = trpc.expenses.list.useQuery({
+  const { data: expenses = [], isLoading: expensesLoading } = trpc.expenses.list.useQuery({
     startDate: rangeStart,
     endDate: rangeEnd,
   });
-  const { data: fixedCosts } = trpc.fixedCosts.list.useQuery();
-  const { data: exchangeRates = [] } = trpc.exchangeRatesManagement.list.useQuery({});
+  const { data: fixedCosts, isLoading: fixedCostsLoading } = trpc.fixedCosts.list.useQuery();
+  const { data: exchangeRates = [], isLoading: exchangeRatesLoading } = trpc.exchangeRatesManagement.list.useQuery({});
+
+  // Aggregate-Loading: solange irgendeine der Hauptqueries hydriert, soll das
+  // Dashboard Skeletons zeigen statt potenziell missverständliche "0"-Werte.
+  // (Tax-Queries werden ausgeklammert, weil sie nur in Charts unten relevant sind.)
+  const dashboardLoading =
+    customersLoading || timeEntriesLoading || expensesLoading || fixedCostsLoading || exchangeRatesLoading;
   const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
   const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: now.getFullYear() });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
@@ -623,6 +629,7 @@ export default function Dashboard() {
       icon: Users,
       description: "Aktive Kunden",
       color: "text-primary",
+      isLoading: customersLoading,
     },
     {
       title: "Zeiteinträge",
@@ -630,6 +637,7 @@ export default function Dashboard() {
       icon: CalendarDays,
       description: "Diesen Monat",
       color: "text-primary",
+      isLoading: timeEntriesLoading,
     },
     {
       title: "Reisekosten",
@@ -639,6 +647,7 @@ export default function Dashboard() {
         ? `Im Zeitraum (${selectedPeriodLabel}) in ${targetCurrency}`
         : `Im Zeitraum (${selectedPeriodLabel})`,
       color: "text-primary",
+      isLoading: expensesLoading || exchangeRatesLoading,
     },
     {
       title: "Berichte",
@@ -646,6 +655,7 @@ export default function Dashboard() {
       icon: FileBarChart,
       description: "Ausstehend",
       color: "text-primary",
+      isLoading: false, // statisch
     },
   ];
 
@@ -669,8 +679,12 @@ export default function Dashboard() {
                   <Icon className={`h-4 w-4 ${stat.color}`} />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{stat.value}</div>
-                  <p className="text-xs text-muted-foreground">{stat.description}</p>
+                  {stat.isLoading ? (
+                    <div className="h-8 w-16 animate-pulse rounded bg-muted" />
+                  ) : (
+                    <div className="text-2xl font-bold">{stat.value}</div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
                 </CardContent>
               </Card>
             );
@@ -784,7 +798,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {totalMissingRates > 0 && (
+        {/* Warnung erst nach abgeschlossenem Loading anzeigen — sonst zählen wir
+            während der Hydratation Pseudo-Misses (alle Positionen sind dann
+            "noch nicht umgerechnet" weil Wechselkurse noch nicht da sind). */}
+        {!dashboardLoading && totalMissingRates > 0 && (
           <Card className="border-amber-300 bg-amber-50">
             <CardContent className="pt-6 text-sm text-amber-800 flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 mt-0.5" />

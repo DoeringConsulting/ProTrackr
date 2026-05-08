@@ -307,46 +307,66 @@ function DashboardLayoutContent({
           </SidebarContent>
 
           <SidebarFooter className="p-3 border-t border-sidebar-border">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-sidebar-accent transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
-                  <Avatar className="h-9 w-9 border border-white/20 shrink-0">
-                    <AvatarFallback className="text-xs font-medium">
-                      {user?.name?.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none text-white">
-                      {user?.name || "-"}
-                    </p>
-                    <p className="text-xs text-white/55 truncate mt-1.5">
-                      {user?.email || "-"}
-                    </p>
-                  </div>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
-                  onClick={async () => {
-                    const csrfToken = await ensureCsrfToken();
-                    const headers: Record<string, string> = {};
-                    if (csrfToken) {
-                      headers[getCsrfHeaderName()] = csrfToken;
-                    }
-                    await fetch("/api/auth/logout", {
-                      method: "POST",
-                      headers,
-                      credentials: "include",
-                    });
-                    setLocation("/login");
-                  }}
-                  className="cursor-pointer text-destructive focus:text-destructive"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Abmelden</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Logout-Logik einmal definiert, von zwei UI-Elementen genutzt:
+                dem User-Dropdown (klassisch) und dem direkten Icon-Button. */}
+            {(() => {
+              const handleLogout = async () => {
+                const csrfToken = await ensureCsrfToken();
+                const headers: Record<string, string> = {};
+                if (csrfToken) {
+                  headers[getCsrfHeaderName()] = csrfToken;
+                }
+                await fetch("/api/auth/logout", {
+                  method: "POST",
+                  headers,
+                  credentials: "include",
+                });
+                setLocation("/login");
+              };
+              return (
+                <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-sidebar-accent transition-colors flex-1 min-w-0 text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
+                        <Avatar className="h-9 w-9 border border-white/20 shrink-0">
+                          <AvatarFallback className="text-xs font-medium">
+                            {user?.name?.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+                          <p className="text-sm font-medium truncate leading-none text-white">
+                            {user?.name || "-"}
+                          </p>
+                          <p className="text-xs text-white/55 truncate mt-1.5">
+                            {user?.email || "-"}
+                          </p>
+                        </div>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem
+                        onClick={handleLogout}
+                        className="cursor-pointer text-destructive focus:text-destructive"
+                      >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        <span>Abmelden</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {/* Direkter Logout — ein Klick, ohne Umweg über das Dropdown.
+                      Auch im kollabierten Sidebar-Mode sichtbar (unterhalb des Avatars). */}
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    title="Abmelden"
+                    aria-label="Abmelden"
+                    className="shrink-0 rounded-lg p-2 text-white/70 hover:text-white hover:bg-sidebar-accent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })()}
             {!isCollapsed && (
               <p className="mt-2 text-[10px] text-white/40 leading-none px-1">
                 DÖRING Consulting
