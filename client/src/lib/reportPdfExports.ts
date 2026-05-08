@@ -43,6 +43,8 @@ type BookkeepingSummary = {
   totalManDays: number;
   revenueEur: number;
   travelEur: number;
+  /** Optional — sum of commission paid to intermediaries, EUR cents. */
+  provisionEur?: number;
 };
 
 type AppliedExchangeRate = {
@@ -353,24 +355,31 @@ export async function exportPolishBookkeepingReportToPDF(input: {
   autoTable(doc, {
     startY: sumStartY,
     head: [["Podsumowanie", "Wartosc"]],
-    body: [
-      ["Godziny stacjonarnie (hh:mm)", formatHours(onsiteHours)],
-      ["Godziny stacjonarnie (dziesietne)", formatDecimalHours(onsiteHours)],
-      ["Man-days stacjonarnie", formatManDays(onsiteManDays)],
-      ["Godziny zdalnie (hh:mm)", formatHours(remoteHours)],
-      ["Godziny zdalnie (dziesietne)", formatDecimalHours(remoteHours)],
-      ["Man-days zdalnie", formatManDays(remoteManDays)],
-      ["", ""],
-      ["Suma godzin (hh:mm)", formatHours(input.summary.totalHoursMinutes)],
-      ["Suma godzin (dziesietne)", formatDecimalHours(input.summary.totalHoursMinutes)],
-      ["Suma man-days", formatManDays(input.summary.totalManDays)],
-      ["Przychod (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
-      ["Koszty podrozy (EUR)", formatMoney(input.summary.travelEur, "EUR")],
-      [
-        "Wynik (Przychod - Koszty podrozy) (EUR)",
-        formatMoney(input.summary.revenueEur - input.summary.travelEur, "EUR"),
-      ],
-    ],
+    body: (() => {
+      const provision = input.summary.provisionEur ?? 0;
+      const baseRows: Array<[string, string]> = [
+        ["Godziny stacjonarnie (hh:mm)", formatHours(onsiteHours)],
+        ["Godziny stacjonarnie (dziesietne)", formatDecimalHours(onsiteHours)],
+        ["Man-days stacjonarnie", formatManDays(onsiteManDays)],
+        ["Godziny zdalnie (hh:mm)", formatHours(remoteHours)],
+        ["Godziny zdalnie (dziesietne)", formatDecimalHours(remoteHours)],
+        ["Man-days zdalnie", formatManDays(remoteManDays)],
+        ["", ""],
+        ["Suma godzin (hh:mm)", formatHours(input.summary.totalHoursMinutes)],
+        ["Suma godzin (dziesietne)", formatDecimalHours(input.summary.totalHoursMinutes)],
+        ["Suma man-days", formatManDays(input.summary.totalManDays)],
+        ["Przychod (EUR)", formatMoney(input.summary.revenueEur, "EUR")],
+        ["Koszty podrozy (EUR)", formatMoney(input.summary.travelEur, "EUR")],
+      ];
+      if (provision > 0) {
+        baseRows.push(["Prowizja (posrednik) (EUR)", formatMoney(provision, "EUR")]);
+      }
+      baseRows.push([
+        "Wynik (Przychod - Koszty podrozy" + (provision > 0 ? " - Prowizja" : "") + ") (EUR)",
+        formatMoney(input.summary.revenueEur - input.summary.travelEur - provision, "EUR"),
+      ]);
+      return baseRows;
+    })(),
     styles: { fontSize: 9 },
     headStyles: { fillColor: [3, 109, 121] },
   });
