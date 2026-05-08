@@ -958,6 +958,15 @@ export const appRouter = router({
         city: z.string().optional(),
         country: z.string().optional(),
         vatId: z.string().optional(),
+        // ── Provision an Vermittler (siehe drizzle/schema.ts customers) ──
+        provisionEnabled: z.union([z.boolean(), z.number()]).optional(),
+        provisionMode: z.enum(["deduction", "surcharge"]).optional(),
+        provisionType: z.enum(["percentage", "fixed", "two_rate"]).optional(),
+        provisionValueBp: z.number().int().min(0).max(10000).optional(), // 0–100% in bp
+        provisionValueCents: z.number().int().min(0).optional(),
+        provisionUnit: z.enum(["hour", "day"]).optional(),
+        provisionUserRate: z.number().int().min(0).optional(),
+        provisionUserRateRemote: z.number().int().min(0).optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { createCustomer, getAllCustomersIncludingArchived, getCustomersByMandatenNr } = await import("./db");
@@ -996,8 +1005,20 @@ export const appRouter = router({
         assignedMandatenNr = formatMandatenNumber(nextSequence);
       }
 
+      // Normalize provisionEnabled: zod accepts boolean|number, the DB column is INT 0/1
+      const { provisionEnabled, ...rest } = input;
+      const normalizedProvisionEnabled =
+        typeof provisionEnabled === "undefined"
+          ? undefined
+          : provisionEnabled
+            ? 1
+            : 0;
+
       return await createCustomer({
-        ...input,
+        ...rest,
+        ...(typeof normalizedProvisionEnabled !== "undefined"
+          ? { provisionEnabled: normalizedProvisionEnabled }
+          : {}),
         standardDayHours: input.standardDayHours ?? 800,
         mandatenNr: assignedMandatenNr,
         userId: ctx.user.id,
@@ -1025,9 +1046,18 @@ export const appRouter = router({
         city: z.string().optional(),
         country: z.string().optional(),
         vatId: z.string().optional(),
+        // ── Provision an Vermittler ─────────────────────────────────────
+        provisionEnabled: z.union([z.boolean(), z.number()]).optional(),
+        provisionMode: z.enum(["deduction", "surcharge"]).optional(),
+        provisionType: z.enum(["percentage", "fixed", "two_rate"]).optional(),
+        provisionValueBp: z.number().int().min(0).max(10000).optional(),
+        provisionValueCents: z.number().int().min(0).optional(),
+        provisionUnit: z.enum(["hour", "day"]).optional(),
+        provisionUserRate: z.number().int().min(0).optional(),
+        provisionUserRateRemote: z.number().int().min(0).optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { id, ...data } = input;
+      const { id, provisionEnabled, ...rest } = input;
       const {
         getCustomerById,
         getCustomersByMandatenNr,
@@ -1042,8 +1072,8 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
       }
 
-      if (data.mandatenNr && data.mandatenNr !== customer.mandatenNr) {
-        const existingWithSameNumber = await getCustomersByMandatenNr(data.mandatenNr);
+      if (rest.mandatenNr && rest.mandatenNr !== customer.mandatenNr) {
+        const existingWithSameNumber = await getCustomersByMandatenNr(rest.mandatenNr);
         for (const existing of existingWithSameNumber) {
           if (existing.id === id) continue;
           if (await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null })) {
@@ -1053,6 +1083,12 @@ export const appRouter = router({
             });
           }
         }
+      }
+
+      // Normalize provisionEnabled (zod accepts boolean|number, DB column is INT 0/1)
+      const data: Record<string, any> = { ...rest };
+      if (typeof provisionEnabled !== "undefined") {
+        data.provisionEnabled = provisionEnabled ? 1 : 0;
       }
 
       await updateCustomer(id, data);
