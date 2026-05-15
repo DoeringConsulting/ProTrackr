@@ -479,9 +479,28 @@ export default function Reports() {
     };
 
     // Kompatibilitätsfelder in EUR für bestehende Exporte/Anzeige.
-    const timeRevenue = convertPlnResultToEur(timeRevenuePln);
-    const travelRevenueInGross = convertPlnResultToEur(travelRevenueInGrossPln);
-    const grossRevenue = convertPlnResultToEur(grossRevenuePln);
+    //
+    // WICHTIG: timeRevenue / travelRevenueInGross / grossRevenue werden direkt
+    // aus den bereits zu EUR konvertierten Entry-Werten (.amountEur) summiert,
+    // NICHT aus den PLN-Aggregaten zurückgerechnet. Sonst entsteht eine doppelte
+    // Konversion (EUR→PLN pro Entry, dann PLN-Summe→EUR), die durch zwei
+    // Rundungsstufen einen 1-Cent-Drift gegenüber dem tatsächlichen Rechnungs-
+    // betrag erzeugt. Die PLN-Aggregate timeRevenuePln/grossRevenuePln bleiben
+    // erhalten, weil die Steuer-Engine (aggregateMonthlyTaxResults) sie zwingend
+    // in PLN braucht — aber sie sind nicht mehr Quelle der EUR-Anzeige.
+    const timeRevenue = timeEntriesDetailed.reduce(
+      (sum, entry) => sum + (entry.amountEur ?? 0),
+      0
+    );
+    const travelRevenueInGross = expensesDetailed.reduce((sum, expense) => {
+      if (!expense.timeEntryId) return sum;
+      const relatedEntry = entriesById.get(expense.timeEntryId);
+      if (!relatedEntry) return sum;
+      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      if (relatedCustomer?.costModel !== "exclusive") return sum;
+      return sum + (expense.amountEur ?? 0);
+    }, 0);
+    const grossRevenue = timeRevenue + travelRevenueInGross;
     const totalFixedCosts = convertPlnResultToEur(totalFixedCostsPln);
     const variableCosts = convertPlnResultToEur(variableCostsPln);
     const provisionTotal = convertPlnResultToEur(provisionTotalPln);
