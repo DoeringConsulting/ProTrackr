@@ -101,13 +101,49 @@ export default function Reports() {
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
   const historyRateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
-  // Polish VAT rule: the rate of the last working day before invoice/report
-  // issuance is used. The server resolves this against today; we just need a
-  // stable cache key here.
-  const reportCreatedAtKey = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  }, []);
+
+  // ── Stichtag-Berechnung für den Wechselkurs (Variante C) ──────────────
+  //
+  // Stichtag = jüngstes effectiveEndDate aller Einträge im Bericht, wobei:
+  //   - timeEntry.date                        zählt als Ende
+  //   - expense.date (ohne checkOutDate)      zählt als Ende
+  //   - expense.checkOutDate (mit checkOut)   zählt als Ende
+  //
+  // Einträge mit Ende AUSSERHALB des Bericht-Zeitraums werden ignoriert
+  // (z.B. Hotel-Check-out im Folgemonat → das Hotel zählt nicht für den
+  // Stichtag des aktuellen Berichts).
+  //
+  // Wenn überhaupt keine Einträge im Zeitraum sind → Stichtag bleibt null;
+  // der Bericht zeigt dann "kein Kurs" (kein NBP-Call).
+  const reportStichtag = useMemo<string | null>(() => {
+    const rangeStart = toDateKey(startDate);
+    const rangeEnd = toDateKey(endDate);
+    if (!rangeStart || !rangeEnd) return null;
+
+    const inRange = (key: string | null | undefined) =>
+      key !== null && key !== undefined && key >= rangeStart && key <= rangeEnd;
+
+    let maxKey: string | null = null;
+    const consider = (key: string | null | undefined) => {
+      if (!inRange(key)) return;
+      if (maxKey === null || (key as string) > maxKey) maxKey = key as string;
+    };
+
+    for (const te of timeEntries as any[]) {
+      consider(toDateKey(te?.date));
+    }
+    for (const exp of expenses as any[]) {
+      // Bei Hotels gibt es checkInDate + checkOutDate. effectiveEnd = checkOutDate
+      // falls vorhanden, sonst expense.date. Wenn effectiveEnd außerhalb des
+      // Berichts liegt (z.B. checkOut im Folgemonat), wird der Eintrag durch
+      // inRange() schlicht verworfen.
+      const effectiveEnd =
+        toDateKey(exp?.checkOutDate) ?? toDateKey(exp?.date) ?? toDateKey(exp?.checkInDate);
+      consider(effectiveEnd);
+    }
+
+    return maxKey;
+  }, [timeEntries, expenses, startDate, endDate]);
   const reportPairs = useMemo(() => {
     const currencies = new Set<string>(["EUR", "PLN", targetCurrency]);
     for (const customer of customers as any[]) {
@@ -125,12 +161,14 @@ export default function Reports() {
       .map(code => `${code}/PLN`)
       .sort((a, b) => a.localeCompare(b, "de"));
   }, [customers, expenses, fixedCosts, targetCurrency]);
+  // Wenn der Bericht keine Einträge enthält, fragen wir den Server gar nicht
+  // erst — kein Stichtag, kein Kurs. Sonst geht der Stichtag mit auf den Wire.
   const reportRatesQuery = trpc.exchangeRatesManagement.resolveForReportDate.useQuery(
     {
-      date: reportCreatedAtKey,
+      date: reportStichtag ?? "",
       pairs: reportPairs.length > 0 ? reportPairs : ["EUR/PLN"],
     },
-    { enabled: true }
+    { enabled: Boolean(reportStichtag) }
   );
   const reportRateMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -1403,7 +1441,9 @@ export default function Reports() {
                 <div className="mt-4 rounded border p-3 text-sm">
                   <p className="font-medium mb-2">Angewendete Wechselkurse</p>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Berichterstellung: {new Date(reportCreatedAtKey).toLocaleDateString("de-DE")}
+                    {reportStichtag
+                      ? `Stichtag (letzter Leistungs-/Kosten-Tag im Bericht): ${new Date(`${reportStichtag}T00:00:00`).toLocaleDateString("de-DE")}`
+                      : "Kein Stichtag — Bericht enthält keine Einträge"}
                     {reportRatesQuery.isLoading ? " · Kurse werden geladen…" : ""}
                   </p>
                   {appliedExchangeRatesForUi.length === 0 ? (
