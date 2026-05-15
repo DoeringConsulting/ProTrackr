@@ -3536,10 +3536,11 @@ export const appRouter = router({
       const useManualOverride = Number(settings?.useManualExchangeRate ?? 0) === 1;
 
       // Anker für den "aktuellsten Kurs"-Mit-Abruf, wenn der Bericht-Stichtag
-      // selbst einen NBP-Call erzwingt (siehe weiter unten).
-      const now = new Date();
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
+      // selbst einen NBP-Call erzwingt (siehe weiter unten). Wir nehmen HEUTE
+      // (UTC-Mitternacht). NBP's eigener 404-Fallback springt automatisch auf
+      // gestern, falls heute noch nicht publiziert.
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const todayUtc = new Date(`${todayKey}T00:00:00Z`);
 
       const results: Array<{
         pair: string;
@@ -3600,14 +3601,14 @@ export const appRouter = router({
           });
 
           // ── Mitnahme: bei dieser Gelegenheit zusätzlich den aktuellsten
-          //    NBP-Kurs (für gestern) abfragen und ablegen, sofern er noch
-          //    nicht vorliegt. Spart einen späteren NBP-Call beim nächsten
-          //    Bericht für einen aktuelleren Stichtag.
-          //    Nur wenn der Stichtag selbst nicht schon der aktuellste war.
-          const yesterdayKey = yesterday.toISOString().slice(0, 10);
-          if (archivedForStichtag.effectiveDate !== yesterdayKey) {
+          //    verfügbaren NBP-Kurs (Anker = heute) abfragen und ablegen,
+          //    sofern der Stichtag-Kurs selbst nicht schon der aktuellste war.
+          //    NBP's 404-Fallback geht bis 7 Tage rückwärts, also bekommen wir
+          //    auch vor 12:00 PL-Zeit / am Wochenende einen Treffer (gestern
+          //    bzw. letzter Werktag).
+          if (archivedForStichtag.effectiveDate < todayKey) {
             try {
-              const archivedToday = await fetchNBPExchangeRateWithMeta(baseCurrency, yesterday);
+              const archivedToday = await fetchNBPExchangeRateWithMeta(baseCurrency, todayUtc);
               const todayEffective = new Date(`${archivedToday.effectiveDate}T00:00:00Z`);
               await createExchangeRate({
                 date: todayEffective,
@@ -3685,19 +3686,21 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
       }
 
-      // Anchor on yesterday and let NBP's 404-fallback walk back to the last
-      // working day with a published rate (Polish VAT rule: rate of last
-      // working day before invoice issuance).
-      const referenceDate = new Date();
-      referenceDate.setDate(referenceDate.getDate() - 1);
+      // Anchor on TODAY (UTC midnight) so the user sees the most recent
+      // published rate when clicking "Kurse von NBP abrufen". NBP's own
+      // 404-fallback (in nbp.ts, up to 7 days backward) handles the cases
+      // where today is not yet published (call before ~12:00 PL) or non-
+      // working-day (weekend / Polish holiday) — it walks back to the latest
+      // available working day automatically.
+      const todayUtc = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
 
       const results = [];
       for (const currency of input.currencies) {
         if (currency.toUpperCase() === "PLN") continue;
         try {
-          const { rate, effectiveDate } = await fetchNBPExchangeRateWithMeta(currency, referenceDate);
+          const { rate, effectiveDate } = await fetchNBPExchangeRateWithMeta(currency, todayUtc);
           await upsertExchangeRate({
-            date: new Date(`${effectiveDate}T00:00:00`),
+            date: new Date(`${effectiveDate}T00:00:00Z`),
             currencyPair: `${currency}/PLN`,
             rate: Math.round(rate * 10000),
             source: "NBP",
