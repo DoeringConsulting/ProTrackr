@@ -35,6 +35,8 @@ interface AccountingData {
   grossRevenue: number;
   totalFixedCosts: number;
   variableCosts: number;
+  /** Optional — sum of commission paid to intermediaries, EUR cents. */
+  provisionTotal?: number;
   zus: number;
   healthInsurance: number;
   taxBase: number;
@@ -93,25 +95,33 @@ export async function exportAccountingReportToPDF(
   const travelRevenueInGross =
     data.travelRevenueInGross ?? Math.max(0, data.grossRevenue - timeRevenue);
 
+  const provisionTotal = data.provisionTotal ?? 0;
+  const bodyRows: Array<[string, string]> = [
+    ["Przychod brutto", formatCurrency(data.grossRevenue)],
+    ["  Ewidencja czasu", formatCurrency(timeRevenue)],
+    ["  Koszty podrozy (rozliczane, tylko Exclusive)", formatCurrency(travelRevenueInGross)],
+    ["", ""],
+    ["Koszty stale", formatCurrency(data.totalFixedCosts)],
+    ["Koszty zmienne", formatCurrency(data.variableCosts)],
+  ];
+  if (provisionTotal > 0) {
+    bodyRows.push(["Prowizja (posrednik)", formatCurrency(provisionTotal)]);
+  }
+  bodyRows.push(
+    ["", ""],
+    ["ZUS (ubezpieczenie spoleczne 19,52%)", formatCurrency(data.zus)],
+    ["Ubezpieczenie zdrowotne (9%)", formatCurrency(data.healthInsurance)],
+    ["", ""],
+    ["Podstawa opodatkowania", formatCurrency(data.taxBase)],
+    ["Podatek (19%)", formatCurrency(data.tax)],
+    ["", ""],
+    ["Zysk netto", formatCurrency(data.netProfit)],
+  );
+
   autoTable(doc, {
     startY: 45,
     head: [["Pozycja", "Kwota"]],
-    body: [
-      ["Przychod brutto", formatCurrency(data.grossRevenue)],
-      ["  Ewidencja czasu", formatCurrency(timeRevenue)],
-      ["  Koszty podrozy (rozliczane, tylko Exclusive)", formatCurrency(travelRevenueInGross)],
-      ["", ""],
-      ["Koszty stale", formatCurrency(data.totalFixedCosts)],
-      ["Koszty zmienne", formatCurrency(data.variableCosts)],
-      ["", ""],
-      ["ZUS (ubezpieczenie spoleczne 19,52%)", formatCurrency(data.zus)],
-      ["Ubezpieczenie zdrowotne (9%)", formatCurrency(data.healthInsurance)],
-      ["", ""],
-      ["Podstawa opodatkowania", formatCurrency(data.taxBase)],
-      ["Podatek (19%)", formatCurrency(data.tax)],
-      ["", ""],
-      ["Zysk netto", formatCurrency(data.netProfit)],
-    ],
+    body: bodyRows,
     theme: "striped",
     headStyles: { fillColor: [59, 130, 246] },
     styles: { fontSize: 10 },

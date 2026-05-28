@@ -73,6 +73,22 @@ export const customers = mysqlTable("customers", {
   mealRateCurrency: varchar("mealRateCurrency", { length: 3 }).default("EUR").notNull(),
   costModel: mysqlEnum("costModel", ["exclusive", "inclusive"]).notNull(),
   isArchived: int("isArchived").default(0).notNull(), // 0 = active, 1 = archived
+  // ── Provision an Vermittler (optional, default deaktiviert) ──────────
+  // provisionEnabled = 0 → keine Provisions-Berechnung; alle anderen Felder
+  // werden dann ignoriert (Backward-Compat: Bestandskunden bleiben unverändert).
+  provisionEnabled: int("provisionEnabled").default(0).notNull(), // 0/1
+  provisionMode: mysqlEnum("provisionMode", ["deduction", "surcharge"]).default("deduction").notNull(),
+  provisionType: mysqlEnum("provisionType", ["percentage", "fixed", "two_rate"]).default("percentage").notNull(),
+  // Bei type=percentage: Anteil in basis points (10% = 1000, 100% = 10000)
+  provisionValueBp: int("provisionValueBp").default(0).notNull(),
+  // Bei type=fixed: Festbetrag in cents (in onsiteRateCurrency)
+  provisionValueCents: int("provisionValueCents").default(0).notNull(),
+  // Bei type=fixed: bezogen auf Stunde oder Tag
+  provisionUnit: mysqlEnum("provisionUnit", ["hour", "day"]).default("day").notNull(),
+  // Bei type=two_rate: User-Netto-Sätze in cents (entsprechende Currency = onsiteRate-Currency)
+  // Onsite/Remote werden symmetrisch behandelt; userRate ergänzt onsiteRate, userRateRemote ergänzt remoteRate.
+  provisionUserRate: int("provisionUserRate").default(0).notNull(),
+  provisionUserRateRemote: int("provisionUserRateRemote").default(0).notNull(),
   // Billing address fields
   street: varchar("street", { length: 255 }),
   postalCode: varchar("postalCode", { length: 20 }),

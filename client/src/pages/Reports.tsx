@@ -28,6 +28,10 @@ import {
   formatMoney,
   type SupportedCurrency,
 } from "@/lib/currencyUtils";
+import {
+  calculateProvisionCents,
+  provisionConfigFromCustomer,
+} from "@/lib/provision";
 
 const EXPENSE_CATEGORY_LABELS: Record<
   string,
@@ -97,13 +101,49 @@ export default function Reports() {
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
 
   const historyRateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
-  // Polish VAT rule: the rate of the last working day before invoice/report
-  // issuance is used. The server resolves this against today; we just need a
-  // stable cache key here.
-  const reportCreatedAtKey = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  }, []);
+
+  // ── Stichtag-Berechnung für den Wechselkurs (Variante C) ──────────────
+  //
+  // Stichtag = jüngstes effectiveEndDate aller Einträge im Bericht, wobei:
+  //   - timeEntry.date                        zählt als Ende
+  //   - expense.date (ohne checkOutDate)      zählt als Ende
+  //   - expense.checkOutDate (mit checkOut)   zählt als Ende
+  //
+  // Einträge mit Ende AUSSERHALB des Bericht-Zeitraums werden ignoriert
+  // (z.B. Hotel-Check-out im Folgemonat → das Hotel zählt nicht für den
+  // Stichtag des aktuellen Berichts).
+  //
+  // Wenn überhaupt keine Einträge im Zeitraum sind → Stichtag bleibt null;
+  // der Bericht zeigt dann "kein Kurs" (kein NBP-Call).
+  const reportStichtag = useMemo<string | null>(() => {
+    const rangeStart = toDateKey(startDate);
+    const rangeEnd = toDateKey(endDate);
+    if (!rangeStart || !rangeEnd) return null;
+
+    const inRange = (key: string | null | undefined) =>
+      key !== null && key !== undefined && key >= rangeStart && key <= rangeEnd;
+
+    let maxKey: string | null = null;
+    const consider = (key: string | null | undefined) => {
+      if (!inRange(key)) return;
+      if (maxKey === null || (key as string) > maxKey) maxKey = key as string;
+    };
+
+    for (const te of timeEntries as any[]) {
+      consider(toDateKey(te?.date));
+    }
+    for (const exp of expenses as any[]) {
+      // Bei Hotels gibt es checkInDate + checkOutDate. effectiveEnd = checkOutDate
+      // falls vorhanden, sonst expense.date. Wenn effectiveEnd außerhalb des
+      // Berichts liegt (z.B. checkOut im Folgemonat), wird der Eintrag durch
+      // inRange() schlicht verworfen.
+      const effectiveEnd =
+        toDateKey(exp?.checkOutDate) ?? toDateKey(exp?.date) ?? toDateKey(exp?.checkInDate);
+      consider(effectiveEnd);
+    }
+
+    return maxKey;
+  }, [timeEntries, expenses, startDate, endDate]);
   const reportPairs = useMemo(() => {
     const currencies = new Set<string>(["EUR", "PLN", targetCurrency]);
     for (const customer of customers as any[]) {
@@ -121,12 +161,14 @@ export default function Reports() {
       .map(code => `${code}/PLN`)
       .sort((a, b) => a.localeCompare(b, "de"));
   }, [customers, expenses, fixedCosts, targetCurrency]);
+  // Wenn der Bericht keine Einträge enthält, fragen wir den Server gar nicht
+  // erst — kein Stichtag, kein Kurs. Sonst geht der Stichtag mit auf den Wire.
   const reportRatesQuery = trpc.exchangeRatesManagement.resolveForReportDate.useQuery(
     {
-      date: reportCreatedAtKey,
+      date: reportStichtag ?? "",
       pairs: reportPairs.length > 0 ? reportPairs : ["EUR/PLN"],
     },
-    { enabled: true }
+    { enabled: Boolean(reportStichtag) }
   );
   const reportRateMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -324,6 +366,33 @@ export default function Reports() {
       return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
     }, 0);
     const grossRevenuePln = timeRevenuePln + travelRevenueInGrossPln;
+
+    // ── Provision an Vermittler ────────────────────────────────────────
+    // Pro Time-Entry abgeleitete Größe (nicht persistiert), aggregiert in
+    // PLN (für Steuer) und in Original-Währung (für die Anzeige aufgeschlüsselt
+    // pro Währung wie Fixkosten / Variable Kosten).
+    let provisionTotalPln = 0;
+    const provisionByCurrencyMap = new Map<string, number>();
+    for (const entry of timeEntriesDetailed) {
+      const customer = customersById.get(entry.customerId);
+      if (!customer) continue;
+      const cfg = provisionConfigFromCustomer(customer as any);
+      if (!cfg.enabled) continue;
+      const provisionCents = calculateProvisionCents(cfg, {
+        entryType: (entry.entryType ?? "onsite") as "onsite" | "remote",
+        hoursMinutes: Number(entry.hours ?? 0),
+        manDays: Number(entry.manDays ?? 0) / 1000, // DB stores thousandths
+        rate: Number(entry.rate ?? 0),
+      });
+      if (provisionCents <= 0) continue;
+      const provCurrency = String(customer.onsiteRateCurrency || "EUR").toUpperCase();
+      provisionByCurrencyMap.set(
+        provCurrency,
+        (provisionByCurrencyMap.get(provCurrency) ?? 0) + provisionCents
+      );
+      provisionTotalPln += convertAmountToPlnForTax(provisionCents, provCurrency);
+    }
+    const provisionByCurrency = provisionByCurrencyMap;
     const periodMonthCount = getPeriodMonthCount(startDate, endDate);
     const monthlyFixedCostsPln = fixedCostsDetailed.reduce(
       (sum, cost) => sum + convertAmountToPlnForTax(cost.amount, cost.sourceCurrency),
@@ -366,10 +435,33 @@ export default function Reports() {
           if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
           monthVariablePln += convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
         }
+        // Provision an Vermittler ist ebenfalls eine Betriebsausgabe und
+        // mindert die Steuerbasis. Wir berechnen sie pro Monat aus den
+        // Time-Entries, deren Datum im Monat liegt.
+        let monthProvisionPln = 0;
+        for (const entry of timeEntriesDetailed) {
+          if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
+          const customer = customersById.get(entry.customerId);
+          if (!customer) continue;
+          const cfg = provisionConfigFromCustomer(customer as any);
+          if (!cfg.enabled) continue;
+          const provisionCents = calculateProvisionCents(cfg, {
+            entryType: (entry.entryType ?? "onsite") as "onsite" | "remote",
+            hoursMinutes: Number(entry.hours ?? 0),
+            manDays: Number(entry.manDays ?? 0) / 1000,
+            rate: Number(entry.rate ?? 0),
+          });
+          if (provisionCents > 0) {
+            const provCurrency = String(customer.onsiteRateCurrency || "EUR").toUpperCase();
+            monthProvisionPln += convertAmountToPlnForTax(provisionCents, provCurrency);
+          }
+        }
         return {
           revenueCents: monthRevenuePln,
           fixedCostsCents: monthlyFixedCostsPln,
-          variableCostsCents: monthVariablePln,
+          // Provision wird wie eine variable Kostenposition behandelt — sie
+          // mindert die Steuerbasis genauso wie Reisekosten.
+          variableCostsCents: monthVariablePln + monthProvisionPln,
         };
       },
       profile: mappedTaxProfile,
@@ -387,11 +479,31 @@ export default function Reports() {
     };
 
     // Kompatibilitätsfelder in EUR für bestehende Exporte/Anzeige.
-    const timeRevenue = convertPlnResultToEur(timeRevenuePln);
-    const travelRevenueInGross = convertPlnResultToEur(travelRevenueInGrossPln);
-    const grossRevenue = convertPlnResultToEur(grossRevenuePln);
+    //
+    // WICHTIG: timeRevenue / travelRevenueInGross / grossRevenue werden direkt
+    // aus den bereits zu EUR konvertierten Entry-Werten (.amountEur) summiert,
+    // NICHT aus den PLN-Aggregaten zurückgerechnet. Sonst entsteht eine doppelte
+    // Konversion (EUR→PLN pro Entry, dann PLN-Summe→EUR), die durch zwei
+    // Rundungsstufen einen 1-Cent-Drift gegenüber dem tatsächlichen Rechnungs-
+    // betrag erzeugt. Die PLN-Aggregate timeRevenuePln/grossRevenuePln bleiben
+    // erhalten, weil die Steuer-Engine (aggregateMonthlyTaxResults) sie zwingend
+    // in PLN braucht — aber sie sind nicht mehr Quelle der EUR-Anzeige.
+    const timeRevenue = timeEntriesDetailed.reduce(
+      (sum, entry) => sum + (entry.amountEur ?? 0),
+      0
+    );
+    const travelRevenueInGross = expensesDetailed.reduce((sum, expense) => {
+      if (!expense.timeEntryId) return sum;
+      const relatedEntry = entriesById.get(expense.timeEntryId);
+      if (!relatedEntry) return sum;
+      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      if (relatedCustomer?.costModel !== "exclusive") return sum;
+      return sum + (expense.amountEur ?? 0);
+    }, 0);
+    const grossRevenue = timeRevenue + travelRevenueInGross;
     const totalFixedCosts = convertPlnResultToEur(totalFixedCostsPln);
     const variableCosts = convertPlnResultToEur(variableCostsPln);
+    const provisionTotal = convertPlnResultToEur(provisionTotalPln);
     const zus = convertPlnResultToEur(taxResultPln.zus);
     const healthInsurance = convertPlnResultToEur(taxResultPln.healthInsurance);
     const deductibleHealth = convertPlnResultToEur(taxResultPln.deductibleHealth);
@@ -424,6 +536,8 @@ export default function Reports() {
       grossRevenue,
       totalFixedCosts,
       variableCosts,
+      provisionTotal,
+      provisionByCurrency,
       zus,
       healthInsurance,
       deductibleHealth,
@@ -448,8 +562,28 @@ export default function Reports() {
 
     if (!customer) return null;
 
+    // Customer-facing amounts: in deduction-mode entry.amountEur is already
+    // the customer-brutto value; in surcharge-mode we need to add the per-day
+    // provision so the customer sees the rate they actually pay (without the
+    // provision being separately labelled — that's the whole point of the
+    // surcharge mode).
+    const provisionCfg = provisionConfigFromCustomer(customer as any);
+    const customerVisibleAmountEur = (entry: any): number => {
+      const stored = entry.amountEur ?? 0;
+      if (!provisionCfg.enabled || provisionCfg.mode === "deduction") return stored;
+      // surcharge: add provision per day, converted to EUR using same rate map
+      const provisionCents = calculateProvisionCents(provisionCfg, {
+        entryType: (entry.entryType ?? "onsite") as "onsite" | "remote",
+        hoursMinutes: Number(entry.hours ?? 0),
+        manDays: Number(entry.manDays ?? 0),
+        rate: Number(entry.rate ?? 0),
+      });
+      const provisionEur = convertToEur(provisionCents, customer.onsiteRateCurrency || "EUR") ?? 0;
+      return stored + provisionEur;
+    };
+
     const totalHours = customerEntries.reduce((sum, entry) => sum + entry.hours, 0);
-    const totalAmount = customerEntries.reduce((sum, entry) => sum + (entry.amountEur ?? 0), 0); // EUR
+    const totalAmount = customerEntries.reduce((sum, entry) => sum + customerVisibleAmountEur(entry), 0);
     const totalManDays = customerEntries.reduce((sum, entry) => sum + entry.manDays, 0);
 
     // Calculate expenses for this customer
@@ -636,6 +770,7 @@ export default function Reports() {
         totalManDays: timeEntries.reduce((sum, entry) => sum + entry.manDays, 0),
         revenueEur,
         travelEur,
+        provisionEur: accountingData.provisionTotal,
       },
       appliedExchangeRates,
     });
@@ -888,6 +1023,7 @@ export default function Reports() {
                         travelRevenueInGross: accountingData.travelRevenueInGross,
                         fixedCosts: fixedCosts.map(fc => ({ category: fc.category, amount: fc.amount })),
                         variableCosts: accountingData.variableCosts,
+                        provisionTotal: accountingData.provisionTotal,
                         zus: accountingData.zus,
                         healthInsurance: accountingData.healthInsurance,
                         tax: accountingData.tax,
@@ -1000,6 +1136,16 @@ export default function Reports() {
                           : renderCurrencyBadges(accountingData.variableCostsByCurrency)}
                       </TableCell>
                     </TableRow>
+                    {accountingData.provisionTotal > 0 && (
+                      <TableRow className="border-t-2">
+                        <TableCell className="font-semibold">Provision (Vermittler)</TableCell>
+                        <TableCell className="text-right font-semibold text-red-600">
+                          {showUnifiedCurrency
+                            ? formatCalculatedCurrencyNegative(accountingData.provisionTotal)
+                            : renderCurrencyBadges(accountingData.provisionByCurrency)}
+                        </TableCell>
+                      </TableRow>
+                    )}
                     <TableRow className="border-t-2">
                       <TableCell className="font-semibold">ZUS (Sozialversicherung)</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
@@ -1314,7 +1460,9 @@ export default function Reports() {
                 <div className="mt-4 rounded border p-3 text-sm">
                   <p className="font-medium mb-2">Angewendete Wechselkurse</p>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Berichterstellung: {new Date(reportCreatedAtKey).toLocaleDateString("de-DE")}
+                    {reportStichtag
+                      ? `Stichtag (letzter Leistungs-/Kosten-Tag im Bericht): ${new Date(`${reportStichtag}T00:00:00`).toLocaleDateString("de-DE")}`
+                      : "Kein Stichtag — Bericht enthält keine Einträge"}
                     {reportRatesQuery.isLoading ? " · Kurse werden geladen…" : ""}
                   </p>
                   {appliedExchangeRatesForUi.length === 0 ? (

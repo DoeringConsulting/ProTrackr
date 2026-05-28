@@ -6,6 +6,8 @@ interface AccountingReportData {
   travelRevenueInGross?: number;
   fixedCosts: { category: string; amount: number }[];
   variableCosts: number;
+  /** Optional — sum of commission paid to intermediaries, EUR cents. */
+  provisionTotal?: number;
   zus: number;
   healthInsurance: number;
   tax: number;
@@ -64,8 +66,9 @@ export async function exportAccountingReportToExcel(data: AccountingReportData) 
   const travelRevenueInGross =
     data.travelRevenueInGross ?? Math.max(0, data.revenue - timeRevenue);
 
+  const provisionTotal = data.provisionTotal ?? 0;
   // Create worksheet data
-  const wsData = [
+  const wsData: any[][] = [
     ["Buchhaltungsbericht"],
     [`Zeitraum: ${data.startDate} bis ${data.endDate}`],
     [],
@@ -80,6 +83,11 @@ export async function exportAccountingReportToExcel(data: AccountingReportData) 
     [],
     ["Variable Kosten"],
     ["Reisekosten", data.variableCosts / 100],
+  ];
+  if (provisionTotal > 0) {
+    wsData.push(["Provision (Vermittler)", provisionTotal / 100]);
+  }
+  wsData.push(
     [],
     ["Abzüge"],
     ["ZUS (19,52%)", data.zus / 100],
@@ -87,7 +95,7 @@ export async function exportAccountingReportToExcel(data: AccountingReportData) 
     ["Steuer (19%)", data.tax / 100],
     [],
     ["Nettogewinn", data.netProfit / 100],
-  ];
+  );
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 

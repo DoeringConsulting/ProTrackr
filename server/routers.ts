@@ -958,6 +958,15 @@ export const appRouter = router({
         city: z.string().optional(),
         country: z.string().optional(),
         vatId: z.string().optional(),
+        // ── Provision an Vermittler (siehe drizzle/schema.ts customers) ──
+        provisionEnabled: z.union([z.boolean(), z.number()]).optional(),
+        provisionMode: z.enum(["deduction", "surcharge"]).optional(),
+        provisionType: z.enum(["percentage", "fixed", "two_rate"]).optional(),
+        provisionValueBp: z.number().int().min(0).max(10000).optional(), // 0–100% in bp
+        provisionValueCents: z.number().int().min(0).optional(),
+        provisionUnit: z.enum(["hour", "day"]).optional(),
+        provisionUserRate: z.number().int().min(0).optional(),
+        provisionUserRateRemote: z.number().int().min(0).optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { createCustomer, getAllCustomersIncludingArchived, getCustomersByMandatenNr } = await import("./db");
@@ -996,8 +1005,20 @@ export const appRouter = router({
         assignedMandatenNr = formatMandatenNumber(nextSequence);
       }
 
+      // Normalize provisionEnabled: zod accepts boolean|number, the DB column is INT 0/1
+      const { provisionEnabled, ...rest } = input;
+      const normalizedProvisionEnabled =
+        typeof provisionEnabled === "undefined"
+          ? undefined
+          : provisionEnabled
+            ? 1
+            : 0;
+
       return await createCustomer({
-        ...input,
+        ...rest,
+        ...(typeof normalizedProvisionEnabled !== "undefined"
+          ? { provisionEnabled: normalizedProvisionEnabled }
+          : {}),
         standardDayHours: input.standardDayHours ?? 800,
         mandatenNr: assignedMandatenNr,
         userId: ctx.user.id,
@@ -1025,9 +1046,18 @@ export const appRouter = router({
         city: z.string().optional(),
         country: z.string().optional(),
         vatId: z.string().optional(),
+        // ── Provision an Vermittler ─────────────────────────────────────
+        provisionEnabled: z.union([z.boolean(), z.number()]).optional(),
+        provisionMode: z.enum(["deduction", "surcharge"]).optional(),
+        provisionType: z.enum(["percentage", "fixed", "two_rate"]).optional(),
+        provisionValueBp: z.number().int().min(0).max(10000).optional(),
+        provisionValueCents: z.number().int().min(0).optional(),
+        provisionUnit: z.enum(["hour", "day"]).optional(),
+        provisionUserRate: z.number().int().min(0).optional(),
+        provisionUserRateRemote: z.number().int().min(0).optional(),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
-      const { id, ...data } = input;
+      const { id, provisionEnabled, ...rest } = input;
       const {
         getCustomerById,
         getCustomersByMandatenNr,
@@ -1042,8 +1072,8 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Kein Zugriff auf diesen Kunden" });
       }
 
-      if (data.mandatenNr && data.mandatenNr !== customer.mandatenNr) {
-        const existingWithSameNumber = await getCustomersByMandatenNr(data.mandatenNr);
+      if (rest.mandatenNr && rest.mandatenNr !== customer.mandatenNr) {
+        const existingWithSameNumber = await getCustomersByMandatenNr(rest.mandatenNr);
         for (const existing of existingWithSameNumber) {
           if (existing.id === id) continue;
           if (await canAccessCustomerOwnedData(ctx.user, { userId: existing.userId ?? null })) {
@@ -1053,6 +1083,12 @@ export const appRouter = router({
             });
           }
         }
+      }
+
+      // Normalize provisionEnabled (zod accepts boolean|number, DB column is INT 0/1)
+      const data: Record<string, any> = { ...rest };
+      if (typeof provisionEnabled !== "undefined") {
+        data.provisionEnabled = provisionEnabled ? 1 : 0;
       }
 
       await updateCustomer(id, data);
@@ -3461,10 +3497,12 @@ export const appRouter = router({
     }),
     resolveForReportDate: protectedProcedure.input((val: unknown) => {
       return z.object({
-        // Optional. Reserved for future use; the rate selection is always
-        // anchored on the report-creation date (today), per Polish VAT law:
-        // "ostatni dzień roboczy poprzedzający dzień wystawienia faktury".
-        date: z.string().optional(),
+        // Pflicht — der Stichtag des Berichts. Wird im Client als jüngstes
+        // effectiveEnd-Datum aller Einträge im Bericht berechnet (timeEntries
+        // + expenses, Hotels mit Check-out im Folgemonat werden ausgeschlossen).
+        // Wenn der Client keinen Stichtag bestimmen kann (leerer Bericht),
+        // soll der Aufruf gar nicht erst erfolgen.
+        date: z.string(),
         pairs: z.array(z.string()).min(1).max(25),
       }).parse(val);
     }).query(async ({ ctx, input }) => {
@@ -3472,6 +3510,7 @@ export const appRouter = router({
       const {
         createExchangeRate,
         getAccountSettings,
+        getExchangeRateByDate,
         getLatestManualExchangeRate,
         getLatestNbpExchangeRate,
       } = await import("./db");
@@ -3482,23 +3521,26 @@ export const appRouter = router({
         /^[A-Z]{3}\/PLN$/.test(pair)
       );
 
-      // Manual override: when the user has flipped the global toggle, every pair
-      // resolves to their latest manual entry instead of going to NBP.
+      // Stichtag parsen. Client liefert YYYY-MM-DD; auf Mitternacht UTC fixen
+      // (`Z`-Suffix erzwingt UTC). Sonst rutscht das Datum in fetchNBP über
+      // .toISOString() um die Server-Timezone-Differenz zurück (Europa/Warsaw
+      // +2h → "30.4. lokal" würde zu "29.4. UTC" werden).
+      const stichtag = new Date(`${input.date}T00:00:00Z`);
+      if (Number.isNaN(stichtag.getTime())) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Ungültiges Stichtag-Datum" });
+      }
+
+      // Manual override: wenn der globale Toggle gesetzt ist, nutzt jeder Pair
+      // den jüngsten manuellen Eintrag — unabhängig vom Stichtag.
       const settings = await getAccountSettings(ctx.user.id);
       const useManualOverride = Number(settings?.useManualExchangeRate ?? 0) === 1;
 
-      // Polish VAT/PIT rule: the rate of the last working day BEFORE the
-      // invoice/report issuance date. Start from "yesterday" — the NBP fallback
-      // (404 → previous day, up to 7 attempts) handles weekends/holidays.
-      const now = new Date();
-      const referenceDate = new Date(now);
-      referenceDate.setDate(referenceDate.getDate() - 1);
-
-      // Cache window: consider an existing NBP rate "fresh" if it was queried
-      // within the last 12 hours. NBP publishes table A around 12:00 PL time,
-      // so a 12-hour window guarantees we re-fetch at least once on either side
-      // of the daily publish window.
-      const FRESH_WINDOW_MS = 12 * 60 * 60 * 1000;
+      // Anker für den "aktuellsten Kurs"-Mit-Abruf, wenn der Bericht-Stichtag
+      // selbst einen NBP-Call erzwingt (siehe weiter unten). Wir nehmen HEUTE
+      // (UTC-Mitternacht). NBP's eigener 404-Fallback springt automatisch auf
+      // gestern, falls heute noch nicht publiziert.
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const todayUtc = new Date(`${todayKey}T00:00:00Z`);
 
       const results: Array<{
         pair: string;
@@ -3529,45 +3571,71 @@ export const appRouter = router({
               results.push(buildResult(manual, { isManual: true, sourceLabel: "Manual" }));
               continue;
             }
-            // No manual rate stored yet — fall through to NBP lookup.
+            // Kein manueller Eintrag vorhanden — fällt durch auf NBP-Pfad.
           }
 
-          // Fast path: if we already have a fresh NBP rate, return it without
-          // hitting the upstream API. This keeps Reports snappy and respects
-          // the 20-row history cap.
-          const cached = await getLatestNbpExchangeRate(pair);
-          if (cached?.queriedAt) {
-            const queriedAtMs = new Date(cached.queriedAt as any).getTime();
-            if (now.getTime() - queriedAtMs < FRESH_WINDOW_MS) {
-              results.push(buildResult(cached, { isManual: false, sourceLabel: String(cached.source ?? "NBP") }));
-              continue;
-            }
+          // ── Stichtag-Match: existiert bereits ein gespeicherter Kurs für
+          //    genau diesen Stichtag-Tag und dieses Paar? Wenn ja, nehmen wir
+          //    den — kein NBP-Call. Das deckt den Standard-Fall ab, dass
+          //    Berichte für vergangene Monate immer denselben Stichtag haben.
+          const stichtagMatch = await getExchangeRateByDate(pair, stichtag, 0);
+          if (stichtagMatch) {
+            results.push(buildResult(stichtagMatch, { isManual: false, sourceLabel: String(stichtagMatch.source ?? "NBP") }));
+            continue;
           }
 
+          // ── Stichtag-Kurs nicht in der Liste → NBP-Call mit dem Stichtag-
+          //    Datum. NBP's eigener 404-Fallback geht bis zu 7 Tage rückwärts
+          //    (Wochenende / Feiertag / noch nicht publiziert).
           const baseCurrency = pair.split("/")[0];
-          const archived = await fetchNBPExchangeRateWithMeta(baseCurrency, referenceDate);
-          const effectiveDate = new Date(`${archived.effectiveDate}T00:00:00`);
-          const rateInt = Math.round(archived.rate * 10000);
+          const archivedForStichtag = await fetchNBPExchangeRateWithMeta(baseCurrency, stichtag);
+          const stichtagEffective = new Date(`${archivedForStichtag.effectiveDate}T00:00:00Z`);
+          const stichtagRateInt = Math.round(archivedForStichtag.rate * 10000);
           await createExchangeRate({
-            date: effectiveDate,
+            date: stichtagEffective,
             currencyPair: pair,
-            rate: rateInt,
+            rate: stichtagRateInt,
             source: "NBP",
             userId: 0,
             isManual: 0,
           });
 
+          // ── Mitnahme: bei dieser Gelegenheit zusätzlich den aktuellsten
+          //    verfügbaren NBP-Kurs (Anker = heute) abfragen und ablegen,
+          //    sofern der Stichtag-Kurs selbst nicht schon der aktuellste war.
+          //    NBP's 404-Fallback geht bis 7 Tage rückwärts, also bekommen wir
+          //    auch vor 12:00 PL-Zeit / am Wochenende einen Treffer (gestern
+          //    bzw. letzter Werktag).
+          if (archivedForStichtag.effectiveDate < todayKey) {
+            try {
+              const archivedToday = await fetchNBPExchangeRateWithMeta(baseCurrency, todayUtc);
+              const todayEffective = new Date(`${archivedToday.effectiveDate}T00:00:00Z`);
+              await createExchangeRate({
+                date: todayEffective,
+                currencyPair: pair,
+                rate: Math.round(archivedToday.rate * 10000),
+                source: "NBP",
+                userId: 0,
+                isManual: 0,
+              });
+            } catch {
+              // Aktueller Kurs noch nicht publiziert oder NBP unreachable —
+              // wir haben den Stichtag-Kurs trotzdem.
+            }
+          }
+
           results.push({
             pair,
-            rate: archived.rate,
-            date: archived.effectiveDate,
+            rate: archivedForStichtag.rate,
+            date: archivedForStichtag.effectiveDate,
             queriedAt: new Date().toISOString(),
             source: "NBP",
             isManual: false,
           });
         } catch {
-          // Fall back to whatever we have stored so the report still works
-          // when NBP is unreachable.
+          // NBP unreachable oder völlig keinen Kurs in 7 Tagen rückwärts gefunden
+          // → letzten gespeicherten Eintrag als Notfall nehmen, damit der
+          // Bericht trotzdem rendert.
           const fallback = await getLatestNbpExchangeRate(pair);
           if (fallback) {
             results.push(buildResult(fallback, { isManual: false, sourceLabel: String(fallback.source ?? "NBP") }));
@@ -3618,19 +3686,21 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
       }
 
-      // Anchor on yesterday and let NBP's 404-fallback walk back to the last
-      // working day with a published rate (Polish VAT rule: rate of last
-      // working day before invoice issuance).
-      const referenceDate = new Date();
-      referenceDate.setDate(referenceDate.getDate() - 1);
+      // Anchor on TODAY (UTC midnight) so the user sees the most recent
+      // published rate when clicking "Kurse von NBP abrufen". NBP's own
+      // 404-fallback (in nbp.ts, up to 7 days backward) handles the cases
+      // where today is not yet published (call before ~12:00 PL) or non-
+      // working-day (weekend / Polish holiday) — it walks back to the latest
+      // available working day automatically.
+      const todayUtc = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
 
       const results = [];
       for (const currency of input.currencies) {
         if (currency.toUpperCase() === "PLN") continue;
         try {
-          const { rate, effectiveDate } = await fetchNBPExchangeRateWithMeta(currency, referenceDate);
+          const { rate, effectiveDate } = await fetchNBPExchangeRateWithMeta(currency, todayUtc);
           await upsertExchangeRate({
-            date: new Date(`${effectiveDate}T00:00:00`),
+            date: new Date(`${effectiveDate}T00:00:00Z`),
             currencyPair: `${currency}/PLN`,
             rate: Math.round(rate * 10000),
             source: "NBP",
