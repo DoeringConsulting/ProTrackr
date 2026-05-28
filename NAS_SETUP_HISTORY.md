@@ -364,7 +364,98 @@ Die drei Files bilden die **minimale Container-Architektur**. Mit diesen drei Fi
 
 ---
 
-# Phase 1 — Implementations-Dateien (continued — 1.2 pending)
+## 2026-05-28 — Phase 1.2: Doku + Migrations-Skripte (Phase 1 Abschluss)
+
+**Was:**
+Die in Phase 1.1 ausgesparten 5 Files angelegt:
+
+1. **`.dockerignore`** (~70 Zeilen) — schließt vom Build-Context aus: `.git`, `.env*`, `node_modules`, `dist`, `logs`, IDE-Dateien, `.claude`, `*.md` (außer Runtime-nötige), Test-Files, `.husky`, Dump-Files. Erklärt jeden Block mit Kommentar.
+
+2. **`NAS_SETUP_README.md`** (~190 Zeilen) — Master-Anleitung:
+   - Projekt-Eckdaten mit `dc001` vs `DCS01` Verwechslungs-Hinweis
+   - ASCII-Architektur-Diagramm (Tailnet → NAS → Container-Stack → SMTP outbound)
+   - Files-Übersicht im Branch
+   - Phasen-Quick-Start-Tabelle mit Doku-Verweisen
+   - Secrets-Management (Variante A `.env`, Variante B Unraid Container Variables Masked — empfohlen)
+   - Update-Workflow (git pull + docker compose build + up)
+   - Troubleshooting-Sektion (App-Crash, SMTP, Tailscale Serve 502, Backup-Restore)
+   - Verweise auf andere Doku-Files
+
+3. **`docs/UNRAID_DEPLOYMENT.md`** (~220 Zeilen) — Unraid-spezifische Schritt-für-Schritt-Anleitung:
+   - Voraussetzungs-Checkliste (Unraid 7.2.5, Plugins, Web-Terminal, Port 9443 frei)
+   - Compose Manager Plugin Installation
+   - Verzeichnis-Layout-Vorschlag (`/mnt/user/appdata/protrackr/`)
+   - Repo-Clone direkt auf NAS (Branch `nas-setup` explizit)
+   - Secrets: zwei Wege (`.env` file vs Container Variables masked)
+   - DB vorbereiten: Weg A Fresh-Start (Drizzle push), Weg B Daten-Migration vom Notebook
+   - Stack starten + Erfolgs-Indikatoren
+   - Tailscale Serve einrichten + Persistierung über User Scripts Plugin
+   - Update-Workflow mit explizitem Hinweis: niemals `git pull origin main`
+   - Backup-Strategie (User Scripts Plugin für tägliches mysqldump + Retention 14 Tage)
+   - Unraid-spezifisches Troubleshooting (UID/GID 1001 vs 99, Compose Manager, Tailscale persistence)
+
+4. **`scripts/migrate-db.ps1`** (~180 Zeilen, PowerShell 7+):
+   - Liest `DATABASE_URL` aus `.env`, parsed `mysql://user:pass@host:port/dbname` Format
+   - Sechs nummerierte Schritte mit farbigen Status-Ausgaben (Yellow/Green/Red/Cyan)
+   - Voraussetzungs-Check (mysqldump im PATH)
+   - Vorab-Check via `mysql` CLI (Tabellen-Count, optional)
+   - `mysqldump --single-transaction --quick --routines --triggers --events --default-character-set=utf8mb4 --set-gtid-purged=OFF --column-statistics=0`
+   - Komprimierung via .NET `GZipStream` (PowerShell hat kein natives gzip)
+   - Output: `db-migration/protrackr-dump-YYYY-MM-DD_HH-MM-SS.sql.gz`
+   - Flags: `-OutDir`, `-SkipGzip`, `-DryRun`
+   - Abschluss mit Copy-Paste-fertigem `scp`-Befehl für NAS-Übertragung
+
+5. **`scripts/migrate-db.sh`** (~210 Zeilen, Bash mit `set -euo pipefail`):
+   - Erwartet Dump-Pfad als Argument; unterstützt `--dry-run` und `--help`
+   - Sechs nummerierte Schritte mit ANSI-Farben
+   - Liest `.env` via `set -a; source .env; set +a`
+   - Container-Status-Check (`docker compose ps mysql --status running`)
+   - Healthcheck-Wait (bis zu 10 Sekunden auf `healthy`)
+   - **Sicherheits-Check:** Wenn Ziel-DB schon Tabellen hat → explizite `yes`-Bestätigung erforderlich (außer im Dry-Run)
+   - Auto-Erkennung `.sql.gz` vs `.sql` (gunzip-Pipe vs `< file`)
+   - **Verifikation nach Import:** Tabellen-Count + Zeilen-Counts für `mandanten`, `users`, `customers`, `timeEntries`, `expenses`, `exchangeRates`
+   - Abschluss-Hinweis: `shred -u <dump>` nach Verifikation
+
+**Warum:**
+Phase 1.1 hatte nur die Container-Architektur-Kernfiles geliefert. Für ein produktives NAS-Deployment braucht es zusätzlich:
+- **`.dockerignore`** — sonst kommt der gesamte Source-Tree inkl. `node_modules` und `.env` in den Build-Context (Build-Aufwand, Image-Größe, Secret-Leak-Risiko)
+- **README + Unraid-Doku** — Self-Service-Anleitung für später (z.B. nach 6 Monaten, wenn Details vergessen)
+- **Migrations-Skripte** — Phase 2 (Notebook-Dump) und Phase 4 (NAS-Import) brauchen reproduzierbare, sichere Helfer
+
+**Design-Entscheidungen mit Begründung:**
+
+| Entscheidung | Begründung |
+|---|---|
+| `*.md` im `.dockerignore` (außer wirklich nötig) | Docs gehören nicht ins Runtime-Image; reduziert Größe + Layer-Invalidation |
+| `CLAUDE.md` im `.dockerignore` | Agent-Memory soll nicht im Container landen |
+| Sechs-Schritt-Struktur in beiden Skripten | Konsistente UX; jeder Schritt verifizierbar einzeln |
+| Farbige Output-Ausgaben | Visuelle Unterscheidung Fortschritt vs Warnung vs Fehler |
+| Sicherheits-Bestätigung im Import-Skript (`yes`-Confirm) | Verhindert versehentliches Überschreiben |
+| PowerShell GZipStream statt externem gzip | Keine externe Abhängigkeit auf Windows |
+| Zeilen-Counts wichtiger Tabellen nach Import | Quick-Sanity-Check ohne UI-Login |
+| Empfehlung Container Variables (masked) vor `.env` file | Stärkerer Schutz vor Backup-Leaks und Log-Exposure |
+
+**Ergebnis:**
+- `.dockerignore` (~70 Zeilen)
+- `NAS_SETUP_README.md` (~190 Zeilen)
+- `docs/UNRAID_DEPLOYMENT.md` (~220 Zeilen)
+- `scripts/migrate-db.ps1` (~180 Zeilen)
+- `scripts/migrate-db.sh` (~210 Zeilen)
+- Branch `nas-setup` Working Tree um 5 Files erweitert
+- **Phase 1 abgeschlossen** — alle 8 ursprünglich geplanten Files vorhanden
+- Hook-Gate verhindert weiterhin Pollution (Tests bleiben aktiv)
+
+---
+
+# Phase 1 — Abgeschlossen ✓
+
+> Alle 8 Files aus dem ursprünglichen Phase-1-Plan vorhanden:
+> Dockerfile, .dockerignore, docker-compose.yml, .env.production.example,
+> NAS_SETUP_README.md, docs/UNRAID_DEPLOYMENT.md, scripts/migrate-db.{ps1,sh}
+
+---
+
+# Phase 2 — Datenbank-Dump auf dem Notebook (folgt)
 
 > Geplante Dateien im Branch `nas-setup`:
 > - `Dockerfile`
@@ -376,8 +467,6 @@ Die drei Files bilden die **minimale Container-Architektur**. Mit diesen drei Fi
 > - `scripts/migrate-db.sh`
 
 ---
-
-# Phase 2 — Datenbank-Dump auf dem Notebook (folgt)
 
 # Phase 3 — NAS-Vorbereitung & Container-Build (folgt)
 

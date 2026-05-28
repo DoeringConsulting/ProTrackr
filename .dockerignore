@@ -1,0 +1,96 @@
+# =============================================================================
+# .dockerignore — files excluded from Docker build context
+# =============================================================================
+# Purpose:
+#   1. Smaller, faster build context upload
+#   2. Prevent leaking host secrets (.env, *.local) into image layers
+#   3. Avoid invalidating layer cache on irrelevant changes (logs, screenshots)
+# =============================================================================
+
+# --- Version control ---------------------------------------------------------
+.git
+.gitignore
+.gitattributes
+
+# --- Local secrets (NEVER ship in image) -------------------------------------
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+*.pem
+*.key
+
+# --- Dependencies & build artifacts (regenerated inside container) -----------
+node_modules
+dist
+dist-ssr
+coverage
+.vite
+.cache
+.parcel-cache
+.turbo
+.next
+.nuxt
+build
+
+# --- Logs --------------------------------------------------------------------
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- IDE / Editor ------------------------------------------------------------
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# --- OS-generated ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Claude Code / Agent runtime ---------------------------------------------
+.claude
+CLAUDE.md
+NAS_SETUP_HISTORY.md
+
+# --- Documentation (not needed at runtime) -----------------------------------
+docs
+README.md
+NAS_SETUP_README.md
+CHANGELOG.md
+ARCHITECTURE.md
+DEVELOPMENT_HISTORY.md
+todo.md
+*.md
+
+# --- Test files & coverage ---------------------------------------------------
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+vitest.config.ts
+**/__tests__
+**/__mocks__
+
+# --- Husky hooks (not used in container) -------------------------------------
+.husky
+
+# --- DB migration dumps (handled separately via scripts/) --------------------
+db-migration
+*.sql.gz
+*.dump
+
+# --- Misc dev tooling --------------------------------------------------------
+.eslintrc*
+.prettierrc*
+.editorconfig
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
