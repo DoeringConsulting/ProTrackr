@@ -248,6 +248,59 @@ Ab jetzt kann auf `nas-setup` ohne Pollution committet werden. Phase 1 (Implemen
 
 ---
 
+## 2026-05-28 — Phase 0.11: Sync mit main via Merge (Option A)
+
+**Was:**
+Erste explizit autorisierte `main → nas-setup`-Integration via `git merge`:
+
+```bash
+git checkout nas-setup
+git merge origin/main -m "merge: sync nas-setup with main..."
+git push origin nas-setup
+```
+
+**Warum:**
+`main` hatte seit Branch-Anlage **14 Commits** vorgelegt — u.a. das komplette Provision-Feature in 6 Phasen, ein BREAKING CHANGE bei der Stichtag-Logik, mehrere Bugfixes und die neue projekt-`CLAUDE.md`. NAS-Setup-Arbeit braucht den aktuellen Code-Stand, weil Phase 1 (Container-Build) sonst auf veraltetem v1.3.3-Stand aufbauen würde. User hat Methode A (Merge) nach detaillierter Risikoaufklärung (Mirror vs. Merge vs. Rebase vs. Re-Fork) explizit freigegeben.
+
+**Ergebnis:**
+- **Merge-Commit:** `7400755 merge: sync nas-setup with main (incl. provision feature + breaking changes)`
+- **Parents:** `894e6d6` (alter nas-setup HEAD) + `327e770` (main HEAD)
+- 23 Files integriert: **+1.673 / -193 Zeilen**
+- **0 Konflikte** (Vorprüfung bestätigt: disjunkte File-Mengen — main hat nie `NAS_SETUP_HISTORY.md` angefasst)
+- `NAS_SETUP_HISTORY.md` unverändert erhalten ✓
+- Working Tree clean
+- Hooks: kein Bump/Build/Restart ausgelöst (Hook-Gate aus Phase 0.10 funktioniert)
+
+**Integrierte main-Commits (neu in nas-setup):**
+- `327e770 fix:` vereinheitliche EUR-Summen — keine Doppel-Rundung mehr über PLN
+- `a1f4a67 fix:` vitest afterAll cleanup hook (this time actually persisted)
+- `5d0d8d2 fix:` NBP-Update + Mitnahme-Pfad fragen jetzt für heute statt gestern
+- `c6f8b3b feat!:` **BREAKING CHANGE** — rewrite report exchange-rate stichtag to last-leistung-day
+- `41435b8 docs:` project-specific CLAUDE.md (repo-level memory for Claude sessions)
+- `0c06253 fix:` full-coverage backup + auto-cleanup of vitest fixtures + retire server/lib/
+- `1dd76e9 feat:` phase 6 — Polish bookkeeping PDF includes provision (Prowizja)
+- `e537452 feat:` phase 5 — customer report surcharge-mode + data-leak guard
+- `25cc9c3 feat:` phase 4 — provision integrated into accounting report + tax base
+- `0e26288 feat:` phase 3 — customer form supports commission configuration
+- `aad1376 feat:` phase 2 — provision helper + zod schemas
+- `da33a09 feat:` phase 1 — customers schema for commission/provision feature
+- `b03a0a7 fix:` dashboard loading skeletons + direct logout button
+- `3bc46ec fix:` clean stale references to v1.0/v1.1 setup paths in docs and scripts
+
+**Wichtige Folgen für die weitere NAS-Implementierung:**
+
+1. **Neue DB-Migration `drizzle/0023_customers_provision.sql`** muss beim Container-Start auf der Container-DB ausgeführt werden (legt Provision-Spalten in `customers`-Tabelle an). Drizzle übernimmt das per `drizzle-kit migrate` oder im Container-Boot-Skript.
+2. **BREAKING CHANGE Stichtag-Logik** in `server/routers.ts`: Wechselkurse für Reports berechnen sich nach "letzter Leistungs-Werktag" statt vorheriger Logik. Bei Datenmigration vom Notebook beachten — der Notebook-Server läuft schon mit dieser Logik (laut Phase 0.10 auf v1.3.3 main-Code), die Daten sind also bereits konsistent.
+3. **Neue `CLAUDE.md` im Repo-Root** — enthält projekt-spezifische Konventionen (Drizzle, Geld als int cents, Provision-Felder, etc.). Wird im NAS-Container-Image mit verpackt.
+4. **Versions-Stand** von nas-setup ist nun identisch mit main (vermutlich ≥ v1.4.x wegen `feat!` BREAKING CHANGE-Bump auf main).
+5. **Erste Änderung an der nas-setup ↔ main-Trennung:** Nur die `main → nas-setup`-Richtung wurde berührt. Die `nas-setup → main`-Richtung bleibt **weiterhin gesperrt** ohne weitere explizite Freigabe und Risikoaufklärung.
+
+**Trennungsregel-Status (gemäß Memory `feedback_nas_umzug_branch.md`):**
+> ✓ Aktion war explizit autorisiert nach vorheriger Klärung & Risiko-Aufklärung
+> ✓ Memory-Regel "Einzige Ausnahme — ich genehmige es nach vorheriger Klärung und Aufklärung — inkl. aller Risiken" eingehalten
+
+---
+
 # Phase 1 — Implementations-Dateien (folgt)
 
 > Geplante Dateien im Branch `nas-setup`:
