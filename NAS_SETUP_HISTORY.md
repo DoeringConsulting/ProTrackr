@@ -301,7 +301,70 @@ git push origin nas-setup
 
 ---
 
-# Phase 1 — Implementations-Dateien (folgt)
+# Phase 1 — Implementations-Dateien
+
+## 2026-05-28 — Phase 1.1: Container-Core (Dockerfile, docker-compose.yml, .env.production.example)
+
+**Was:**
+Drei Kern-Files für die Container-Architektur angelegt — die minimale Basis, mit der ein `docker compose build` lauffähig wäre (wird in dieser Phase aber NICHT ausgeführt):
+
+1. **`Dockerfile`** — Multi-Stage-Build:
+   - `base` (node:22-alpine + pnpm 10.4.1 via corepack)
+   - `deps` (full install inkl. devDependencies + Patches)
+   - `build` (führt `pnpm build` aus → `dist/index.js` + `dist/public/`)
+   - `prod-deps` (production-only `node_modules`)
+   - `runtime` (slim Final-Image, non-root user `protrackr:nodejs`)
+   - EXPOSE 3000, CMD `node dist/index.js`
+
+2. **`docker-compose.yml`** — zwei Services:
+   - **`app`** — built from local Dockerfile, port-mapping `127.0.0.1:3000:3000` (nur Localhost, weil Tailscale Serve davor terminiert), depends_on `mysql healthy`, alle ENV-Variablen aus `.env`, json-file logging mit Rotation 10m×5
+   - **`mysql`** — `mysql:8.0` Image, persistent volume `mysql_data`, **keine Port-Exposition** (nur im internen `protrackr_net` erreichbar), Healthcheck via `mysqladmin ping`
+   - Network: `protrackr_net` (Bridge, isoliert)
+   - Volume: `mysql_data` (lokal; Bind-Mount auf `/mnt/user/appdata/protrackr/mysql` als auskommentierte Unraid-Empfehlung)
+
+3. **`.env.production.example`** — Template mit allen erforderlichen Variablen:
+   - Application: `NODE_ENV`, `PORT`
+   - Secrets: `SESSION_SECRET`, `JWT_SECRET`, `SCHEDULER_API_KEY`, `CRON_SECRET` (alle als `CHANGE_ME_*` Platzhalter, mit `openssl rand -hex 32` Generierungs-Hinweis)
+   - Cookies: `SESSION_COOKIE_SECURE=true` (HTTPS via Tailscale), `SESSION_COOKIE_SAMESITE=lax`
+   - DB: `DATABASE_URL`, `MYSQL_*` (Passwort-Konsistenz-Hinweis)
+   - SMTP: vollständige hoste.pl-Konfig + CRAM-MD5 Hinweis für ggf. nötigen Code-Patch in `server/email.ts:42`
+   - Vite-Build-Vars + ungenutzte Legacy-Manus-Vars (leer, damit env-Parser nicht warnt)
+
+**Warum:**
+Die drei Files bilden die **minimale Container-Architektur**. Mit diesen drei Files alleine könnte man theoretisch `docker compose build` aufrufen (wird in dieser Phase aber NICHT getan — wir warten auf NAS-Vorbereitung in Phase 3). Bewusst weggelassen wurden in 1.1: `.dockerignore` (Build wird langsamer aber funktioniert), Master-README, Unraid-Anleitung und DB-Migrations-Skripte — kommen in 1.2.
+
+**Design-Entscheidungen mit Begründung:**
+
+| Entscheidung | Begründung |
+|---|---|
+| `node:22-alpine` als Base | Minimaler Footprint, gleicher Node-Major wie Notebook |
+| pnpm via `corepack prepare pnpm@10.4.1` | Exakte Version aus `package.json` packageManager-Feld |
+| Non-root user 1001 im Container | Defense-in-depth; Container-User-Mapping zu Unraid wird in Phase 3 falls nötig nachgesteuert |
+| `127.0.0.1:3000:3000` (statt `0.0.0.0:3000`) | Verhindert versehentliche LAN-Exposition; Tailscale Serve bindet auf Localhost |
+| MySQL keine Host-Port-Exposition | Datenbank ist Backend-only; Admin via `docker exec` |
+| `depends_on: mysql healthy` | App startet erst wenn DB ready ist — verhindert Crash-Loop beim ersten Boot |
+| `restart: unless-stopped` | NAS reboots überstehen, manuelle Stops respektieren |
+| json-file logging 10m×5 | Verhindert Log-Wachstum auf Unraid-Cache-Disk |
+| Drizzle-Migrations NICHT im Container-Entrypoint | Bewusste Trennung: bei Daten-Migration vom Notebook bringt der Dump das Schema mit; bei Fresh-Start wird `pnpm db:push` manuell einmalig getriggert (Doku in 1.2) |
+
+**Ergebnis:**
+- `Dockerfile` (~70 Zeilen, gut kommentiert)
+- `docker-compose.yml` (~110 Zeilen, alle Felder begründet)
+- `.env.production.example` (~80 Zeilen, vollständig dokumentiert)
+- Keine Änderung am bestehenden App-Code
+- Branch `nas-setup` Working Tree um 3 Files erweitert
+- Pre-commit-Tests laufen vor dem Commit; Hook-Gate verhindert Pollution
+
+**Noch offen in Phase 1 (kommt in 1.2 beim nächsten Termin):**
+- `.dockerignore` (reduziert Build-Context, schließt Secrets aus)
+- `NAS_SETUP_README.md` — Master-Anleitung mit Architektur-Diagramm
+- `docs/UNRAID_DEPLOYMENT.md` — Unraid-spezifische Schritt-für-Schritt-Doku
+- `scripts/migrate-db.ps1` — PowerShell-Helfer für Notebook-DB-Dump
+- `scripts/migrate-db.sh` — Bash-Helfer für NAS-DB-Import
+
+---
+
+# Phase 1 — Implementations-Dateien (continued — 1.2 pending)
 
 > Geplante Dateien im Branch `nas-setup`:
 > - `Dockerfile`

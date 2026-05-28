@@ -1,0 +1,94 @@
+# =============================================================================
+# ProTrackr — Production Container Image
+# =============================================================================
+# Multi-stage build:
+#   1. base       — node:22-alpine + pnpm via corepack
+#   2. deps       — all dependencies (incl. devDependencies for build)
+#   3. build      — produces dist/index.js (server) + dist/public/ (frontend)
+#   4. prod-deps  — production-only node_modules for runtime
+#   5. runtime    — slim final image, non-root user
+#
+# Target: NAS deployment (Unraid 7.2.5, AOOSTAR WTR MAX 8845, x86_64)
+# Exposed port: 3000 (internal). Tailscale Serve maps to external :9443.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Base — Node 22 Alpine with pnpm
+# -----------------------------------------------------------------------------
+FROM node:22-alpine AS base
+
+# Enable corepack and pin pnpm version to match packageManager in package.json
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+
+WORKDIR /app
+
+# -----------------------------------------------------------------------------
+# Stage 2: Dependencies — full install with lockfile fidelity
+# -----------------------------------------------------------------------------
+FROM base AS deps
+
+# Patches are referenced in package.json pnpm.patchedDependencies
+# and must exist BEFORE pnpm install runs.
+COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
+
+# --frozen-lockfile ensures reproducible builds (CI-style)
+RUN pnpm install --frozen-lockfile
+
+# -----------------------------------------------------------------------------
+# Stage 3: Build — produce dist/
+# -----------------------------------------------------------------------------
+FROM deps AS build
+
+# Copy full source. .dockerignore filters out node_modules, dist, logs, .env*
+COPY . .
+
+# package.json scripts:
+#   prebuild: node scripts/generate-version.js && node scripts/update-version.js
+#   build:    vite build (-> dist/public/) && esbuild server/_core/index.ts (-> dist/index.js)
+RUN pnpm build
+
+# -----------------------------------------------------------------------------
+# Stage 4: Production dependencies — slim runtime node_modules
+# -----------------------------------------------------------------------------
+FROM base AS prod-deps
+
+COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
+
+# --prod excludes devDependencies; lockfile still enforced.
+RUN pnpm install --frozen-lockfile --prod
+
+# -----------------------------------------------------------------------------
+# Stage 5: Runtime — final slim image with non-root user
+# -----------------------------------------------------------------------------
+FROM node:22-alpine AS runtime
+
+# Add wget for healthcheck (Alpine includes BusyBox wget by default — fine)
+# corepack/pnpm only needed if we want to run pnpm db:push at runtime.
+# Kept enabled to allow ad-hoc drizzle-kit migrations via docker exec.
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+
+WORKDIR /app
+
+# Non-root user (Unraid default UID is 99, but standard non-root 1001 is fine
+# because container is isolated from host UIDs unless we map them explicitly
+# in docker-compose.yml).
+RUN addgroup -g 1001 -S nodejs \
+ && adduser  -u 1001 -S protrackr -G nodejs
+
+# Copy artifacts from previous stages
+COPY --from=prod-deps --chown=protrackr:nodejs /app/node_modules ./node_modules
+COPY --from=build     --chown=protrackr:nodejs /app/dist          ./dist
+COPY --from=build     --chown=protrackr:nodejs /app/drizzle       ./drizzle
+COPY --chown=protrackr:nodejs package.json drizzle.config.ts ./
+
+USER protrackr
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+EXPOSE 3000
+
+# Server entry produced by esbuild bundle of server/_core/index.ts
+CMD ["node", "dist/index.js"]

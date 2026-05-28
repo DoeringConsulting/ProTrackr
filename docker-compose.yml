@@ -1,0 +1,152 @@
+# =============================================================================
+# ProTrackr — Docker Compose Stack (NAS Production)
+# =============================================================================
+# Target host: Unraid 7.2.5 on AOOSTAR WTR MAX 8845
+# External access: Tailscale Serve at https://dcs01.taile370c2.ts.net:9443
+#                  -> forwards to host port 3000 -> app container :3000
+#
+# IMPORTANT
+#   - .env file must exist alongside this compose file with all
+#     CHANGE_ME values replaced. See .env.production.example for template.
+#   - On Unraid: prefer the Compose Manager plugin and set variables via the
+#     Container Variables UI (masked) instead of an on-disk .env file.
+#   - MySQL is NOT exposed to the host — only reachable via the internal
+#     docker network. For admin access use:  docker compose exec mysql mysql -u root -p
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # ProTrackr application (Node 22, Express + tRPC, served Vite SPA from dist/)
+  # ---------------------------------------------------------------------------
+  app:
+    container_name: protrackr-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+    # Wait for MySQL to be healthy before starting the app.
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    environment:
+      # Runtime configuration — values from .env file
+      NODE_ENV: production
+      PORT: 3000
+
+      # Database connection (hostname "mysql" = service name on internal network)
+      DATABASE_URL: ${DATABASE_URL}
+
+      # Auth & session secrets
+      SESSION_SECRET: ${SESSION_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      SCHEDULER_API_KEY: ${SCHEDULER_API_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+
+      # Cookies — HTTPS-only because Tailscale terminates TLS in front of us
+      SESSION_COOKIE_SECURE: "true"
+      SESSION_COOKIE_SAMESITE: lax
+
+      # SMTP — hoste.pl mail server for password reset emails
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+
+    ports:
+      # Host:Container — Tailscale Serve binds to localhost:3000 on the NAS
+      # and re-publishes it as https://dcs01.taile370c2.ts.net:9443
+      - "127.0.0.1:3000:3000"
+
+    networks:
+      - protrackr_net
+
+    # Poor-man's healthcheck — hit the root route; expect anything that's not
+    # a connection error. App's frontend served from dist/public/index.html.
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    # Logs land in docker's json-file driver by default. Rotate to avoid
+    # filling the Unraid cache disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # MySQL 8.0 — persistent data in named volume
+  # ---------------------------------------------------------------------------
+  mysql:
+    container_name: protrackr-mysql
+    image: mysql:8.0
+    restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      # Skip tzinfo load on first init (faster startup, we set tz in app anyway).
+      MYSQL_INITDB_SKIP_TZINFO: "1"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    networks:
+      - protrackr_net
+
+    # Healthcheck used by app's depends_on condition
+    healthcheck:
+      test:
+        - "CMD"
+        - "mysqladmin"
+        - "ping"
+        - "-h"
+        - "localhost"
+        - "-u"
+        - "root"
+        - "-p${MYSQL_ROOT_PASSWORD}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    # No host port exposure — MySQL is only reachable from inside protrackr_net.
+    # For admin: docker compose exec mysql mysql -u root -p
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+# =============================================================================
+# Volumes — persistent data lives on the NAS, survives container recreate
+# =============================================================================
+volumes:
+  mysql_data:
+    driver: local
+    # On Unraid: docker creates this under /var/lib/docker/volumes/. For better
+    # placement on a specific disk/share, define a bind mount instead:
+    #   mysql_data:
+    #     driver: local
+    #     driver_opts:
+    #       type: none
+    #       o: bind
+    #       device: /mnt/user/appdata/protrackr/mysql
+
+# =============================================================================
+# Networks — isolated bridge, app <-> mysql communication only
+# =============================================================================
+networks:
+  protrackr_net:
+    driver: bridge
