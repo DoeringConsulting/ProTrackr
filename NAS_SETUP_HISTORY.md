@@ -455,7 +455,150 @@ Phase 1.1 hatte nur die Container-Architektur-Kernfiles geliefert. Für ein prod
 
 ---
 
-# Phase 2 — Datenbank-Dump auf dem Notebook (folgt)
+# Phase 2 — Datenbank-Dump auf dem Notebook
+
+## 2026-05-28 — Phase 2.1: Pre-Checks & Tool-Verfügbarkeit
+
+**Was:**
+- Branch-State: `nas-setup` sauber, synchron mit `origin/nas-setup`
+- Tool-Suche nach `mysqldump.exe`:
+  - **Nicht im `PATH`**, aber gefunden unter `C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqldump.exe`
+  - Workaround: PATH temporär in PowerShell-Aufruf erweitert
+- MySQL-Service-Test: `Test-NetConnection 127.0.0.1 -Port 3306` → `True` (Server hört auf 3306)
+- `.env` vorhanden mit gültigem `DATABASE_URL`
+- PowerShell 7 + gzip verfügbar
+
+**Warum:**
+Robustes Setup vor Schreib-Operationen: erst alle Voraussetzungen prüfen, dann sich auf den eigentlichen Schritt konzentrieren.
+
+**Ergebnis:**
+Alle Voraussetzungen erfüllt. `mysqldump` muss bei Aufruf mit erweitertem PATH genutzt werden — Skript an sich ist robust (sucht via `Get-Command`).
+
+---
+
+## 2026-05-28 — Phase 2.2: `.gitignore` für Dump-Schutz erweitert
+
+**Was:**
+`.gitignore` um Block "NAS Migration — DB dumps" erweitert:
+```
+db-migration/
+protrackr-dump-*.sql
+protrackr-dump-*.sql.gz
+*.dump
+```
+
+**Warum:**
+Sicherheit. Verhindert versehentliches Committen der Produktivdaten-Dumps. Verifiziert via `git check-ignore -v`:
+- `db-migration/...sql.gz` → blockiert ✓
+- `drizzle/0023_customers_provision.sql` → **NICHT** blockiert ✓ (Drizzle-Migrations müssen committed bleiben)
+
+**Ergebnis:**
+Wenn der echte Dump erzeugt wird, taucht er in `git status` nicht auf und kann nicht versehentlich in einen Commit landen.
+
+---
+
+## 2026-05-28 — Phase 2.3: Dry-Run von `migrate-db.ps1`
+
+**Was:**
+```powershell
+$env:PATH = "C:\Program Files\MySQL\MySQL Server 8.4\bin;" + $env:PATH
+.\scripts\migrate-db.ps1 -DryRun
+```
+
+**Warum:**
+Skript-Logik validieren ohne tatsächlichen Dump.
+
+**Ergebnis:**
+- Voraussetzungs-Check ✓
+- `DATABASE_URL` korrekt aus `.env` geparst (Host `127.0.0.1:3306`, User `protrackr_user`, DB `protrackr`, Passwort 23 Zeichen)
+- Output-Verzeichnis `db-migration/` angelegt
+- Geplanter Ziel-Pfad: `db-migration/protrackr-dump-2026-05-28_20-50-27.sql.gz`
+- Keine Fehler im Dry-Run
+
+---
+
+## 2026-05-28 — Phase 2.4: Echter Dump erzeugt
+
+**Was:**
+```powershell
+$env:PATH = "C:\Program Files\MySQL\MySQL Server 8.4\bin;" + $env:PATH
+.\scripts\migrate-db.ps1
+```
+
+**Warum:**
+Erzeugt den eigentlichen MySQL-Dump für die spätere NAS-Migration in Phase 4. Read-only auf DB, schreibend nur auf lokales `db-migration/`-Verzeichnis.
+
+**Ergebnis:**
+- Tabellen-Vorabcheck: **16 Tabellen** in `protrackr`-DB ✓
+- mysqldump erfolgreich: unkomprimiert 0.09 MB
+- Komprimierung via .NET GZipStream: **0.02 MB (18.421 bytes)**
+- Unkomprimiertes Zwischen-File automatisch gelöscht (Sicherheit)
+- Output-Datei: `db-migration/protrackr-dump-2026-05-28_20-51-07.sql.gz`
+
+---
+
+## 2026-05-28 — Phase 2.5: Verifikation des Dumps
+
+**Was:**
+- `gzip -t` Integritäts-Test
+- Header-Inspektion (Dump-Format, Server-Version, Charset)
+- Tabellen-Liste aus `CREATE TABLE`-Statements
+- Schema-Spot-Check auf Provision-Migration (Migration `0023`)
+- `__drizzle_migrations`-Tabellen-Inhalt
+- Approximate Row-Count
+- gitignore-Block-Verifikation
+
+**Warum:**
+Vor der Übertragung auf NAS sicherstellen, dass der Dump:
+1. Technisch valide ist (gzip OK)
+2. Das vollständige aktuelle Schema enthält (inkl. neuestem Provision-Feature)
+3. Realistisch viel Inhalt hat (nicht leer, nicht abgeschnitten)
+4. Nicht versehentlich committed wird
+
+**Ergebnis:**
+
+| Check | Ergebnis |
+|---|---|
+| gzip-Integrität | OK ✓ |
+| MySQL-Server-Version im Dump | 8.4.8 (Win64) |
+| Charset | utf8mb4 ✓ |
+| Tabellen im Dump | **16/16** (alle bekannten: `__drizzle_migrations`, `accountsettings`, `customers`, `documents`, `exchangerates`, `expenseaianalyses`, `expenses`, `fixedcosts`, `invoicenumbers`, `mandanten`, `passwordresettokens`, `taxconfigpl`, `taxprofiles`, `taxsettings`, `timeentries`, `users`) |
+| **Provision-Spalten in `customers`** | ✅ **alle 8 vorhanden** (`provisionEnabled`, `provisionMode`, `provisionType`, `provisionValueBp`, `provisionValueCents`, `provisionUnit`, `provisionUserRate`, `provisionUserRateRemote`) — Migration 0023 ist bereits angewandt |
+| `__drizzle_migrations` Einträge | 19 — alle bisherigen Migrations sind getrackt |
+| Row-Counts (INSERT-Statements pro Tabelle) | 1 pro Tabelle für mandanten/users/customers/timeentries/expenses/exchangerates — mysqldump-Standard packt alle Rows einer Tabelle in ein INSERT-Statement mit mehreren VALUES-Tupeln |
+| `git check-ignore db-migration/...sql.gz` | matcht Regel auf Zeile 110 ✓ |
+| `git status` | Dump-File erscheint **nicht** (gitignore-Schutz wirkt) |
+
+**Konsequenz für Phase 4 (NAS-Datenimport):**
+- Schema im Dump = aktueller Stand (inkl. Provision-Feature)
+- **Kein extra `drizzle migrate` Lauf nötig** vor erstem Container-Start
+- `scripts/migrate-db.sh` auf NAS kann direkt das `.sql.gz` einspielen
+- Die `mysqldump`-Warnung "Using a password on the command line interface can be insecure" ist Standard und auf Single-User-Notebook unbedenklich
+
+---
+
+## 2026-05-28 — Phase 2.6: Phase-2-Abschluss
+
+**Status:**
+- Dump-Datei lokal verfügbar: `db-migration/protrackr-dump-2026-05-28_20-51-07.sql.gz` (18 KB)
+- Notebook-DB **unverändert** (nur gelesen)
+- Notebook-Server `localhost:3001` **läuft weiter** auf main-Code, unbeeinträchtigt
+- Dump-Datei **nicht im Git** (gitignore-geschützt)
+- Branch-State sauber
+
+**Was als nächstes (Phase 3) erforderlich:**
+- Dump-Datei muss in Phase 4 zum NAS übertragen werden — Vorschlag: `scp` via Tailscale-IP, oder Unraid SMB-Share
+- **NICHT JETZT** — erst Phase 3 (NAS-Vorbereitung + Container-Build) muss durchlaufen sein
+- Bis dahin: Dump-Datei lokal aufbewahren, NICHT löschen
+
+**Sicherheits-Hinweis (für Phase 4):**
+Nach erfolgreichem Import auf NAS und Verifizierung in der App: Dump-Datei sicher löschen (`Remove-Item` auf Notebook, `shred -u` auf NAS).
+
+---
+
+# Phase 2 — Abgeschlossen ✓
+
+> Dump-Datei: `db-migration/protrackr-dump-2026-05-28_20-51-07.sql.gz` (18 KB, gitignore-geschützt, gzip-integer, vollständiges Schema inkl. Provision-Feature)
 
 > Geplante Dateien im Branch `nas-setup`:
 > - `Dockerfile`

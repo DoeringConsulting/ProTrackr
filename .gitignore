@@ -105,3 +105,9 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# NAS Migration — DB dumps (NEVER commit production data)
+db-migration/
+protrackr-dump-*.sql
+protrackr-dump-*.sql.gz
+*.dump
