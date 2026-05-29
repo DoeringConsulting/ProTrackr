@@ -83,10 +83,29 @@ WORKDIR /app
 RUN addgroup -g 1001 -S nodejs \
  && adduser  -u 1001 -S protrackr -G nodejs
 
-# Copy artifacts from previous stages
-COPY --from=prod-deps --chown=protrackr:nodejs /app/node_modules ./node_modules
-COPY --from=build     --chown=protrackr:nodejs /app/dist          ./dist
-COPY --from=build     --chown=protrackr:nodejs /app/drizzle       ./drizzle
+# Copy artifacts from previous stages.
+#
+# NOTE: We deliberately copy node_modules from the `build` stage (with full
+# devDependencies installed) instead of the leaner `prod-deps` stage. Reason:
+# server/_core/vite.ts has *static* ES-module imports of `vite` and the
+# top-level `vite.config`. ES modules evaluate top-level imports at module
+# load time regardless of whether the importing function (setupVite) is ever
+# called at runtime. In production we use serveStatic, not setupVite — but
+# the static import still fires and crashes with ERR_MODULE_NOT_FOUND for
+# `vite` if it isn't in node_modules.
+#
+# Cleanest long-term fix would be to convert these to dynamic imports in
+# server/_core/vite.ts (Option A), but that's an app-code change that would
+# also need to land on main. For the nas-setup branch we keep the change
+# isolated to this Dockerfile by shipping the full node_modules from the
+# build stage (adds ~200 MB to the image but is branch-local).
+#
+# The prod-deps stage above is therefore unused but intentionally kept as
+# documentation of the intended slim approach; remove it once dynamic
+# imports land in main.
+COPY --from=build --chown=protrackr:nodejs /app/node_modules ./node_modules
+COPY --from=build --chown=protrackr:nodejs /app/dist          ./dist
+COPY --from=build --chown=protrackr:nodejs /app/drizzle       ./drizzle
 COPY --chown=protrackr:nodejs package.json drizzle.config.ts ./
 
 USER protrackr
