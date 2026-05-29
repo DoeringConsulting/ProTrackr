@@ -59,8 +59,12 @@ services:
 
     ports:
       # Host:Container — Tailscale Serve binds to localhost:3000 on the NAS
-      # and re-publishes it as https://dcs01.taile370c2.ts.net:9443
-      - "127.0.0.1:3000:3000"
+      # and re-publishes it as https://dcs01.taile370c2.ts.net:9443.
+      # NOTE: Host port is 3010 (not 3000) because Obsidian on the same NAS
+      # already binds the 3000-3001 range. Container-internal port stays 3000
+      # so the app's own logic, healthcheck, and image are unchanged.
+      # When configuring `tailscale serve` later, target localhost:3010.
+      - "127.0.0.1:3010:3000"
 
     networks:
       - protrackr_net
