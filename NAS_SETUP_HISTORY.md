@@ -930,10 +930,254 @@ docker compose up -d mysql               # Initialisiert mit LCTN=1
 
 ---
 
-# Phase 4 — Implementation läuft (4.4 App-Start folgt)
+## 2026-05-29 — Phase 4.4: App-Container Start (Port-Conflict + Vite-Static-Import-Fix)
+
+**1. Erster Start — Port-Conflict:**
+
+`docker compose up -d app` scheiterte mit:
+```
+Bind for 0.0.0.0:3000 failed: port is already allocated
+```
+
+Diagnose via `ss -tlnp`: Container `obsidian` belegt den Range **3000-3001** (in Phase 0.5 hatten wir nur 3001 = Obsidian dokumentiert; den 3000-Endpunkt hatten wir ohne netstat-Scan nicht gesehen). Curl auf `localhost:3000` lieferte `Server: nginx` mit 762 Bytes — das ist die Obsidian-Welcome-Page.
+
+**Fix Commit `87c75e4`:**
+Host-Port von `127.0.0.1:3000:3000` auf `127.0.0.1:3010:3000` geändert. Container-interner Port bleibt 3000 (App-Code, Healthcheck-Befehl `wget http://localhost:3000/`, Env-Var `PORT=3000` alles unverändert). Tailscale-Serve-Plan in Phase 5 zielt jetzt auf `localhost:3010` statt `:3000`.
 
 ---
 
-# Phase 5 — Tailscale Serve aktivieren & End-to-End-Test (folgt)
+**2. Zweiter Start — Vite-Static-Import-Crash:**
+
+App startete, wechselte aber in Restart-Schleife:
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /app/dist/index.js
+```
+
+**Root cause:** `server/_core/vite.ts` hat **statische** ES-Module-Imports auf Top-Level:
+```typescript
+import { createServer as createViteServer } from "vite";
+import viteConfig from "../../vite.config";
+```
+
+ES-Module-Top-Level-Imports werden bei Module-Load **immer** ausgewertet, auch wenn die importierende Funktion (`setupVite`) in Production nie aufgerufen wird (Production-Pfad nutzt `serveStatic`). Da `vite` als devDependency im `prod-deps` Stage fehlt → Crash.
+
+**Drei Optionen erwogen, User-Entscheidung gefragt:**
+
+| Option | Vorgehen | Wahl |
+|---|---|---|
+| A | Dynamic imports in `vite.ts` (App-Code-Fix, sauberste Lösung, gehört aber auf `main`) | als TODO-M3 für später |
+| B | Dockerfile: `node_modules` vom `build`-Stage statt `prod-deps`-Stage kopieren (~200 MB größeres Image, aber branch-isoliert) | **gewählt** |
+| C | `vite` in `dependencies` verschieben (package.json-Change, würde main betreffen) | verworfen |
+
+**Fix Commit `69591ff`:**
+- `COPY --from=build` statt `COPY --from=prod-deps` für `/app/node_modules` im runtime stage
+- Ausführlicher Kommentar mit Begründung und Verweis auf Option A als langfristige Lösung
+- `prod-deps`-Stage bewusst NICHT entfernt — bleibt als "Doku der intendierten schlanken Variante", entfernen sobald Option A in `main` landet
+
+---
+
+**3. Re-Build + Re-Start — Erfolg:**
+
+| Check | Ergebnis |
+|---|---|
+| Build-Zeit | **22 s** (Cache wirkte: `base`, `deps`, `build` Stages cached, nur `runtime` neu) |
+| Image | `protrackr-app:latest sha256:35d90e0bf32b…` |
+| MySQL healthy in | 5 s |
+| **App healthy in** | **10 s** ✓ |
+| Container-Status | `Up (healthy)`, Port-Mapping `127.0.0.1:3010->3000/tcp` |
+| Curl-Test (NAS lokal) | `HTTP/1.1 200 OK` mit Helmet-Security-Headers ✓ |
+| HTML-Body | `<title>Döring Consulting - Projekt & Abrechnungsmanagement</title>`, `APP_VERSION: 2.0.4` ✓ |
+
+**Drei non-fatal Warnings im Log** (siehe Maintenance-TODOs am Ende dieser Phase):
+1. `MemoryStore is not designed for a production environment` → TODO-M1
+2. `ValidationError: ipKeyGenerator helper function for IPv6 addresses` (3×) → TODO-M2
+3. Bewusst akzeptierter Dockerfile-Workaround (Option B statt A) → TODO-M3
+
+---
+
+# Phase 4 — Implementation läuft (4.5 Browser-Login + 4.6 SMTP-Test pending)
+
+---
+
+# Phase 5 — Tailscale Serve aktivieren & End-to-End-Test
+
+## 2026-05-29 — Phase 5.1: Tailscale Serve aktiviert
+
+**Was:**
+```bash
+tailscale serve --bg --https=9443 http://localhost:3010
+```
+
+**Ergebnis (`tailscale serve status`):**
+```
+https://dcs01.taile370c2.ts.net:9443 (tailnet only)
+|-- / proxy http://localhost:3010
+```
+
+**Self-Connect-Test vom NAS selbst** (`curl https://dcs01.taile370c2.ts.net:9443/`) lieferte leere Response — bekannter Tailscale-Self-Routing-Quirk, kein App-Problem. Der echte Test ist von Notebook/anderen Tailnet-Geräten aus.
+
+---
+
+## 2026-05-29 — Phase 5.2: Externer Erreichbarkeits-Test (Notebook)
+
+**Was:**
+```powershell
+curl.exe -k -I https://dcs01.taile370c2.ts.net:9443/
+```
+
+**Ergebnis:**
+
+| Indikator | Wert | Bedeutung |
+|---|---|---|
+| Status | `HTTP/1.1 200 OK` | App liefert sauber aus ✓ |
+| `Content-Length` | 368.030 (368 KB) | Vollständige SPA wird ausgeliefert ✓ |
+| `Content-Type` | `text/html; charset=UTF-8` | ProTrackr-HTML ✓ |
+| `Set-Cookie: csrf-token=…` | `Secure; HttpOnly; SameSite=Lax` | CSRF-Middleware aktiv ✓ |
+| `Set-Cookie: connect.sid=…` | `Secure; HttpOnly; SameSite=Lax` | Express-Session-Cookie korrekt hardened ✓ |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | HSTS aktiv ✓ |
+| `X-Frame-Options`, `X-Content-Type-Options`, `Cross-Origin-Opener-Policy`, … | (alle gesetzt) | Helmet-Security-Headers ✓ |
+| TLS-Cert | gültig (Let's Encrypt via Tailscale) | Grünes Schloss im Browser ✓ |
+
+**Konsequenz:** App ist von jedem Gerät im Tailnet (Notebook, Handy, weitere Rechner) unter **`https://dcs01.taile370c2.ts.net:9443`** erreichbar. End-to-End-Verbindung Browser → Tailscale → Host:3010 → Container:3000 → MySQL funktioniert.
+
+**Persistenz noch offen** (Phase 5.3): `tailscale serve --bg` überlebt NAS-Reboot nicht. Wird mit Unraid User Scripts Plugin nachgezogen.
+
+---
+
+# Phase 5 — Implementation läuft (5.3 Reboot-Persistenz pending)
+
+---
+
+# Maintenance-TODOs / Open-Issues
+
+Nicht-blockierende Verbesserungen, gesammelt während der NAS-Migration. App läuft funktional einwandfrei — diese Items können bei Gelegenheit in einem separaten Wartungs-Pass abgearbeitet werden. Reihenfolge nach **kombinierten Nutzen+Aufwand**.
+
+---
+
+## TODO-M1: MemoryStore → MySQL-Session-Store
+
+**Symptom:** Beim App-Start im Log:
+```
+Warning: connect.session() MemoryStore is not designed for a production environment,
+as it will leak memory, and will not scale past a single process.
+```
+
+**Was passiert aktuell:**
+Express speichert alle Login-Sessions im **RAM** des App-Containers. Bei jedem Container-Restart (Updates, Reboot des NAS, `docker compose up --force-recreate app`) gehen alle Sessions verloren → User muss sich neu einloggen.
+
+**Auswirkung im aktuellen Setup:** Niedrig. Single-User, Container-Restarts seltener als monatlich. Ein erneuter Login pro Update ist zumutbar. Memory-Leak ist bei < 5 aktiven Sessions vernachlässigbar.
+
+**Lösung (Empfehlung: Option A — MySQL-Session-Store):**
+
+1. Dependencies hinzufügen:
+   ```
+   pnpm add express-mysql-session
+   pnpm add -D @types/express-mysql-session
+   ```
+2. In `server/_core/index.ts` Session-Config umstellen (~15 Zeilen):
+   ```typescript
+   import MySQLStore from "express-mysql-session";
+   const MySQLSessionStore = MySQLStore(session);
+   const sessionStore = new MySQLSessionStore({
+     host: dbHost, port: dbPort,
+     user: dbUser, password: dbPass,
+     database: dbName,
+     createDatabaseTable: true,  // legt `sessions`-Tabelle automatisch an
+   });
+   app.use(session({ store: sessionStore, secret: ..., ... }));
+   ```
+3. Lokaler Test: Login → Server-Restart → noch eingeloggt?
+4. Commit + Push, NAS-Rebuild + Restart, Browser-Test.
+
+**Alternativen (verworfen):**
+- B) Redis-Session-Store — overkill für Single-User (+1 Container)
+- C) File-Store — kein konkurrenter Zugriff sicher, schlechte Performance
+- D) Beibehalten — die hier dokumentierte Default-Strategie
+
+**Aufwand-Schätzung:** ~**35–45 Minuten** (Code-Change 10 min, lokaler Test 10 min, Commit/Push/Tests 3 min, NAS-Rebuild 5 min, Browser-Test 3 min, HISTORY-Doku 3 min).
+
+**Risiko:** Mittel. Session-Persistence-Konfiguration ist sensibel; bei Fehlern Login-Schleife oder unsichere Cookies möglich. Mitigation: Lokaler Test vor Push, gründliche Browser-Verifikation.
+
+**Branch-Strategie:** Gehört konsequent auf `main` (App-Code-Verbesserung, nicht NAS-spezifisch). Wenn dort gefixt, später bewusster `main → nas-setup` Sync nach Risikoaufklärung.
+
+---
+
+## TODO-M2: IPv6-aware Rate-Limit-Key-Generator
+
+**Symptom:** Beim App-Start dreimal im Log:
+```
+ValidationError: Custom keyGenerator appears to use request IP without calling
+the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6
+users to bypass limits.
+  code: 'ERR_ERL_KEY_GEN_IPV6'
+```
+
+**Was passiert aktuell:**
+`express-rate-limit` hat in Version 8+ einen Validator eingebaut, der prüft ob der Custom-Key-Generator IPv6-sicher ist. Unser Code nutzt `req.ip` direkt, was IPv6-Adressen nicht sauber normalisiert. Theoretisch könnten IPv6-User Rate-Limits umgehen, indem sie verschiedene Sub-Adressen im selben Prefix nutzen.
+
+**Auswirkung im aktuellen Setup:** Niedrig. Zugriff läuft über Tailscale, das primär IPv4-Endpunkte (100.x.x.x) nutzt. Selbst wenn IPv6 im Tailnet aktiv wäre — die Bedrohung ist "Brute-Force gegen meine eigene Single-User-App durch mich selbst", was kein realistisches Szenario ist.
+
+**Lösung:**
+In den drei Aufrufen von `rateLimit()` in `server/_core/index.ts` den Custom-Key-Generator durch den Helper `ipKeyGenerator` aus `express-rate-limit` ersetzen:
+```typescript
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
+// vorher: keyGenerator: (req) => req.ip,
+// nachher:
+keyGenerator: (req) => ipKeyGenerator(req.ip),
+```
+
+**Aufwand-Schätzung:** ~**15 Minuten** (Code-Change 5 min, Tests 3 min, Commit + NAS-Restart 7 min).
+
+**Risiko:** Niedrig — Standard-API-Anwendung des Helpers.
+
+**Branch-Strategie:** Gehört auf `main`.
+
+---
+
+## TODO-M3: Vite Dynamic-Import statt Dockerfile-Workaround (Option A aus Phase 4.4)
+
+**Symptom:** Image ist ~200 MB größer als nötig, weil das Dockerfile bewusst `node_modules` mit allen devDependencies aus dem `build`-Stage in den Runtime kopiert (Option B aus Phase 4.4).
+
+**Was passiert aktuell:**
+`server/_core/vite.ts` hat statische Top-Level-Imports von `vite` und `vite.config`. Die werden bei jedem Module-Load ausgewertet — auch in Production, wo nie `setupVite` aufgerufen wird. Daher muss `vite` in `node_modules` vorhanden sein, sonst `ERR_MODULE_NOT_FOUND`.
+
+**Auswirkung im aktuellen Setup:** Niedrig. 200 MB mehr Disk auf NAS sind bei 7.2 TB freier Platte irrelevant. Etwas größerer Container-Attack-Surface (vite, tsx, vitest sind im Runtime obwohl nie genutzt). Image-Pull-Zeit bei Erst-Deployment minimal langsamer.
+
+**Lösung:**
+In `server/_core/vite.ts` die zwei Top-Level-Imports in dynamic imports innerhalb der `setupVite`-Funktion verlagern:
+```typescript
+// VORHER (Top-Level):
+import { createServer as createViteServer } from "vite";
+import viteConfig from "../../vite.config";
+
+// NACHHER (in setupVite):
+export async function setupVite(app: Express, server: Server) {
+  const { createServer: createViteServer } = await import("vite");
+  const viteConfig = (await import("../../vite.config")).default;
+  // ... rest unchanged
+}
+```
+
+Dann im Dockerfile: `COPY --from=prod-deps` wieder aktivieren statt `COPY --from=build`. Image schrumpft auf ~563 MB.
+
+**Aufwand-Schätzung:** ~**25–30 Minuten** (Code-Change 5 min, lokaler Test `pnpm dev` + `pnpm build` + Run 10 min, Dockerfile-Revert 2 min, Commit/Push/Pre-commit-Tests 3 min, NAS-Rebuild 5 min, Browser-Test 3 min).
+
+**Risiko:** Niedrig. Dynamic imports sind Standard-ES-Module-Pattern und in Node 22 voll unterstützt.
+
+**Branch-Strategie:** Gehört auf `main` (App-Code-Fix). Sobald gefixt: Dockerfile-Hack auf `nas-setup` zurückrollen, `prod-deps`-Stage wieder verwenden.
+
+---
+
+## Maintenance-TODOs — Priorisierungs-Empfehlung
+
+| Reihenfolge | TODO | Begründung |
+|---|---|---|
+| 1. (irgendwann zuerst) | **M2** (IPv6 Rate-Limit) | Quickest win, 15 min, viele Warnings weg, sauberer Log |
+| 2. | **M1** (MySQL-Session-Store) | Mittlerer Aufwand, höchster spürbarer Nutzen (Login überlebt Restarts) |
+| 3. | **M3** (Vite Dynamic Import) | Niedrigster Nutzen-Aufwand-Quotient; lohnt sich nur als Teil eines größeren Wartungs-Passes auf main |
+
+Alle drei können auch in einem Rutsch erledigt werden (~75-90 Min Gesamtzeit) — z.B. als bewusster "Wartungs-Tag" einmal pro Quartal.
+
+---
 
 # Phase 6 — Notebook-Server abschalten / Switchover (folgt)
