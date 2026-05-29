@@ -150,11 +150,27 @@ if ($DryRun) {
     $dbName
   )
 
-  # mysqldump schreibt nach stdout, wir leiten in die Datei
-  & mysqldump @dumpArgs 2>&1 | Out-File -FilePath $dumpFile -Encoding utf8
+  # mysqldump schreibt SQL nach stdout, Warnings nach stderr.
+  # WICHTIG: stderr (z.B. "Using a password on the command line interface
+  # can be insecure.") MUSS getrennt behandelt werden, sonst landet die
+  # Warning als erste Zeile im Dump -> Import scheitert mit ERROR 1064.
+  $errFile = "$dumpFile.stderr"
+  & mysqldump @dumpArgs 2>$errFile | Out-File -FilePath $dumpFile -Encoding utf8
   if ($LASTEXITCODE -ne 0) {
+    if (Test-Path $errFile) {
+      Write-Host "  mysqldump stderr:" -ForegroundColor Red
+      Get-Content $errFile | Write-Host -ForegroundColor Red
+      Remove-Item $errFile
+    }
     throw "mysqldump fehlgeschlagen mit Exit-Code $LASTEXITCODE"
   }
+  if ((Test-Path $errFile) -and (Get-Item $errFile).Length -gt 0) {
+    # Stderr-Output ist da, aber Exit-Code war 0 — also "nur" Warnings.
+    # Wir zeigen sie an, schreiben sie aber NICHT ins Dump-File.
+    Write-Host "  mysqldump Warnings (nicht im Dump):" -ForegroundColor DarkGray
+    Get-Content $errFile | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+  }
+  if (Test-Path $errFile) { Remove-Item $errFile }
 
   $dumpSize = (Get-Item $dumpFile).Length
   Write-Host "  Dump erstellt: $dumpFile ($([math]::Round($dumpSize/1MB, 2)) MB)" -ForegroundColor Green

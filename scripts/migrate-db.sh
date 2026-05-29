@@ -186,18 +186,25 @@ echo -e "${GREEN}  Dump-Groesse: $((DUMP_SIZE / 1024 / 1024)) MB${NC}"
 if [[ "$DRY_RUN" == "true" ]]; then
   echo -e "${GRAY}  (Dry-Run: ueberspringe Import)${NC}"
 else
+  # NOTE: We filter out lines starting with "mysqldump:" because some
+  # mysqldump invocations (e.g. older Windows PowerShell with 2>&1 | Out-File)
+  # accidentally write stderr warnings ("Using a password on the command line
+  # interface can be insecure.") into the dump file itself. Those lines are
+  # not valid SQL and would cause ERROR 1064 on import. Filtering on the
+  # consuming side makes the script robust against such dirty dumps without
+  # requiring the dump file itself to be regenerated.
   if [[ "$DUMP_FILE" == *.gz ]]; then
-    echo "  Importiere komprimiertes Dump..."
-    gunzip -c "$DUMP_FILE" | docker exec -i protrackr-mysql mysql \
+    echo "  Importiere komprimiertes Dump (filtere mysqldump-Warnings)..."
+    gunzip -c "$DUMP_FILE" | grep -v '^mysqldump:' | docker exec -i protrackr-mysql mysql \
       -u root -p"$MYSQL_ROOT_PASSWORD" \
       --default-character-set=utf8mb4 \
       "$MYSQL_DATABASE"
   else
-    echo "  Importiere unkomprimiertes Dump..."
-    docker exec -i protrackr-mysql mysql \
+    echo "  Importiere unkomprimiertes Dump (filtere mysqldump-Warnings)..."
+    grep -v '^mysqldump:' "$DUMP_FILE" | docker exec -i protrackr-mysql mysql \
       -u root -p"$MYSQL_ROOT_PASSWORD" \
       --default-character-set=utf8mb4 \
-      "$MYSQL_DATABASE" < "$DUMP_FILE"
+      "$MYSQL_DATABASE"
   fi
   echo -e "${GREEN}  Import abgeschlossen${NC}"
 fi
