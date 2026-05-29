@@ -611,7 +611,144 @@ Nach erfolgreichem Import auf NAS und Verifizierung in der App: Dump-Datei siche
 
 ---
 
-# Phase 3 — NAS-Vorbereitung & Container-Build (folgt)
+# Phase 3 — NAS-Vorbereitung & Container-Build
+
+## 2026-05-29 — Phase 3.1: Voraussetzungs-Check auf NAS + Compose-Plugin-Install
+
+**Was:**
+Erster echter NAS-Kontakt via Unraid Web-Terminal (Konsolen-Icon rechts oben in der WebGUI). Befehl: Voraussetzungs-Check der Tools, Speicher und vorhandenen Container.
+
+**Befund:**
+| Komponente | Erkenntnis |
+|---|---|
+| Unraid | 7.2.5 ✓ |
+| Docker | 29.3.1 ✓ |
+| **`docker compose`** | ⚠️ `unknown command` — Compose v2 Plugin fehlte |
+| Tailscale | 1.96.2, Hostname `dcs01` ist Self, IP `100.108.232.64` ✓ |
+| Git | 2.51.1 ✓ |
+| Speicher `/mnt/user` | 7.3 TB, 143 GB belegt (2%) ✓ |
+| `/mnt/user/appdata/` | enthält `mariadb-official/`, `nextcloud/`, `obsidian/`, `ollama/`, `open-webui/` — `protrackr/` noch nicht da ✓ |
+
+**Aktion:**
+Plugin **"Compose Manager Plus"** von `mstrhakr` (Tools-Kategorie, **stable** Version, nicht BETA) über Unraid Community Apps installiert. Bringt sowohl Web-UI als auch `docker compose` CLI mit.
+
+**Nachher:** `docker compose version` zeigt `v5.1.2` (Plugin-Version, intern Compose-v2-kompatibel). ✓
+
+**Beobachtung am Rande:**
+NAS hostet bereits Nextcloud (mit eigener MariaDB), Obsidian, Open-WebUI/Ollama. **Plan bleibt:** Wir nutzen unseren **eigenen** MySQL-Container für ProTrackr (Isolation, keine Schema-Konflikte mit Nextcloud-DB).
+
+---
+
+## 2026-05-29 — Phase 3.2: Repo auf NAS clonen
+
+**Was:**
+```bash
+mkdir -p /mnt/user/appdata
+cd /mnt/user/appdata
+git clone --branch nas-setup --single-branch \
+  https://github.com/DoeringConsulting/ProTrackr.git protrackr
+cd protrackr
+```
+
+**Warum `--single-branch`:**
+Verhindert versehentliches Mitziehen von `main` — schützt vor versehentlichem Branch-Wechsel auf dem NAS und spart Platte (~ 1.35 MiB Branch-only statt ~10 MiB full clone).
+
+**Ergebnis:**
+- Clone-Output: 3.779 Objekte, 1.35 MiB ✓
+- Working Dir: `/mnt/user/appdata/protrackr` ✓
+- Branch: `nas-setup` ✓
+- HEAD: `62e8613` (= Phase 2 Commit auf origin) ✓
+- Alle Top-Level Files vorhanden: `Dockerfile`, `docker-compose.yml`, `.env.production.example`, `.dockerignore` ✓
+- Scripts: `migrate-db.{ps1,sh}` ✓
+- **24 Drizzle-SQL-Files** in `drizzle/` (Notebook-Dump hat 19 `__drizzle_migrations`-Einträge — 5 weitere SQL-Files vorhanden im Repo; nicht alle sind unbedingt versionierte Migrations; nicht-kritisch, wird beim ersten Container-Start automatisch geprüft)
+
+---
+
+## 2026-05-29 — Phase 3.3: Secrets generieren + `.env` anlegen
+
+**Was:**
+- `scripts/migrate-db.sh` ausführbar gemacht (`chmod +x`)
+- `.env.production.example` → `.env` kopiert
+- **6 Secrets generiert mit `openssl rand -hex`** (alle hex → sed-safe, keine Sonderzeichen):
+  - `SESSION_SECRET` (64 Zeichen)
+  - `JWT_SECRET` (64 Zeichen)
+  - `SCHEDULER_API_KEY` (64 Zeichen)
+  - `CRON_SECRET` (64 Zeichen)
+  - `MYSQL_ROOT_PASSWORD` (48 Zeichen)
+  - `MYSQL_PASSWORD` (48 Zeichen)
+- Via `sed -i` in `.env` eingesetzt, inkl. der `DATABASE_URL`-Zeile (gleiches Passwort wie `MYSQL_PASSWORD`)
+- `.env` Permissions auf `600` gesetzt (nur root liest)
+
+**SMTP_PASS manuelles Setzen:**
+
+Erste Eingabe via `read -s` ergab eine fehlerhafte Länge in `.env` (38 Zeichen statt der 10 Zeichen des Mailbox-Passworts). Mögliche Ursache: Web-Terminal-Quirk, Bracket-Pasting, oder unerwartetes Tastatur-Layout-Verhalten.
+
+**Erfolgreiche Methode (zweiter Versuch):**
+- Webmail-Login-Test vorher zur Passwort-Verifizierung (User bestätigt: PW korrekt)
+- Sichtbare Eingabe via `read -p` (User kontrolliert Eingabe selbst mit den Augen)
+- Visuelle Bestätigung (`>${PW}<`) + Länge angezeigt
+- In-Place-Update mit **`awk -v pw="$PW"`** statt `sed` — robuster gegen Sonderzeichen
+- `clear` am Schluss als Schulter-Schutz
+- Verifikation: 10 Bytes in .env ✓, 1 SMTP_PASS-Zeile ✓
+
+**Lerneffekt:**
+- `read -s` mit anschließendem `sed`-Escape ist im Web-Terminal nicht zuverlässig
+- `read -p` (sichtbar) + `awk`-Replacement ist robuster
+- **`Strg + W`** schließt den Browser-Tab und damit das Web-Terminal — also kann `nano` mit `Strg+W` (Search) nicht genutzt werden. Falls Editing nötig: `vi` (keine Strg-Tasten nötig) oder die `awk`-Methode
+
+**Ergebnis:**
+- `.env` vollständig konfiguriert (alle 6 generierten Secrets + SMTP_PASS gesetzt)
+- Permissions `600` ✓
+- Keine `CHANGE_ME_*`-Platzhalter mehr ✓
+
+---
+
+## 2026-05-29 — Phase 3.4: Container-Build (erster Versuch + Husky-Fix)
+
+**Erster Versuch — `docker compose build`:**
+
+Build durchlief mehrere Stages erfolgreich (`base`, `deps`, parallel `build` und `prod-deps`), brach dann ab im `prod-deps`-Stage mit:
+
+```
+> project-billing-app@2.0.4 prepare /app
+> husky
+sh: husky: not found
+ ELIFECYCLE  Command failed.
+ERROR: process "/bin/sh -c pnpm install --frozen-lockfile --prod" did not complete successfully: exit code: 1
+```
+
+**Diagnose:**
+`package.json` hat `"prepare": "husky"` als Script. pnpm führt `prepare` nach jedem `install` automatisch aus. Im `prod-deps`-Stage installieren wir nur Production-Dependencies (`--prod`), Husky ist aber eine devDependency → `husky: not found` → Build bricht.
+
+Im `deps`-Stage lief Husky auch (mit Warning `.git can't be found` weil Build-Container kein .git hat), exit aber mit 0. Nur der `--prod`-Stage scheitert hart.
+
+**Fix (Commit `945b916`):**
+
+```dockerfile
+# Original (failed):
+RUN pnpm install --frozen-lockfile --prod
+
+# Fixed:
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+```
+
+**Warum sicher:**
+- `--ignore-scripts` überspringt ALLE Lifecycle-Scripts (prepare, postinstall, ...) — nur im `prod-deps`-Stage
+- Der `build`-Stage hatte alle devDependencies + Scripts aktiv (vite, esbuild liefen normal)
+- bcryptjs (pure JS) ist die im Code genutzte Auth-Lib, nicht bcrypt (native) → kein postinstall-Rebuild nötig
+- Runtime-Image braucht nur den resolved node_modules tree, keine Scripts
+
+**Re-Build:**
+- Auf NAS: `git pull origin nas-setup` zog Fix
+- HEAD: `945b916` ✓
+- `docker compose build` neu gestartet — Build-Cache erleichtert (deps + build cached, nur prod-deps und runtime neu)
+- *Ergebnis kommt sobald Build durch ist*
+
+---
+
+# Phase 3 — Implementation läuft (3.4 Re-Build in Arbeit, 3.5 folgt)
+
+---
 
 # Phase 4 — Erstes Anlaufen, SMTP-Test, Datenmigration (folgt)
 
