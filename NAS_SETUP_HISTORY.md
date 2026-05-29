@@ -746,7 +746,63 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 ---
 
-# Phase 3 — Implementation läuft (3.4 Re-Build in Arbeit, 3.5 folgt)
+## 2026-05-29 — Phase 3.4 (Forts.): Re-Build erfolgreich
+
+**Was:**
+Auf NAS: `git pull origin nas-setup` → HEAD `945b916`. Dann `docker compose build` erneut.
+
+**Ergebnis (Build-Cache wirksam):**
+- Re-Build von **17:29:18 bis 17:29:38 = 20 Sekunden** (statt 5-10 min beim ersten Versuch ohne Cache)
+- `prod-deps` Stage: **6.6 s** (ohne husky-Crash dank `--ignore-scripts`)
+- `build` Stage: **8.8 s** (vite + esbuild aus Cache)
+- `runtime` Stage: **4.3 s** (COPY-Operationen)
+- Final-Image: `protrackr-app:latest e929ad445b0a` **563 MB**
+
+**Beobachtung:**
+`mysql:8.0` Image wurde NICHT beim Build gepullt — `docker compose build` baut nur Services mit `build:` Block. Das `mysql`-Service-Image wird erst beim ersten `up` gepullt. Erwartet, kein Problem.
+
+---
+
+## 2026-05-29 — Phase 3.5: MySQL Container starten + Healthcheck
+
+**Was:**
+```bash
+docker compose up -d mysql
+# Wait-Loop bis healthy (max 60 s)
+```
+
+**Ergebnis:**
+- `mysql:8.0` Image gepullt: **799 MB**
+- Network `protrackr_protrackr_net` (Bridge) erstellt ✓
+- Volume `protrackr_mysql_data` (lokal) erstellt ✓
+- Container `protrackr-mysql` gestartet ✓
+- Health-Status: `starting` → `starting` → ... → **`healthy` nach 25 Sekunden** ✓
+
+**MySQL-Init-Sequenz im Log:**
+- `Creating database protrackr` ✓
+- `Creating user protrackr_user` ✓
+- `Giving user protrackr_user access to schema protrackr` ✓
+- `MySQL init process done. Ready for start up.`
+- `Server ready for connections. Version: '8.0.46' port: 3306` ✓
+
+**Harmlose Warnings im Log (keine Aktion nötig):**
+- `--skip-host-cache` deprecated → MySQL 8.x Hinweis, wird in compose.yml nicht gesetzt, vermutlich Default vom Image
+- `CA certificate ca.pem is self signed` → MySQL-internes TLS für Replication, irrelevant für unsere Nutzung
+- `Insecure configuration for --pid-file` → Container-internal, irrelevant
+
+**Container-Status:** `Up (healthy)`, Ports `3306/tcp, 33060/tcp` (nur intern im `protrackr_protrackr_net`, NICHT zum Host exposed wie gewollt).
+
+---
+
+# Phase 3 — Abgeschlossen ✓
+
+> **NAS-Vorbereitung & Container-Build komplett:**
+> - Compose Manager Plus installiert ✓
+> - Repo gecloned auf `/mnt/user/appdata/protrackr` ✓
+> - `.env` mit 6 generierten Secrets + SMTP_PASS konfiguriert ✓
+> - `protrackr-app:latest` (563 MB) gebaut ✓
+> - `mysql:8.0` (799 MB) läuft healthy, frische DB initialisiert ✓
+> - **App-Container noch nicht gestartet** — kommt in Phase 4 nach Datenimport
 
 ---
 
