@@ -90,6 +90,18 @@ services:
     image: mysql:8.0
     restart: unless-stopped
 
+    # IMPORTANT: --lower-case-table-names=1 must be set at FIRST init only.
+    # Reason: the original DB was created on Windows (default LCTN=1), so the
+    # dump contains lowercased table names. Drizzle schema uses camelCase
+    # (timeEntries, accountSettings, etc.). On Linux the MySQL default is
+    # LCTN=0 (case-sensitive) which would make `SELECT * FROM timeEntries`
+    # fail against the actual `timeentries` table. Setting LCTN=1 makes MySQL
+    # normalize all table names to lowercase and compare case-insensitively,
+    # so Drizzle's camelCase reads transparently hit the lowercased tables.
+    # NOTE: This variable can ONLY be set during DB initialization. Changing
+    # it later requires destroying the mysql_data volume and re-importing.
+    command: --lower-case-table-names=1
+
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
