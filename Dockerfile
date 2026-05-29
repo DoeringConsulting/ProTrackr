@@ -57,7 +57,13 @@ COPY package.json pnpm-lock.yaml ./
 COPY patches ./patches
 
 # --prod excludes devDependencies; lockfile still enforced.
-RUN pnpm install --frozen-lockfile --prod
+# --ignore-scripts: the "prepare" script (in package.json) calls husky, which
+# is a devDependency and therefore NOT present in --prod. Without this flag,
+# pnpm fails with "sh: husky: not found". Lifecycle scripts (postinstall etc.)
+# are not needed in the runtime image — the actual build happens in the
+# separate build stage above, and bcryptjs (pure JS) is used over bcrypt
+# (native), so no native rebuild is required.
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # -----------------------------------------------------------------------------
 # Stage 5: Runtime — final slim image with non-root user
