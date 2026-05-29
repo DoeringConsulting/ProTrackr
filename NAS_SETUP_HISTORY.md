@@ -806,7 +806,133 @@ docker compose up -d mysql
 
 ---
 
-# Phase 4 — Erstes Anlaufen, SMTP-Test, Datenmigration (folgt)
+# Phase 4 — Erstes Anlaufen, SMTP-Test, Datenmigration
+
+## 2026-05-29 — Phase 4.1: Dump-Transfer Notebook → NAS
+
+**Was:**
+Dump-Datei vom Notebook auf den NAS übertragen via **Tailscale SSH** + `scp`:
+
+```powershell
+scp -o StrictHostKeyChecking=accept-new \
+  "C:\Projects\ProTrackr_developing_path\db-migration\protrackr-dump-2026-05-28_20-51-07.sql.gz" \
+  root@dcs01.taile370c2.ts.net:/mnt/user/appdata/protrackr/db-migration/
+```
+
+**Beobachtung — Tailscale SSH ist elegant:**
+Statt klassischem SSH-Passwort-Login lief die Auth über die **Tailscale-Account-Authentifizierung** (URL `https://login.tailscale.com/a/...`). Kein Unraid-Root-Passwort nötig — sehr saubere Trennung von "Tailnet-Mitgliedschaft" und "OS-Zugriff", plus ACL-Bindung an den Tailscale-Account.
+
+**Stolperfalle: Zielverzeichnis fehlte**
+Erste SCP-Übertragung scheiterte mit `dest open: Failure`, weil `/mnt/user/appdata/protrackr/db-migration/` auf NAS nicht existierte. Der Ordner ist in `.gitignore` → wird beim `git clone` nicht angelegt. Fix: `mkdir -p` im Web-Terminal, dann SCP-Wiederholung.
+
+**Ergebnis:**
+- Datei auf NAS: `db-migration/protrackr-dump-2026-05-28_20-51-07.sql.gz` (18.421 Bytes, identisch zum Notebook) ✓
+- gzip-Integritätstest auf NAS: OK ✓
+
+---
+
+## 2026-05-29 — Phase 4.2: Dump-Import + zwei Skript-Bugs gefixt
+
+**Erster Versuch — Import scheiterte mit:**
+```
+ERROR 1064 (42000) at line 1: You have an error in your SQL syntax;
+... near 'mysqldump: [Warning] Using a password on the command line interface can be insec'
+```
+
+**Root cause 1 — `migrate-db.ps1`:**
+Das PowerShell-Skript hatte `& mysqldump @args 2>&1 | Out-File ...` — `2>&1` merged stderr in stdout. Daher landete die mysqldump-Warning ("Using a password ...") als **erste Zeile** im Dump-File. MySQL parsed sie beim Import als SQL → ERROR 1064.
+
+**Fix Commit `ddc9f1f`:**
+
+Zwei-Schichten-Verteidigung:
+1. **`scripts/migrate-db.sh`** (robust gegen existierende dirty dumps): Import-Stream durch `grep -v '^mysqldump:'` pipen — entfernt jegliches mysqldump-stderr-Noise on-the-fly. Wirkt für `.sql` und `.sql.gz`.
+2. **`scripts/migrate-db.ps1`** (Source-Fix für zukünftige Dumps): stderr in separate Temp-Datei (`$dumpFile.stderr`) statt merge. Operator sieht Warnings (grau), Errors (rot) — aber sie landen NIE im Dump-File. Temp wird aufgeräumt.
+
+**Stolperfalle: Pull mit chmod-Konflikt**
+Nach dem Skript-Fix wollte der User `git pull` — scheiterte:
+```
+error: Your local changes to the following files would be overwritten by merge:
+        scripts/migrate-db.sh
+```
+Ursache: `chmod +x` aus Phase 3.3 hatte die Mode-Bits im Repo geändert (`100644` → `100755`).
+
+**Lösung:** Atomar via `git fetch && git reset --hard origin/nas-setup`, dann `chmod +x` erneut.
+
+**Folge-Fix Commit `b12c559`** (Permanent-Lösung):
+Mode-Bit `+x` direkt im git-Index gesetzt für `scripts/migrate-db.{sh,ps1}` via `git update-index --chmod=+x`. Damit gilt: künftige Clones haben die Skripte sofort ausführbar, und `chmod +x` nach Clone produziert keinen "local change" mehr → kein Pull-Konflikt mehr.
+
+**Zweiter Import-Versuch (mit gefixtem Skript):**
+```
+[5/6] Import ausfuehren...
+  Importiere komprimiertes Dump (filtere mysqldump-Warnings)...
+  Import abgeschlossen
+[6/6] Verifikation nach Import...
+  Tabellen in protrackr nach Import: 16
+  Zeilenanzahl wichtiger Tabellen:
+    mandanten: 3, users: 2, customers: 3
+    timeEntries: n/a, expenses: 170, exchangeRates: n/a
+```
+
+**Aber: `n/a` für `timeEntries` und `exchangeRates`** → führte zu Phase 4.3.
+
+---
+
+## 2026-05-29 — Phase 4.3: LCTN-Diagnose + Re-Init
+
+**Diagnose:**
+```sql
+SHOW VARIABLES LIKE 'lower_case_table_names';
+-- Wert: 0 (Linux-Default, case-sensitive)
+```
+
+```sql
+SHOW TABLES;
+-- Alle Tabellen kommen lowercase aus dem Dump:
+-- timeentries, exchangerates, accountsettings, expenseaianalyses, ...
+```
+
+**Root cause:**
+- Notebook (Windows-MySQL) hat Default `lower_case_table_names=1` → Tabellen-Namen werden intern als lowercase gespeichert
+- `mysqldump` exportiert die Namen wie gespeichert (= lowercase)
+- Container auf Linux startete mit Default `lower_case_table_names=0` → strikt case-sensitive
+- Drizzle's Code (schema.ts) referenziert die Tabellen mit **camelCase** (`timeEntries`, `accountSettings`, `exchangeRates`, ...)
+- Mismatch: `SELECT * FROM timeEntries` würde gegen `timeentries` scheitern → App-Crash beim Start
+
+**Fix Commit `93085b5`:**
+`command: --lower-case-table-names=1` im `mysql`-Service der `docker-compose.yml`. MySQL normalisiert dann alle Tabellen-Namen zu lowercase und vergleicht case-insensitive — Drizzle's camelCase-Reads matchen transparent gegen die lowercase Tabellen.
+
+**Wichtiges Detail:** `lower_case_table_names` ist eine **Init-only**-Variable. Kann nur beim ersten DB-Start gelesen werden. Daher Re-Init nötig:
+
+```bash
+docker compose down
+docker volume rm protrackr_mysql_data   # Frische DB
+git fetch && git reset --hard origin/nas-setup
+docker compose up -d mysql               # Initialisiert mit LCTN=1
+# ... wait for healthy ...
+./scripts/migrate-db.sh db-migration/protrackr-dump-*.sql.gz
+```
+
+**Ergebnis nach Re-Init:**
+| Check | Wert |
+|---|---|
+| `lower_case_table_names` | **1 ✓** |
+| Container-Health | healthy in 25 s ✓ |
+| Import-Schritt 6/6 | **alle Row-Counts vollständig** (mandanten: 3, users: 2, customers: 3, **timeEntries: 124**, expenses: 170, **exchangeRates: 21**) ✓ |
+| `SELECT FROM timeEntries` (camelCase) | 124 Zeilen ✓ (case-insensitive Match wirkt) |
+| `SELECT FROM exchangeRates` (camelCase) | 21 Zeilen ✓ |
+
+**Daten-Vollständigkeit verifiziert:**
+- 16 / 16 Tabellen importiert
+- 124 Zeit-Einträge, 170 Reisekosten-Einträge, 21 Wechselkurs-Einträge
+- 3 Mandanten, 2 User, 3 Kunden
+
+**Lerneffekt für andere MySQL-Windows-Linux-Migrationen:** `lower_case_table_names=1` ist Pflicht beim ersten Init, wenn der Dump aus Windows kommt. Sonst Schema-Mismatch.
+
+---
+
+# Phase 4 — Implementation läuft (4.4 App-Start folgt)
+
+---
 
 # Phase 5 — Tailscale Serve aktivieren & End-to-End-Test (folgt)
 
