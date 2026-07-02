@@ -1554,9 +1554,36 @@ T3 (VITE_APP_TITLE build-arg für sichtbares DEV-Label), M1/M2/M4, task_bba37780
 
 ---
 
-# Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
+## 2026-07-02 — GOVERNANCE-Regel: PROD nur via Dev→Prod-Promotion
 
-# Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)
+**User-Anweisung (verbindlich):** Keine direkten Änderungen an PROD. Jede
+Änderung (Code/Image, Schema, Daten) geht zwingend DEV → Test → Freigabe →
+Promotion → PROD. Direkte Prod-Eingriffe sind gesperrt; angefragte
+Prod-Änderungen werden auf DEV umgeleitet und der User wird informiert.
+
+**Drei Durchsetzungs-Ebenen (ehrlich):**
+1. **Claude-Verhalten (ab sofort 100%):** Memory-Regel
+   `feedback_prod_only_via_dev_promotion`. Jede Prod-Änderungsanfrage → in DEV
+   umsetzen + User informieren; kein direkter Prod-Deploy außer autorisierter
+   Promotion.
+2. **Technische Guards (A4-Umsetzung):** `scripts/deploy-prod.sh` als einziger
+   legitimer Prod-Deploy-Weg mit Promotion-Gate (nur in Dev getestete Images);
+   direkte `docker compose -f docker-compose.yml up/build` abfangen → Stopp +
+   Hinweis + optionale SMTP-Benachrichtigung.
+3. **Ehrliche Grenze:** root auf dem NAS ist technisch nicht 100% sperrbar —
+   Guards machen Direkteingriffe unwahrscheinlich + sichtbar, nicht unmöglich.
+
+**Success Criteria für Promotion Dev→Prod (alle Pflicht):**
+1. `tsc --noEmit` + `vitest run` grün · 2. Dev deployt, app+mysql healthy ·
+3. Health-Gate `:9444/version.json` + keine DB-Fehler · 4. Manuelle
+Funktionsabnahme in DEV durch User · 5. kein offener kritischer Bug ·
+6. Prod-Backup vor Promotion · 7. explizite User-Freigabe.
+Dann: Image-Promotion (bit-identisch) + Prod-Restart + Health-Gate +
+Auto-Rollback.
+
+**Umsetzung der technischen Guards = Teil von A4.**
+
+---
 
 # Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
 
