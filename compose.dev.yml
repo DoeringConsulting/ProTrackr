@@ -108,15 +108,12 @@ services:
       - protrackr_dev_net
 
     healthcheck:
-      test:
-        - "CMD"
-        - "mysqladmin"
-        - "ping"
-        - "-h"
-        - "localhost"
-        - "-u"
-        - "root"
-        - "-p${MYSQL_ROOT_PASSWORD}"
+      # CMD-SHELL + $$ (verdoppeltes Dollar) — so gibt Compose das Literal
+      # $MYSQL_ROOT_PASSWORD an den Container weiter, wo es zur Laufzeit aus der
+      # env_file (.env.dev) evaluiert wird. Mit "-p${MYSQL_ROOT_PASSWORD}" würde
+      # Compose stattdessen aus der Prod-.env interpolieren → falsches Passwort
+      # → Healthcheck nie healthy (genau der A2.2-Wurzelfehler).
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 10s
       timeout: 5s
       retries: 10
