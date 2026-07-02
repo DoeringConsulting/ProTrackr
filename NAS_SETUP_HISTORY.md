@@ -1517,6 +1517,40 @@ ziehen jetzt app-dev UND mysql-dev dieselben Werte.
 **PROD-Status:** unverändert erreichbar auf `:9443`, buildTime 14:29 — der
 gesamte Dev-Fehler war vollständig isoliert.
 
+## 2026-07-02 — Phase A / A2.2c: Dev-Stack Neuaufsatz erfolgreich
+
+**Zusätzlicher Fix vorab:** Dev-mysql-Healthcheck nutzte `-p${MYSQL_ROOT_PASSWORD}`
+(Compose-Interpolation aus Prod-.env). Auf `CMD-SHELL` + `$$MYSQL_ROOT_PASSWORD`
+umgestellt (Container-Laufzeit-Eval aus env_file) — Commit `1e66f45`. Sonst wäre
+mysql-dev nie healthy geworden.
+
+**Neuaufsatz (frisches Terminal + `unset` verschmutzter Shell-Vars):**
+1. `git reset --hard origin/nas-setup` → 1e66f45 (env_file + Healthcheck-Fix).
+2. `docker compose -f compose.dev.yml down -v` → alter Dev-Stack + Volume weg
+   (nur `protrackr-dev`-Projekt; Prod `protrackr` unberührt).
+3. `up -d mysql` → mysql-dev **healthy in 25 s** (Healthcheck greift jetzt).
+4. **Root-Test `SELECT 1` → `1`** = Passwort-Konsistenz bewiesen (env_file).
+5. `clone-prod-to-dev.sh --yes` → 16 Tabellen.
+6. Daten-Verifikation (Container-PW): **users 2, timeEntries 170, expenses 197**
+   (197 = 195 + 2 Juli-Sobrietas-Testbelege, konsistent mit Prod).
+7. `up -d --build --no-deps app` → app-dev healthy in 15 s, **keine DB-Fehler**
+   in Logs (nur IPv6-Warnings = M2).
+8. version.json: Dev 3011 = 2.1.8; **Prod 3010 = 2.1.8, buildTime 14:29
+   unverändert** → Prod über das gesamte Dev-Chaos hinweg isoliert.
+
+**Lessons Learned (für spätere main-seitige Compose-Konsolidierung):**
+- Zwei-Umgebungen-Compose braucht `env_file:` je Service (nicht nur
+  `${VAR}`-Interpolation), sonst greift die Default-`.env` (Prod).
+- Healthchecks mit Passwörtern: `CMD-SHELL` + `$$VAR`, nie `${VAR}`.
+- `set -a; source .env.dev` in der interaktiven Shell vermeiden (verschmutzt
+  Umgebung + bricht an ungequoteten Werten). env_file macht source überflüssig.
+
+**Status:** A2.2 abgeschlossen (Browser-Login-Abnahme bei Doku noch offen).
+Dev erreichbar `https://dcs01.taile370c2.ts.net:9444` (Prod-Klon).
+
+**Verbleibende TODOs:** T2 (clone-Skript Row-Count-Anzeige n/a, kosmetisch),
+T3 (VITE_APP_TITLE build-arg für sichtbares DEV-Label), M1/M2/M4, task_bba37780.
+
 ---
 
 # Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
