@@ -1,6 +1,6 @@
 ---
 name: nas-rollout
-description: Rollt eine auf main freigegebene Release (via Rollout-Manifest) kontrolliert auf den NAS aus — Merge main→nas-setup, DB-Backup, Migrationen, Docker-Rebuild, Health-Gate, Auto-Rollback. NUR im NAS-Setup-Chat verwenden, niemals im Main-Chat.
+description: Rollt eine freigegebene Release (via Rollout-Manifest) kontrolliert auf EINE der zwei Server-Umgebungen (dev | prod) aus — Ziel-Config aus manifest.environments, DB-Backup, Migrationen, Deploy, Health-Gate, Auto-Rollback. NUR im NAS-Setup-Chat verwenden, niemals im Main-Chat.
 ---
 
 # NAS-Rollout
@@ -16,7 +16,7 @@ stufenweise aus — mit Bestätigung vor jedem zerstörerischen Schritt.
 - Voraussetzung: NAS online, Repo-Clone mit Docker-Zugriff auf den NAS, ein
   Manifest existiert und ist reviewed.
 
-## Die 4 harten Leitplanken (nie brechen)
+## Die 5 harten Leitplanken (nie brechen)
 1. **Merge-Richtung ist einseitig:** ausschließlich `main → nas-setup`. Niemals
    `nas-setup → main` (das braucht separate, explizite Freigabe im Main-Chat).
 2. **Versionsdatei-Konflikte automatisch zu main auflösen** (`--theirs`), keine
@@ -24,6 +24,21 @@ stufenweise aus — mit Bestätigung vor jedem zerstörerischen Schritt.
 3. **DB-Backup VOR jeder Migration.** Kein Migrate ohne verifiziertes Backup.
 4. **Health-Gate + Auto-Rollback:** Nach dem Deploy muss die Zielversion
    antworten, sonst automatischer Rollback (Merge + Image + DB).
+5. **Dev und Prod strikt trennen:** ein Dev-Deploy fasst NIE den Prod-Stack/-DB
+   an und umgekehrt; DB-Klon-Richtung ist immer nur Prod → Dev.
+
+## Ziel-Umgebung wählen (dev | prod)
+Der Rollout zielt auf **eine** von zwei Server-Umgebungen (siehe
+`docs/DEPLOYMENT-BLUEPRINT.md`). Die Zielkonfiguration steht im Manifest unter
+`environments.<env>` (`composeFile`, `envFile`, `appContainer`, `dbContainer`,
+`hostPort`, `healthUrl`):
+- **dev** — Entwicklung/Test, DB = Prod-Klon. Normaler Fluss nach jedem reifen
+  main-Stand.
+- **prod** — produktiv, echte Daten (`requireExtraConfirm: true` → zusätzliche
+  ausdrückliche Freigabe). Bevorzugt **Image-Promotion**: das auf dev getestete
+  Image unverändert deployen (kein Rebuild).
+Alle folgenden Stufen verwenden die Werte der GEWÄHLTEN Umgebung. Die genaue
+Git-/Promotion-Mechanik pro Umgebung wird in Phase A finalisiert.
 
 ## NAS-individuelle Einstellungen (schützen — NIEMALS überschreiben)
 Diese Werte existieren NUR auf dem NAS. Der Merge fasst sie ohnehin nicht an
@@ -52,11 +67,13 @@ klären (Leitplanke 2).
 
 ## Ablauf (stufenweise, mit Bestätigung)
 
-### Stufe 0 — Manifest lesen & vorlegen
+### Stufe 0 — Manifest lesen, Umgebung wählen & vorlegen
 - Lies `.claude/rollouts/<version>.json` (oder den vom User genannten Pfad).
-- Fasse dem User zusammen: Version, `source.commit`, Anzahl neuer Migrationen,
-  `breaking`, `notes`. **Bei `breaking.value = true`: ausdrücklich warnen und
-  Extra-Freigabe einholen.** Bestätigung abwarten.
+- **Ziel-Umgebung festlegen:** `dev` oder `prod`; lade `environments.<env>`.
+  Bei `prod` (`requireExtraConfirm`): zusätzliche ausdrückliche Freigabe einholen.
+- Fasse dem User zusammen: Version, **Ziel-Umgebung**, `source.commit`, Anzahl
+  neuer Migrationen, `breaking`, `notes`. **Bei `breaking.value = true`:
+  ausdrücklich warnen.** Bestätigung abwarten.
 
 ### Stufe 1 — Preflight
 - `git fetch origin`.
@@ -81,11 +98,11 @@ klären (Leitplanke 2).
   (dann: Konflikte im Main-Chat klären, hier stoppen).
 
 ### Stufe 3 — DB-Backup (VOR Migrate, Pflicht)
-- Dump aus dem MySQL-Container in eine Datei mit Zeitstempel, z.B.:
-  `docker exec protrackr-mysql sh -c 'exec mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines <DB>' > ./db-migration/nas-pre-<version>.sql`
+- Dump aus dem DB-Container der Umgebung (`environments.<env>.dbContainer`, z.B.
+  `mysql-prod`) in eine Datei mit Zeitstempel:
+  `docker exec <dbContainer> sh -c 'exec mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines <DB>' > ./db-migration/<env>-pre-<version>.sql`
 - **Verifizieren:** Datei existiert und ist > 0 Bytes. Sonst STOPP + Rollback.
-- Den exakten DB-Namen/Zugang aus dem `nas-setup`-`docker-compose.yml` / `.env`
-  bestätigen (nicht raten).
+- DB-Name/Zugang aus `environments.<env>.envFile` / compose bestätigen (nicht raten).
 
 ### Stufe 4 — Migrationen anwenden
 - `manifest.database.migrations` zeigt alle Migrationen; `drizzle-kit migrate`
@@ -95,17 +112,19 @@ klären (Leitplanke 2).
   Entsprechend vorgehen. Fehler hier → Stufe 7 (Rollback inkl. DB-Restore).
 
 ### Stufe 5 — Build & Deploy
-- **Vor dem Build:** `.env`/`.env.production` muss vorhanden sein (Runtime-Vars
-  für compose). Braucht der NAS gefüllte `VITE_*` im Client, diese als Build-
-  `args` übergeben — `.dockerignore` schließt `.env*` aus dem Build-Context aus,
-  sonst werden leere `VITE_*` in den Client gebacken.
-- `docker compose build app`
-- `docker compose up -d`
-- Kurz auf Container-Health warten (`docker compose ps`, healthcheck grün).
+- **Vor dem Build:** die Umgebungs-Env-Datei (`environments.<env>.envFile`) muss
+  vorhanden sein (Runtime-Vars für compose). Braucht der Client gefüllte `VITE_*`,
+  diese als Build-`args` übergeben — `.dockerignore` schließt `.env*` aus dem
+  Build-Context aus, sonst werden leere `VITE_*` gebacken.
+- **prod bevorzugt Image-Promotion:** das auf dev getestete Image unverändert
+  deployen (kein Rebuild); dev baut aus dem aktuellen Stand.
+- `docker compose -f <environments.<env>.composeFile> up -d` (dev ggf. mit
+  vorherigem `build`).
+- Kurz auf Container-Health warten (`docker compose -f <composeFile> ps`).
 
 ### Stufe 6 — Health-Gate
-- Poll `manifest.app.healthUrl` (Host-Port 3010) bis `version` ==
-  `manifest.app.expectVersion`, mit Timeout (z.B. 12×5s).
+- Poll `environments.<env>.healthUrl` (Host-Port der Umgebung) bis `version` ==
+  `app.expectVersion`, mit Timeout (z.B. 12×5s).
 - Ungleich/Timeout → Stufe 7 (Rollback).
 
 ### Stufe 7 — Abschluss ODER Rollback
@@ -116,13 +135,14 @@ klären (Leitplanke 2).
 - **Rollback (bei Fehler ab Stufe 2):**
   - Noch nicht committet: `git merge --abort`.
   - Bereits committet: `git reset --hard <Pre-Merge-SHA>`.
-  - DB aus `nas-pre-<version>.sql` wiederherstellen.
-  - `docker compose up -d` mit vorherigem Stand; Health erneut prüfen.
+  - DB aus `<env>-pre-<version>.sql` wiederherstellen.
+  - `docker compose -f <environments.<env>.composeFile> up -d` mit vorherigem
+    Stand (bei prod: vorheriges Image); Health erneut prüfen.
   - Fehlerursache dem User berichten; NICHT stillschweigend weitermachen.
 
 ## Niemals
-- `nas-setup → main` mergen/pushen.
+- `nas-setup → main` (bzw. `production → main`) mergen/pushen.
+- Einen Dev-Deploy gegen den Prod-Stack/-DB laufen lassen (oder umgekehrt).
 - Migrieren ohne verifiziertes Backup.
 - Deploy als „fertig" melden ohne bestandenes Health-Gate.
-- NAS-spezifische Werte (DB-Name, Ports, Migrate-Mechanik) raten statt aus
-  `nas-setup` zu bestätigen.
+- NAS-spezifische Werte (DB-Name, Ports, Migrate-Mechanik) raten statt zu bestätigen.

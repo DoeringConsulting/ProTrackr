@@ -90,12 +90,43 @@ const nas = {
       : sharedConfigChanged,
 };
 
+// Zwei Ziel-Umgebungen (Blueprint docs/DEPLOYMENT-BLUEPRINT.md). Ziel wird beim
+// Rollout gewählt. Dev-Port/-Tailscale sind Vorschläge — im NAS-Chat finalisieren.
+const environments = {
+  prod: {
+    role: "produktiv (echte Daten)",
+    gitRef: "production",
+    composeFile: "compose.prod.yml",
+    envFile: ".env.prod",
+    appContainer: "protrackr-app-prod",
+    dbContainer: "mysql-prod",
+    hostPort: 3010,
+    healthUrl: "http://<NAS_HOST>:3010/version.json",
+    tailscale: ":9443 (unveraendert)",
+    requireExtraConfirm: true,
+  },
+  dev: {
+    role: "dev/staging (Prod-Klon)",
+    gitRef: "main",
+    composeFile: "compose.dev.yml",
+    envFile: ".env.dev",
+    appContainer: "protrackr-app-dev",
+    dbContainer: "mysql-dev",
+    hostPort: 3011,
+    healthUrl: "http://<NAS_HOST>:3011/version.json",
+    tailscale: ":9444 (neu, Vorschlag)",
+    requireExtraConfirm: false,
+  },
+  _note: "Ziel-Umgebung beim Rollout waehlen. Dev-Port/-Tailscale im NAS-Chat finalisieren.",
+};
+
 const manifest = {
   schema: "nas-rollout/v1",
   version,
   generatedAt: new Date().toISOString(),
   source: { branch: "main", commit, shortCommit, freezeTag },
   target: { branch: "nas-setup", deploy: "docker compose (Unraid)" },
+  environments,
   app: {
     composeService: "app",
     container: "protrackr-app",
