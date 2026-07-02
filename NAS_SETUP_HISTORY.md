@@ -1585,6 +1585,37 @@ Auto-Rollback.
 
 ---
 
-# Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
+# Phase A / A3 — Dev-Loop
+
+## 2026-07-02 — Phase A / A3: Dev-Loop etabliert (Modell 1)
+
+**Git-Modell-Entscheidung (User):** **Modell 1** — `nas-setup` bleibt
+Deploy-Branch, Infra getrennt von `main`. Dev-Loop = `main → nas-setup` mergen
+(Claude-gesteuert) → NAS `deploy-dev.sh`. Modell 2 (Infra nach main) bleibt
+späteres Blueprint-Endziel.
+
+**Erstellt (Laptop, kein NAS-Kontakt):**
+- **`scripts/deploy-dev.sh`** — deployt `origin/nas-setup` auf Dev: fetch +
+  reset, rebuild `app-dev` (`--no-deps`, mysql-dev unangetastet), Health-Gate
+  gegen `:9444/version.json` (Version == package.json). Nutzt **ausschließlich
+  `compose.dev.yml`** → Prod strukturell unberührt. `bash -n` grün, +x im Index.
+- **`docs/DEV-LOOP.md`** — Alltags-Workflow: edit main → tsc/vitest → push main
+  → (Claude) merge main→nas-setup → `deploy-dev.sh` → in Dev testen → Freigabe
+  → Promotion (A4). Inkl. Merksätze (`-f compose.dev.yml`, kein `source`,
+  Governance PROD-nie-direkt).
+
+**Merge-Teil bewusst NICHT skriptet:** Merges können Konflikte haben →
+Claude-gesteuert mit Trockenlauf (`merge --no-commit --no-ff`) + Leitplanken
+(Versionsdatei-Konflikte auto, echte Konflikte STOPP), nie `nas-setup → main`.
+
+**Status:** Werkzeug steht. Aktuell nichts Neues zu deployen (main = v2.1.8 =
+Dev/Prod-Stand). Erster echter Einsatz beim nächsten main-Update (z.B.
+Reisekosten-Fix task_bba37780 → main → Dev testen → Promotion).
+
+**Offen:** deploy-dev.sh einmal auf NAS testen (idempotenter Rebuild).
+
+---
+
+# Phase A / A4 — Image-Promotion Dev→Prod + Prod-Guards (folgt)
 
 # Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)
