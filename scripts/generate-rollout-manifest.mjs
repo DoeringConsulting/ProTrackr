@@ -60,6 +60,36 @@ if (rolloutTags.length > 0) {
   breaking = { value: false, note: "Kein früheres nas-rollout/*-Tag — bitte manuell prüfen" };
 }
 
+// NAS-individuelle Einstellungen dokumentieren + geänderte GETEILTE Config/
+// Dependencies gegenüber nas-setup ermitteln (falls Branch lokal verfügbar), damit
+// der NAS-Chat gezielt auf Kompatibilität sichten kann.
+const watchList = [
+  "server/_core/env.ts", "server/_core/sessionConfig.ts", "vite.config.ts",
+  "drizzle.config.ts", "tsconfig.json", "vitest.config.ts", "pnpm-lock.yaml",
+];
+let nasRef = "";
+for (const ref of ["nas-setup", "origin/nas-setup"]) {
+  try { git(`rev-parse --verify ${ref}`); nasRef = ref; break; } catch { /* nächster */ }
+}
+const sharedConfigChanged = nasRef
+  ? git(`diff --name-only ${nasRef} HEAD -- ${watchList.join(" ")}`).split("\n").map((s) => s.trim()).filter(Boolean)
+  : null;
+
+const nas = {
+  note: "Rollout fasst NAS-Config NICHT an (alles gitignored oder NAS-only) — trotzdem vor Deploy verifizieren.",
+  runtimeEnvFile:
+    ".env / .env.production (gitignored) — DATABASE_URL→mysql-Container (nicht localhost), PORT=3000, SESSION/JWT/SCHEDULER/CRON-Secrets, SESSION_COOKIE_SECURE=true, SMTP_*, MYSQL_*",
+  buildTimeVite:
+    "VITE_* werden bei `vite build` in den Client gebacken; .dockerignore schließt .env* aus dem Build-Context aus → benötigte VITE_* als Docker build-args übergeben.",
+  nasOnlyFiles: ["docker-compose.yml", "Dockerfile", ".dockerignore", "scripts/migrate-db.ps1", "scripts/migrate-db.sh"],
+  db: { container: "protrackr-mysql", note: "Backup & Migrate gegen die Container-DB, nie gegen die lokale Notebook-DB." },
+  ports: "Host 3010 → Container 3000 (+ Tailscale-Reverse-Proxy :9443)",
+  sharedConfigChanged:
+    sharedConfigChanged === null
+      ? "(nas-setup lokal nicht verfügbar — im NAS-Chat gegen nas-setup prüfen)"
+      : sharedConfigChanged,
+};
+
 const manifest = {
   schema: "nas-rollout/v1",
   version,
@@ -79,6 +109,7 @@ const manifest = {
     migrations,
     applyNote: "Schema-Migrationen via `npx drizzle-kit migrate` gegen die NAS-DB — genaue Mechanik im NAS-Chat gegen nas-setup bestätigen (App-Startup vs. manuell).",
   },
+  nas,
   breaking,
   verified: {
     freezeTagPresent: freezeTag !== "(kein Tag)",

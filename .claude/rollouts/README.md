@@ -31,6 +31,15 @@ NAS. Entkoppelt die beiden Chats über ein **deterministisches Manifest**:
 3. DB-Backup VOR jeder Migration.
 4. Health-Gate nach Deploy, sonst Auto-Rollback (Merge + Image + DB).
 
+## NAS-Config bleibt geschützt
+`.env(.production)` (gitignored) + NAS-only-Docker-Dateien (`docker-compose.yml`,
+`Dockerfile`, `.dockerignore`) fasst der Merge nicht an — App-Config kommt aus
+`process.env`. Der SKILL-Abschnitt „NAS-individuelle Einstellungen" listet alles
+auf und prüft es im Preflight. **Achtung:** `VITE_*` sind **build-time** und
+`.dockerignore` schließt `.env*` aus → ggf. als Docker build-args übergeben.
+Das Manifest-Feld `nas.sharedConfigChanged` zeigt, ob eine Release überhaupt
+geteilte Config/Deps ändert (bei der Bugfix-Welle: leer).
+
 ## Ablauf kurz
 1. **Main-Chat:** Release freezen → Manifest erzeugen → committen/pushen.
 2. **NAS-Setup-Chat:** `/nas-rollout` → Manifest bestätigen → Stufen 1–7 fahren.

@@ -25,6 +25,31 @@ stufenweise aus — mit Bestätigung vor jedem zerstörerischen Schritt.
 4. **Health-Gate + Auto-Rollback:** Nach dem Deploy muss die Zielversion
    antworten, sonst automatischer Rollback (Merge + Image + DB).
 
+## NAS-individuelle Einstellungen (schützen — NIEMALS überschreiben)
+Diese Werte existieren NUR auf dem NAS. Der Merge fasst sie ohnehin nicht an
+(alle gitignored oder NAS-only) — trotzdem vor dem Deploy verifizieren:
+
+- **`.env` / `.env.production` (gitignored, NICHT im Merge)** — die eigentliche
+  NAS-Konfiguration:
+  - *Runtime* (docker-compose liest via `${VAR}`): `DATABASE_URL` zeigt auf den
+    **mysql-Container** (`…@mysql:3306/protrackr`, NICHT localhost), `PORT=3000`,
+    `SESSION_SECRET`/`JWT_SECRET`/`SCHEDULER_API_KEY`/`CRON_SECRET`,
+    `SESSION_COOKIE_SECURE=true`, `SMTP_*`, `MYSQL_*`.
+  - *Build-Zeit* `VITE_*`: werden beim `vite build` in den Client gebacken.
+    **ACHTUNG:** `.dockerignore` schließt `.env*` aus dem Build-Context aus → im
+    Container-Build sind `VITE_*` standardmäßig LEER, außer sie werden als
+    Build-`args` übergeben. Wird ein `VITE_*`-Wert auf dem NAS gebraucht
+    (z.B. `VITE_APP_TITLE`), das VOR dem Build sicherstellen.
+- **NAS-only-Dateien (nur auf nas-setup — Merge lässt sie unberührt):**
+  `docker-compose.yml` (Ports **3010→3000**, Volume `mysql_data`, Healthcheck,
+  Tailscale-Reverse-Proxy `:9443`), `Dockerfile`, `.dockerignore`,
+  `scripts/migrate-db.*`, NAS-Docs.
+- **DB liegt im Container `protrackr-mysql`** — Backup & Migrationen laufen gegen
+  diese Container-DB, nie gegen die lokale Notebook-DB.
+
+Fasst der Merge wider Erwarten eine dieser Dateien an → STOPP, im Main-Chat
+klären (Leitplanke 2).
+
 ## Ablauf (stufenweise, mit Bestätigung)
 
 ### Stufe 0 — Manifest lesen & vorlegen
@@ -39,6 +64,12 @@ stufenweise aus — mit Bestätigung vor jedem zerstörerischen Schritt.
   (`git status --porcelain` leer). Sonst stoppen.
 - `source.commit` muss lokal vorhanden sein (`git cat-file -e <commit>^{commit}`).
 - **Notiere den Pre-Merge-SHA** von nas-setup (`git rev-parse HEAD`) — für Rollback.
+- **NAS-Config prüfen (nicht raten):** `.env`/`.env.production` existiert und ist
+  vollständig — Schlüssel gegen `.env.production.example` abgleichen, fehlende
+  Keys = STOPP. NAS-only-Dateien (`docker-compose.yml`, `Dockerfile`) vorhanden.
+- Manifest-Feld `nas.sharedConfigChanged` prüfen: bringt die Release Änderungen
+  an geteilten Config-/Dependency-Dateien (env.ts, vite/drizzle/tsconfig,
+  package.json-Scripts, pnpm-lock)? Falls ja → auf NAS-Kompatibilität sichten.
 
 ### Stufe 2 — Merge (Git-Mechanik über Helfer-Skript)
 - Trockenlauf zuerst:
@@ -64,6 +95,10 @@ stufenweise aus — mit Bestätigung vor jedem zerstörerischen Schritt.
   Entsprechend vorgehen. Fehler hier → Stufe 7 (Rollback inkl. DB-Restore).
 
 ### Stufe 5 — Build & Deploy
+- **Vor dem Build:** `.env`/`.env.production` muss vorhanden sein (Runtime-Vars
+  für compose). Braucht der NAS gefüllte `VITE_*` im Client, diese als Build-
+  `args` übergeben — `.dockerignore` schließt `.env*` aus dem Build-Context aus,
+  sonst werden leere `VITE_*` in den Client gebacken.
 - `docker compose build app`
 - `docker compose up -d`
 - Kurz auf Container-Health warten (`docker compose ps`, healthcheck grün).
