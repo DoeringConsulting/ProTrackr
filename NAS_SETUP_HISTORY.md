@@ -1267,6 +1267,70 @@ Alle drei können auch in einem Rutsch erledigt werden (~75-90 Min Gesamtzeit) �
 
 ---
 
+## 2026-07-02 — Phase A / A1: Browser-Endabnahme + Zeitzonen-Fix + App-Bug-Diagnose
+
+**Browser-Endabnahme (User):**
+- Login ✓, Version-Footer 2.1.8 ✓, Zeiteinträge korrekt ✓.
+- ⚠️ Reisekosten fielen auf: (a) Datum um 1 Tag verschoben, (b) im Bericht fehlend.
+  → zwei getrennte Ursachen (siehe unten).
+
+**Thema 1 — Zeitzonen-Bug (NAS-Infra, gefixt):**
+- Symptom: expenses-Datum 01.06 wurde als 31.05 angezeigt; Zeiteinträge korrekt.
+- Ursache: `expenses.date` ist `timestamp(mode:"string")`, Werte sind Warschau-
+  Mitternacht (= 22:00/23:00 UTC intern). `server/db.ts` formatiert bewusst in
+  LOKALER TZ (für Europe/Warsaw gebaut). NAS-Container liefen ohne TZ → UTC →
+  TIMESTAMP-Strings einen Tag zu früh. Zeiteinträge waren UTC-Mitternacht, daher
+  kein sichtbarer Shift.
+- Fix (kein Datenverlust, TIMESTAMP ist intern UTC — nur Konvertierung ändert sich):
+  - `TZ: Europe/Warsaw` auf app + mysql Container (Commit `d80ce18`).
+  - mysql (Debian) übernahm sofort: `sys_tz` UTC→CEST, expenses-Wert
+    `2026-03-01 23:00:00` → `2026-03-02 00:00:00` (verifiziert per SELECT).
+  - app-Container (node:22-alpine) blieb UTC — **Alpine hat kein tzdata**.
+    Fix: `apk add --no-cache tzdata` im runtime-Stage (Commit `8fb5620`).
+- **OFFEN bei Pause:** tzdata-Rebuild (`docker compose up -d --build app`) +
+  Verifikation `docker exec protrackr-app date` == CEST noch nicht vom User
+  bestätigt. Beim Wiedereinstieg zuerst prüfen.
+
+**Thema 2 — Reisekosten-Attribution im Bericht (App-Code-Bug, NICHT umzugsbedingt):**
+- Symptom (nach Juli-Testbelegen mit customerId=278/Sobrietas, timeEntryId=NULL):
+  drei Report-Ansichten laufen auseinander:
+  | Ansicht | Reisekosten | Status |
+  |---|---|---|
+  | Kundenbericht-Summary (App-UI) | korrekt (200€/256 PLN) | ✅ |
+  | Buchhaltungsbericht "abrechenbar" | leer, rutscht unter "Variable Kosten" | ❌ |
+  | PDF-Kostenaufstellung | 0,00 | ❌ |
+- Root Cause: `getExpenseBillingCustomerId` (client/src/lib/expenseAttribution.ts)
+  berücksichtigt customerId UND timeEntryId — wird aber nicht überall genutzt.
+  `client/src/pages/Reports.tsx:1091` filtert die "abrechenbar"-Zeile noch mit
+  `if (!expense.timeEntryId) return false` (alte timeEntryId-only-Logik); die
+  PDF bekommt entsprechend falsche Daten. Belege mit customerId-Direktzuordnung
+  (Option B, ohne timeEntryId) fallen durch.
+- Endsumme rechnerisch korrekt (Betrag via travelRevenueInGross im Bruttoumsatz) —
+  reiner Kategorisierungs-/Anzeige-Bug.
+- **Gehört auf `main`** (App-Code, nicht nas-setup). Task-Chip erstellt:
+  `task_bba37780` "Fix Reisekosten-Attribution in Buchhaltung + PDF". Am App-Code
+  wurde hier bewusst NICHTS geändert.
+
+**Maintenance-TODO M4 (neu):** version.json zeigt `"environment": "development"`
+statt production (generate-version.js Default). Kosmetik, Health-Gate prüft nur
+`version`. Siehe Maintenance-TODOs-Sektion.
+
+**Stand bei Pause (Zug):**
+- Branch `nas-setup` HEAD `8fb5620`, lokal = origin, Working Tree clean.
+- Prod läuft v2.1.8 mit echten Laptop-Daten (170 timeEntries, 195 expenses).
+- Rollback-Netz steht: `freeze/nas-A1-start`, `prod-pre-A1-*.sql`,
+  `prod-pre-import-*.sql`, Image `protrackr-app:pre-A1-v2.0.4`.
+- Dump-Dateien auf NAS noch NICHT gelöscht (warten auf finale Abnahme).
+
+**Wiedereinstieg (Flughafen) — nächste Schritte:**
+1. tzdata-Rebuild verifizieren (app-Container date == CEST, Reisekosten-Datum korrekt).
+2. A1 final abhaken: Dump-Dateien auf NAS sicher löschen (`shred -u`).
+3. Dann A2 (Dev-Stack: compose.dev.yml, .env.dev, Port 3011, Tailscale :9444,
+   mysql-dev als Prod-Klon).
+4. App-Bug (Thema 2) separat im Main-Chat via task_bba37780.
+
+---
+
 # Phase A / A2-A5 (folgt)
 
 # Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)
