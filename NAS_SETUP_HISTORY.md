@@ -1612,7 +1612,9 @@ Claude-gesteuert mit Trockenlauf (`merge --no-commit --no-ff`) + Leitplanken
 Dev/Prod-Stand). Erster echter Einsatz beim nächsten main-Update (z.B.
 Reisekosten-Fix task_bba37780 → main → Dev testen → Promotion).
 
-**Offen:** deploy-dev.sh einmal auf NAS testen (idempotenter Rebuild).
+**Getestet ✓ (2026-07-02):** `deploy-dev.sh` idempotenter Rebuild auf NAS
+durchgelaufen — [1/5]..[5/5] grün, app-dev healthy in 15 s, Health-Gate
+`version.json "2.1.8"`, „DEV-DEPLOY OK". Prod (`:9443`) unberührt. **A3 fertig.**
 
 ---
 
