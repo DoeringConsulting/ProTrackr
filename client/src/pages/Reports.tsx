@@ -303,6 +303,53 @@ export default function Reports() {
     [expenses, reportRateMap, entriesById, customersById]
   );
 
+  // ── Fehler #2 (Sobrietas exclusive): abrechnungsrelevanter Kunde eines Belegs ──
+  //
+  // Decision D — Datum-Cutover: Die neue customerId-Mechanik gilt NUR für Belege
+  // ab 01.07.2026. Belege davor behalten exakt die alte Logik (nur über
+  // timeEntryId), damit historische Berichte byte-identisch bleiben.
+  const EXPENSE_CUSTOMER_CUTOVER = "2026-07-01";
+
+  // Datums-Key → Kunden-IDs mit einem Time-Entry an diesem Tag (für den
+  // datumsbasierten Fallback, analog zur Reisekosten-Analyse-Seite).
+  const customerIdsByDate = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+    for (const entry of timeEntries) {
+      const key = toDateKey(entry.date);
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, new Set<number>());
+      map.get(key)!.add(Number(entry.customerId));
+    }
+    return map;
+  }, [timeEntries]);
+
+  // Ermittelt den Kunden, dem ein (Reisekosten-)Beleg für die Abrechnung
+  // zugeordnet wird. Gibt customerId oder null zurück.
+  const getExpenseBillingCustomerId = (expense: any): number | null => {
+    const dateKey =
+      toDateKey(expense?.date) ??
+      toDateKey(expense?.checkInDate) ??
+      toDateKey(expense?.checkOutDate);
+
+    // Vor dem Cutover: unveränderte Alt-Logik — ausschliesslich über timeEntryId.
+    if (!dateKey || dateKey < EXPENSE_CUSTOMER_CUTOVER) {
+      if (!expense?.timeEntryId) return null;
+      const te = entriesById.get(expense.timeEntryId);
+      return te?.customerId ?? null;
+    }
+
+    // Ab Cutover: 1) explizite customerId, 2) via timeEntry, 3) Datums-Fallback
+    // (genau 1 Kunde an dem Tag; „1 Kunde/Tag"-Annahme aus Rückfrage A).
+    if (expense?.customerId != null) return Number(expense.customerId);
+    if (expense?.timeEntryId) {
+      const te = entriesById.get(expense.timeEntryId);
+      if (te?.customerId != null) return te.customerId;
+    }
+    const set = customerIdsByDate.get(dateKey);
+    if (set && set.size === 1) return set.values().next().value ?? null;
+    return null;
+  };
+
   // Calculate accounting report data
   const calculateAccountingReport = () => {
     const fixedCostsDetailed = fixedCosts.map((cost) => {
@@ -358,10 +405,9 @@ export default function Reports() {
       0
     );
     const travelRevenueInGrossPln = expensesDetailed.reduce((sum, expense) => {
-      if (!expense.timeEntryId) return sum;
-      const relatedEntry = entriesById.get(expense.timeEntryId);
-      if (!relatedEntry) return sum;
-      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      const billingCustomerId = getExpenseBillingCustomerId(expense);
+      if (billingCustomerId == null) return sum;
+      const relatedCustomer = customersById.get(billingCustomerId);
       if (relatedCustomer?.costModel !== "exclusive") return sum;
       return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
     }, 0);
@@ -423,10 +469,9 @@ export default function Reports() {
         // Add travel revenue from exclusive customers
         for (const expense of expensesDetailed) {
           if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
-          if (!expense.timeEntryId) continue;
-          const relatedEntry = entriesById.get(expense.timeEntryId);
-          if (!relatedEntry) continue;
-          const relatedCustomer = customersById.get(relatedEntry.customerId);
+          const billingCustomerId = getExpenseBillingCustomerId(expense);
+          if (billingCustomerId == null) continue;
+          const relatedCustomer = customersById.get(billingCustomerId);
           if (relatedCustomer?.costModel !== "exclusive") continue;
           monthRevenuePln += convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
         }
@@ -493,10 +538,9 @@ export default function Reports() {
       0
     );
     const travelRevenueInGross = expensesDetailed.reduce((sum, expense) => {
-      if (!expense.timeEntryId) return sum;
-      const relatedEntry = entriesById.get(expense.timeEntryId);
-      if (!relatedEntry) return sum;
-      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      const billingCustomerId = getExpenseBillingCustomerId(expense);
+      if (billingCustomerId == null) return sum;
+      const relatedCustomer = customersById.get(billingCustomerId);
       if (relatedCustomer?.costModel !== "exclusive") return sum;
       return sum + (expense.amountEur ?? 0);
     }, 0);
@@ -588,9 +632,7 @@ export default function Reports() {
 
     // Calculate expenses for this customer
     const customerExpenses = expensesDetailedAll.filter(expense => {
-      // Find the time entry for this expense
-      const timeEntry = timeEntries.find(te => te.id === expense.timeEntryId);
-      return timeEntry && timeEntry.customerId === selectedCustomerId;
+      return getExpenseBillingCustomerId(expense) === selectedCustomerId;
     });
     const customerExpensesDetailed = customerExpenses;
 

@@ -33,13 +33,13 @@ describe("fixedCosts", () => {
     const caller = appRouter.createCaller(ctx);
 
     await caller.fixedCosts.create({
-      category: "Auto",
+      category: "VTEST-Auto",
       amount: 50000, // 500 EUR
       description: "Monatliche Autokosten",
     });
 
     const costs = await caller.fixedCosts.list();
-    const autoCost = costs.find(c => c.category === "Auto");
+    const autoCost = costs.find(c => c.category === "VTEST-Auto");
 
     expect(autoCost).toBeDefined();
     expect(autoCost?.amount).toBe(50000);
@@ -52,12 +52,12 @@ describe("fixedCosts", () => {
 
     // Create multiple fixed costs
     await caller.fixedCosts.create({
-      category: "Telefon",
+      category: "VTEST-Telefon",
       amount: 5000, // 50 EUR
     });
 
     await caller.fixedCosts.create({
-      category: "Software",
+      category: "VTEST-Software",
       amount: 10000, // 100 EUR
       description: "Adobe Creative Cloud",
     });
@@ -74,12 +74,12 @@ describe("fixedCosts", () => {
 
     // Create a fixed cost
     await caller.fixedCosts.create({
-      category: "Buchhaltung",
+      category: "VTEST-Buchhaltung",
       amount: 15000, // 150 EUR
     });
 
     const costs = await caller.fixedCosts.list();
-    const buchhaltungCost = costs.find(c => c.category === "Buchhaltung");
+    const buchhaltungCost = costs.find(c => c.category === "VTEST-Buchhaltung");
 
     if (!buchhaltungCost) {
       throw new Error("Fixed cost not found");
@@ -106,12 +106,12 @@ describe("fixedCosts", () => {
     // Create a fixed cost
     const randomId = Math.floor(Math.random() * 1000000);
     await caller.fixedCosts.create({
-      category: `TestCategory${randomId}`,
+      category: `VTEST-Category${randomId}`,
       amount: 5000,
     });
 
     const costsBefore = await caller.fixedCosts.list();
-    const testCost = costsBefore.find(c => c.category === `TestCategory${randomId}`);
+    const testCost = costsBefore.find(c => c.category === `VTEST-Category${randomId}`);
 
     if (!testCost) {
       throw new Error("Test fixed cost not found");
