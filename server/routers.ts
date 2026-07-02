@@ -1705,33 +1705,6 @@ export const appRouter = router({
       await deleteExpense(input.id);
       return { success: true };
     }),
-    aggregateByCustomer: protectedProcedure.input((val: unknown) => {
-      return z.object({
-        customerId: z.number(),
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
-      }).parse(val);
-    }).query(async ({ ctx, input }) => {
-      const { getExpensesByCustomer, listUsersByMandantId } = await import("./db");
-      const startDate = input.startDate ? new Date(input.startDate) : undefined;
-      const endDate = input.endDate ? new Date(input.endDate) : undefined;
-
-      if (isWebAppAdmin(ctx.user)) {
-        return [];
-      }
-
-      if (isMandantAdmin(ctx.user) && ctx.user.mandantId) {
-        const mandantUsers = await listUsersByMandantId(ctx.user.mandantId);
-        const result = await Promise.all(
-          mandantUsers.map((user) =>
-            getExpensesByCustomer(user.id, input.customerId, startDate, endDate)
-          )
-        );
-        return result.flat();
-      }
-
-      return await getExpensesByCustomer(ctx.user.id, input.customerId, startDate, endDate);
-    }),
   }),
 
   // Currency support

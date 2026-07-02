@@ -82,9 +82,9 @@ export default function ProjectDetail() {
   }, [filterPeriod, selectedMonth, selectedYear]);
 
   // Alle Belege im Zeitraum laden und client-seitig mit derselben Attribution
-  // wie die Berichte filtern (statt server-seitigem aggregateByCustomer, das nur
-  // timeEntry-verknüpfte Belege fand). So erscheinen standalone- und per
-  // customerId zugewiesene Belege konsistent (Fehler #2).
+  // wie die Berichte filtern (zentrale Logik in expenseAttribution.ts). So
+  // erscheinen standalone- und per customerId zugewiesene Belege konsistent
+  // (Fehler #2).
   const { data: allExpenses = [] } = trpc.expenses.list.useQuery({ startDate, endDate });
   const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({
     startDate,

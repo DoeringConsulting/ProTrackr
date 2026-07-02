@@ -412,45 +412,6 @@ export async function getExpenseById(id: number) {
   return result[0] || null;
 }
 
-export async function getExpensesByCustomer(userId: number, customerId: number, startDate?: Date, endDate?: Date) {
-  const db = await getDb();
-  if (!db) return [];
-  const { expenses, timeEntries } = await import("../drizzle/schema");
-  const conditions = [eq(timeEntries.userId, userId), eq(timeEntries.customerId, customerId)];
-  if (startDate) {
-    conditions.push(
-      sql`COALESCE(${expenses.checkOutDate}, ${expenses.checkInDate}, ${expenses.date}) >= ${localDayStartUtc(startDate)}`
-    );
-  }
-  if (endDate) {
-    conditions.push(
-      sql`COALESCE(${expenses.checkInDate}, ${expenses.date}) < ${localNextDayStartUtc(endDate)}`
-    );
-  }
-
-  // Join expenses with timeEntries to filter by customerId
-  const result = await db
-    .select({
-      id: expenses.id,
-      timeEntryId: expenses.timeEntryId,
-      category: expenses.category,
-      amount: expenses.amount,
-      currency: expenses.currency,
-      comment: expenses.comment,
-      date: expenses.date,
-      flightRouteType: expenses.flightRouteType,
-      departureTime: expenses.departureTime,
-      arrivalTime: expenses.arrivalTime,
-      checkInDate: expenses.checkInDate,
-      checkOutDate: expenses.checkOutDate,
-    })
-    .from(expenses)
-    .innerJoin(timeEntries, eq(expenses.timeEntryId, timeEntries.id))
-    .where(and(...conditions));
-  
-  return result;
-}
-
 export async function deleteDocument(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
