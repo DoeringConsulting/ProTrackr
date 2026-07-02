@@ -32,6 +32,7 @@ import {
   calculateProvisionCents,
   provisionConfigFromCustomer,
 } from "@/lib/provision";
+import { getExpenseBillingCustomerId as attributeExpenseToCustomer } from "@/lib/expenseAttribution";
 
 const EXPENSE_CATEGORY_LABELS: Record<
   string,
@@ -304,11 +305,9 @@ export default function Reports() {
   );
 
   // ── Fehler #2 (Sobrietas exclusive): abrechnungsrelevanter Kunde eines Belegs ──
-  //
-  // Decision D — Datum-Cutover: Die neue customerId-Mechanik gilt NUR für Belege
-  // ab 01.07.2026. Belege davor behalten exakt die alte Logik (nur über
-  // timeEntryId), damit historische Berichte byte-identisch bleiben.
-  const EXPENSE_CUSTOMER_CUTOVER = "2026-07-01";
+  // Zentrale Zuordnungslogik (Cutover 01.07.2026 + Option-B-Override: explizite
+  // customerId gewinnt datumsunabhängig) liegt in lib/expenseAttribution und
+  // wird mit ProjectDetail geteilt.
 
   // Datums-Key → Kunden-IDs mit einem Time-Entry an diesem Tag (für den
   // datumsbasierten Fallback, analog zur Reisekosten-Analyse-Seite).
@@ -323,32 +322,11 @@ export default function Reports() {
     return map;
   }, [timeEntries]);
 
-  // Ermittelt den Kunden, dem ein (Reisekosten-)Beleg für die Abrechnung
-  // zugeordnet wird. Gibt customerId oder null zurück.
-  const getExpenseBillingCustomerId = (expense: any): number | null => {
-    const dateKey =
-      toDateKey(expense?.date) ??
-      toDateKey(expense?.checkInDate) ??
-      toDateKey(expense?.checkOutDate);
-
-    // Vor dem Cutover: unveränderte Alt-Logik — ausschliesslich über timeEntryId.
-    if (!dateKey || dateKey < EXPENSE_CUSTOMER_CUTOVER) {
-      if (!expense?.timeEntryId) return null;
-      const te = entriesById.get(expense.timeEntryId);
-      return te?.customerId ?? null;
-    }
-
-    // Ab Cutover: 1) explizite customerId, 2) via timeEntry, 3) Datums-Fallback
-    // (genau 1 Kunde an dem Tag; „1 Kunde/Tag"-Annahme aus Rückfrage A).
-    if (expense?.customerId != null) return Number(expense.customerId);
-    if (expense?.timeEntryId) {
-      const te = entriesById.get(expense.timeEntryId);
-      if (te?.customerId != null) return te.customerId;
-    }
-    const set = customerIdsByDate.get(dateKey);
-    if (set && set.size === 1) return set.values().next().value ?? null;
-    return null;
-  };
+  // Ermittelt den abrechnungsrelevanten Kunden eines Belegs (customerId oder
+  // null) — delegiert an das geteilte Util, damit Reports und ProjectDetail
+  // exakt dieselbe Zuordnung verwenden.
+  const getExpenseBillingCustomerId = (expense: any): number | null =>
+    attributeExpenseToCustomer(expense, { entriesById, customerIdsByDate });
 
   // Calculate accounting report data
   const calculateAccountingReport = () => {

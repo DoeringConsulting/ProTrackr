@@ -17,6 +17,11 @@ import {
   formatMoney,
   type SupportedCurrency,
 } from "@/lib/currencyUtils";
+import {
+  createEntriesById,
+  createCustomerIdsByDateMap,
+  getExpenseBillingCustomerId,
+} from "@/lib/expenseAttribution";
 
 type FilterPeriod = "month" | "year" | "lifetime" | "average";
 
@@ -57,12 +62,14 @@ export default function ProjectDetail() {
   // Calculate date range based on filter
   const { startDate, endDate } = useMemo(() => {
     if (filterPeriod === "month") {
+      // Monatsgrenzen als String direkt bauen (kein toISOString → kein
+      // Warschau-Mitternacht-Kippen, vgl. Fehler #1 in Expenses.tsx).
       const [year, month] = selectedMonth.split("-");
-      const start = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const end = new Date(parseInt(year), parseInt(month), 0);
+      const mm = month.padStart(2, "0");
+      const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
       return {
-        startDate: start.toISOString().split("T")[0],
-        endDate: end.toISOString().split("T")[0],
+        startDate: `${year}-${mm}-01`,
+        endDate: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
       };
     } else if (filterPeriod === "year") {
       return {
@@ -74,14 +81,11 @@ export default function ProjectDetail() {
     return { startDate: undefined, endDate: undefined };
   }, [filterPeriod, selectedMonth, selectedYear]);
 
-  const { data: expenses = [] } = trpc.expenses.aggregateByCustomer.useQuery(
-    {
-      customerId: customerId!,
-      startDate,
-      endDate,
-    },
-    { enabled: !!customerId }
-  );
+  // Alle Belege im Zeitraum laden und client-seitig mit derselben Attribution
+  // wie die Berichte filtern (statt server-seitigem aggregateByCustomer, das nur
+  // timeEntry-verknüpfte Belege fand). So erscheinen standalone- und per
+  // customerId zugewiesene Belege konsistent (Fehler #2).
+  const { data: allExpenses = [] } = trpc.expenses.list.useQuery({ startDate, endDate });
   const { data: timeEntries = [] } = trpc.timeEntries.list.useQuery({
     startDate,
     endDate,
@@ -90,6 +94,25 @@ export default function ProjectDetail() {
 
   const rateMap = useMemo(() => buildLatestRateMap(exchangeRates as any[]), [exchangeRates]);
   const chartCurrency = showUnifiedCurrency ? targetCurrency : "EUR";
+  const attributionMaps = useMemo(
+    () => ({
+      entriesById: createEntriesById(timeEntries as any[]),
+      customerIdsByDate: createCustomerIdsByDateMap(timeEntries as any[]),
+    }),
+    [timeEntries]
+  );
+
+  // Client-seitige Zuordnung wie in den Berichten: nur Belege dieses Kunden.
+  const expenses = useMemo(
+    () =>
+      customerId == null
+        ? []
+        : (allExpenses as any[]).filter(
+            (e) => getExpenseBillingCustomerId(e, attributionMaps) === customerId
+          ),
+    [allExpenses, attributionMaps, customerId]
+  );
+
   const expenseRows = useMemo(
     () =>
       expenses.map((expense: any) => {
