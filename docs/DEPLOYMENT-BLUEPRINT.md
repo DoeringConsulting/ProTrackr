@@ -42,6 +42,9 @@ Unraid-Server:
 self-hosted Runner · Dev-DB = periodischer Prod-Klon · Prod = bestehende
 NAS-Instanz mit unveränderten Ports/Tailscale.
 
+**Ziel-Plattform:** Unraid **7.3.1** (Docker/Compose-Host). Die genaue Compose-
+Mechanik (nativ vs. Plugin) im NAS-Chat gegen die laufende Unraid-Version bestätigen.
+
 ## 2. Ports & Tailscale — was sich (nicht) ändert
 
 - Container-intern lauscht die App **immer auf 3000** — kein App-Umbau, für
