@@ -1359,7 +1359,59 @@ task_bba37780. Kein nas-setup-Thema.
 
 ---
 
-# Phase A / A2 — Dev-Stack aufbauen (folgt)
+# Phase A / A2 — Dev-Stack aufbauen
+
+> **Cleanup-Regel (User, 2026-07-02):** KEIN Löschen von Dump- oder Backup-
+> Dateien (weder Migrations-Dumps noch die prod-pre-*-Rollback-Backups), bis der
+> GESAMTE Dev/Prod-Umzug abgeschlossen ist UND alle unterwegs identifizierten
+> Bugs gelöst sind (u.a. task_bba37780 Reisekosten-Attribution). Bis dahin
+> Cleanup nicht vorschlagen.
+
+## 2026-07-02 — Phase A / A2.1: Dev-Stack-Dateien erstellt (Laptop, kein NAS-Kontakt)
+
+**Was (nur Dateien im Branch, ungefährlich):**
+
+1. **`compose.dev.yml`** — vollständig isolierter Dev-Stack neben Prod:
+   | Aspekt | Prod (docker-compose.yml) | Dev (compose.dev.yml) |
+   |---|---|---|
+   | Compose-Projektname | protrackr (default) | **protrackr-dev** (`name:`) |
+   | App-Container | protrackr-app | **protrackr-app-dev** |
+   | DB-Container | protrackr-mysql | **protrackr-mysql-dev** |
+   | Volume | mysql_data | **mysql_data_dev** |
+   | Netzwerk | protrackr_net | **protrackr_dev_net** |
+   | Host-Port | 3010 | **3011** |
+   | Tailscale (geplant) | :9443 | **:9444** |
+   - Service heißt bewusst weiter "mysql" → DATABASE_URL strukturgleich, aber im
+     dev-Netz aufgelöst auf protrackr-mysql-dev (kein Weg zur Prod-DB).
+   - Übernimmt alle Prod-Härtungen: TZ=Europe/Warsaw (app+mysql), LCTN=1,
+     Healthchecks, Log-Rotation. NODE_ENV=production (gebaute App servieren).
+   - Aufruf immer mit `-f compose.dev.yml`.
+
+2. **`.env.dev.example`** — Template: eigene Secrets (CHANGE_ME_DEV_*, MÜSSEN
+   ≠ Prod sein), DATABASE_URL → dev-mysql, Port-Hinweis 3011, TZ, SMTP
+   standardmäßig LEER (keine echten Mails aus Test-Umgebung), VITE_APP_TITLE
+   "ProTrackr (DEV)" zur optischen Unterscheidung.
+
+3. **`.gitignore`** erweitert: `.env.dev`, `.env.prod`, `.env.production`,
+   `.env.staging` ignoriert (Secret-Schutz); `*.example`-Templates bleiben
+   tracked. Verifiziert via `git check-ignore`.
+
+**Isolations-Garantie:** Dev kann Prod-DB/Volume/Netz nicht berühren — getrennt
+auf allen Ebenen (Projektname, Container, Volume, Netz, Port, Secrets).
+
+**Noch OFFEN — A2.2 (NAS-Deployment, braucht Ruhe, nicht am Flughafen):**
+1. Auf NAS: `git pull`, `.env.dev` aus Template anlegen (frische Secrets), Port
+   3011 vorab frei prüfen (`ss -tlnp`).
+2. `docker compose -f compose.dev.yml up -d mysql` → healthy.
+3. **Prod → Dev klonen:** Dump aus protrackr-mysql (Prod) → Import in
+   protrackr-mysql-dev. Richtung IMMER nur Prod → Dev.
+4. `docker compose -f compose.dev.yml up -d --build app` → healthy, version 2.1.8.
+5. Tailscale Serve: `tailscale serve --bg --https=9444 http://localhost:3011`.
+6. Test: https://dcs01.taile370c2.ts.net:9444 (Dev, optisch "ProTrackr (DEV)").
+
+---
+
+# Phase A / A2.2 — Dev-Stack auf NAS deployen (folgt)
 
 # Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
 

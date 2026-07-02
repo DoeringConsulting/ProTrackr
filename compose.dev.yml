@@ -1,0 +1,157 @@
+# =============================================================================
+# ProTrackr — Docker Compose Stack (NAS DEV / Staging)
+# =============================================================================
+# Zweite, vollständig ISOLIERTE Umgebung neben Prod (docker-compose.yml).
+# Siehe docs/DEPLOYMENT-BLUEPRINT.md. Rollout via /nas-rollout (Ziel = dev).
+#
+# External access: Tailscale Serve at https://dcs01.taile370c2.ts.net:9444
+#                  -> host port 3011 -> app container :3000
+#
+# ISOLATION GEGEN PROD (kritisch — Dev fasst Prod NIEMALS an):
+#   - Eigener Compose-Projektname:  protrackr-dev  (via `name:` unten) →
+#     eigener Prefix für Netzwerk + Volume, kein Kollidieren mit Prod.
+#   - Eigene Container:  protrackr-app-dev / protrackr-mysql-dev
+#   - Eigenes Volume:    mysql_data_dev   (Prod nutzt mysql_data)
+#   - Eigenes Netzwerk:  protrackr_dev_net (Prod nutzt protrackr_net)
+#   - Eigener Host-Port: 3011            (Prod nutzt 3010)
+#   - Eigene .env.dev    (getrennte Secrets + DATABASE_URL → dev-mysql)
+#   Der Service heißt bewusst weiter "mysql", damit DATABASE_URL (…@mysql:3306)
+#   strukturgleich zu Prod bleibt — aufgelöst wird er NUR im dev-Netzwerk, also
+#   auf protrackr-mysql-dev. Kein Weg zur Prod-DB.
+#
+# DB-Befüllung: mysql-dev wird als periodischer KLON der Prod-DB befüllt
+#   (Richtung immer nur Prod → Dev). Siehe A2.2 im NAS_SETUP_HISTORY.md.
+#
+# WICHTIG: Aufruf immer mit -f, sonst nimmt docker compose die Prod-Datei:
+#   docker compose -f compose.dev.yml up -d
+# =============================================================================
+
+name: protrackr-dev
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # ProTrackr application (DEV) — gleiches Image/Dockerfile wie Prod
+  # ---------------------------------------------------------------------------
+  app:
+    container_name: protrackr-app-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    environment:
+      NODE_ENV: production   # gebaute App wird serviert (kein Vite-Dev-Server);
+                             # "dev" meint die Umgebung, nicht den Node-Modus.
+      PORT: 3000
+
+      # Timezone — wie Prod (siehe docker-compose.yml für die ausführliche
+      # Begründung: expenses.date TIMESTAMP-Shift ohne Europe/Warsaw).
+      TZ: Europe/Warsaw
+
+      # DATABASE_URL zeigt auf den dev-mysql (Service "mysql" im dev-Netzwerk).
+      DATABASE_URL: ${DATABASE_URL}
+
+      SESSION_SECRET: ${SESSION_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      SCHEDULER_API_KEY: ${SCHEDULER_API_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+
+      SESSION_COOKIE_SECURE: "true"
+      SESSION_COOKIE_SAMESITE: lax
+
+      # SMTP — in Dev standardmäßig LEER (keine echten Mails aus der
+      # Test-Umgebung). Bei Bedarf in .env.dev füllen (z.B. Test-Postfach).
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+
+    ports:
+      # Host 3011 (Prod = 3010). Tailscale Serve später: :9444 → localhost:3011.
+      - "127.0.0.1:3011:3000"
+
+    networks:
+      - protrackr_dev_net
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # MySQL 8.0 (DEV) — eigenes Volume, wird als Prod-Klon befüllt
+  # ---------------------------------------------------------------------------
+  mysql:
+    container_name: protrackr-mysql-dev
+    image: mysql:8.0
+    restart: unless-stopped
+
+    # lower_case_table_names=1 wie Prod (nur beim ersten Init wirksam) —
+    # Pflicht, weil die (aus Prod geklonten) Dumps lowercased Tabellennamen
+    # enthalten und Drizzle camelCase liest. Siehe docker-compose.yml.
+    command: --lower-case-table-names=1
+
+    environment:
+      TZ: Europe/Warsaw
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_INITDB_SKIP_TZINFO: "1"
+
+    volumes:
+      - mysql_data_dev:/var/lib/mysql
+
+    networks:
+      - protrackr_dev_net
+
+    healthcheck:
+      test:
+        - "CMD"
+        - "mysqladmin"
+        - "ping"
+        - "-h"
+        - "localhost"
+        - "-u"
+        - "root"
+        - "-p${MYSQL_ROOT_PASSWORD}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    # Kein Host-Port — nur im dev-Netzwerk erreichbar.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+# =============================================================================
+# Volumes — DEV-eigenes Volume, getrennt von Prod (mysql_data)
+# =============================================================================
+volumes:
+  mysql_data_dev:
+    driver: local
+
+# =============================================================================
+# Networks — DEV-eigenes Bridge-Netz, getrennt von Prod (protrackr_net)
+# =============================================================================
+networks:
+  protrackr_dev_net:
+    driver: bridge
