@@ -1403,11 +1403,32 @@ auf allen Ebenen (Projektname, Container, Volume, Netz, Port, Secrets).
 1. Auf NAS: `git pull`, `.env.dev` aus Template anlegen (frische Secrets), Port
    3011 vorab frei prüfen (`ss -tlnp`).
 2. `docker compose -f compose.dev.yml up -d mysql` → healthy.
-3. **Prod → Dev klonen:** Dump aus protrackr-mysql (Prod) → Import in
-   protrackr-mysql-dev. Richtung IMMER nur Prod → Dev.
+3. **Prod → Dev klonen:** `./scripts/clone-prod-to-dev.sh` (in A2.1b erstellt).
+   Richtung fest verdrahtet Prod→Dev, Prod wird nur gelesen, direkter Stream
+   ohne Zwischendatei, Verifikation der Row-Counts Prod==Dev.
 4. `docker compose -f compose.dev.yml up -d --build app` → healthy, version 2.1.8.
 5. Tailscale Serve: `tailscale serve --bg --https=9444 http://localhost:3011`.
 6. Test: https://dcs01.taile370c2.ts.net:9444 (Dev, optisch "ProTrackr (DEV)").
+
+## 2026-07-02 — Phase A / A2.1b: Prod→Dev Klon-Skript (`clone-prod-to-dev.sh`)
+
+**Was:** `scripts/clone-prod-to-dev.sh` erstellt (Laptop, ungefährlich; +x im
+git-Index; `bash -n` Syntax-Check grün).
+
+**Sicherheits-Design:**
+- **Richtung fest verdrahtet** (readonly `PROD_DB_CONTAINER=protrackr-mysql`,
+  `DEV_DB_CONTAINER=protrackr-mysql-dev`) — keine Argumente, die man
+  vertauschen könnte; harte Assertion Prod≠Dev.
+- **Prod nur lesen** (mysqldump), Dev wird ersetzt (Wegwerf-Klon).
+- Passwörter aus den Container-internen `$MYSQL_ROOT_PASSWORD` (keine Secrets
+  im Skript, keine Prod/Dev-Kollision).
+- Direkter Stream Prod→filter→Dev (keine Zwischendatei = keine Produktivdaten
+  auf Disk); `--no-tablespaces` + mysqldump-stderr-Filter (Lektionen aus A1).
+- 5 Stufen: Container-Health → Bestandsaufnahme → Confirm (`--yes`/`--dry-run`)
+  → Klon → Verifikation (Tabellen- + Row-Counts Prod==Dev, sonst Exit 1).
+
+**Nutzung in A2.2:** deckt Schritt 3 (Prod→Dev-Klon) ab und dient später als
+periodischer Klon-Job (Cron mit `--yes`).
 
 ---
 
