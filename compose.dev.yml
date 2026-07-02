@@ -35,6 +35,9 @@ services:
   # ---------------------------------------------------------------------------
   app:
     container_name: protrackr-app-dev
+    # Fester Image-Name — dieses Image ist die Promotion-Quelle: nach dem
+    # Dev-Test taggt deploy-prod.sh protrackr-dev-app:latest auf protrackr-app.
+    image: protrackr-dev-app:latest
     build:
       context: .
       dockerfile: Dockerfile

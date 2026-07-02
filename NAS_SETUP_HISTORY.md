@@ -1618,6 +1618,46 @@ durchgelaufen — [1/5]..[5/5] grün, app-dev healthy in 15 s, Health-Gate
 
 ---
 
-# Phase A / A4 — Image-Promotion Dev→Prod + Prod-Guards (folgt)
+# Phase A / A4 — Image-Promotion Dev→Prod + Prod-Guards
+
+## 2026-07-02 — Phase A / A4.1: Promotion-Werkzeug (deploy-prod.sh)
+
+**Werkzeug-Bau (Laptop, Prod NICHT bewegt — main=v2.1.8=Prod-Stand, nichts zu
+promoten). Compose-Änderungen wirken erst beim nächsten Deploy; laufende Prod
+unverändert.**
+
+**Bit-identische Promotion (Blueprint-konform, ohne Registry, gleicher Host):**
+- `docker-compose.yml` + `compose.dev.yml`: explizites `image:` je app-Service
+  (`protrackr-app:latest` / `protrackr-dev-app:latest`) neben `build:`
+  (Fallback). Ermöglicht: das in Dev getestete Image wird per `docker tag` zum
+  Prod-Image — GENAU dasselbe Image, kein Rebuild.
+- **`scripts/deploy-prod.sh`** — der EINZIGE legitime Prod-Deploy-Weg, 8 Stufen:
+  1. Dev-Image existiert? + Image-ID · 2. **Success-Criteria-Gate** (Checkliste,
+  Bestätigung nur mit Eingabe `PROMOTE`) · 3. **Prod-DB-Backup**
+  (`prod-pre-promote-<ts>.sql`, Größen-Sanity) · 4. **Rollback-Tag** des alten
+  Prod-Image · 5. `docker tag dev-app → app` (bit-identisch, ID-Vergleich) ·
+  6. `docker compose up -d --no-build app` · 7. **Health-Gate** (:3010) ·
+  8. bei Fehler **AUTO-ROLLBACK** (altes Image zurück + DB-Backup-Hinweis).
+  `--dry-run` verfügbar. `bash -n` grün, +x im Index.
+- `docker-compose.yml` Header: prominente **Governance-Sperr-Warnung**
+  (PROD nicht direkt deployen → deploy-prod.sh).
+
+**Migrationen:** Skript wendet DB-Migrationen NICHT automatisch an (zu riskant);
+Hinweis + Backup stehen. v2.1.x hat keine neuen Migrationen. Bei künftigen
+Schema-Änderungen: manuell nach dem Backup, vor dem Health-Gate.
+
+**Noch OFFEN — A4.2 (aktiver Guard, eigener Teilschritt):**
+Benachrichtigung bei JEDER Prod-Container-Änderung (Docker-Event-Watcher +
+SMTP-Mail an User), damit auch direkte Eingriffe sichtbar werden. Braucht
+SMTP-aus-Bash-Setup (hoste.pl) — bewusst als eigener Schritt, nicht 01:xx Uhr.
+**Ehrliche Grenze bleibt:** root kann nicht 100% gesperrt werden; Watcher macht
+Direkteingriffe sichtbar, nicht unmöglich.
+
+**Erster echter Promotion-Einsatz:** beim ersten main-Update (z.B.
+Reisekosten-Fix) — mit frischem Kopf, nicht jetzt.
+
+---
+
+# Phase A / A4.2 — aktiver Prod-Guard (SMTP-Watcher) + A5 Switchover (folgt)
 
 # Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)

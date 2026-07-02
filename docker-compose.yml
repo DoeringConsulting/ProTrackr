@@ -1,6 +1,16 @@
 # =============================================================================
 # ProTrackr — Docker Compose Stack (NAS Production)
 # =============================================================================
+#
+#  ██  GOVERNANCE: PROD NICHT DIREKT DEPLOYEN  ██
+#  Änderungen an PROD ausschließlich über die Promotion aus DEV:
+#      ./scripts/deploy-prod.sh   (nach erfüllten Success Criteria + Freigabe)
+#  KEIN direktes `docker compose -f docker-compose.yml up --build` mit neuem
+#  Code. Der legitime Weg macht Backup + Health-Gate + Auto-Rollback.
+#  Betrieb (Restart/Backup/Logs) ohne Code-Änderung ist ok.
+#  Siehe NAS_SETUP_HISTORY.md (Governance-Regel) + docs/DEV-LOOP.md.
+#
+# =============================================================================
 # Target host: Unraid 7.2.5 on AOOSTAR WTR MAX 8845
 # External access: Tailscale Serve at https://dcs01.taile370c2.ts.net:9443
 #                  -> forwards to host port 3000 -> app container :3000
@@ -21,6 +31,11 @@ services:
   # ---------------------------------------------------------------------------
   app:
     container_name: protrackr-app
+    # Fester Image-Name ermöglicht bit-identische Promotion: deploy-prod.sh
+    # taggt das in Dev getestete Image (protrackr-dev-app) auf protrackr-app um
+    # und startet Prod mit `--no-build` — GENAU dasselbe Image, kein Rebuild.
+    # `build:` bleibt als Fallback (erster Aufbau / lokaler Rebuild).
+    image: protrackr-app:latest
     build:
       context: .
       dockerfile: Dockerfile
