@@ -14,8 +14,16 @@ Ausführlicher Plan: [`docs/DEPLOYMENT-BLUEPRINT.md`](DEPLOYMENT-BLUEPRINT.md).
 ## Start-Nachricht (kopieren & im NAS-Chat einfügen)
 
 ```text
-Wir starten Phase A des Deployment-Blueprints (docs/DEPLOYMENT-BLUEPRINT.md auf
-main). Ziel: zwei Umgebungen auf dem Server statt localhost.
+Wir starten Phase A des Deployment-Blueprints. WICHTIG: Ich bin auf Branch
+nas-setup, die Anleitung liegt auf main. Bitte genau so vorgehen:
+
+1) git fetch origin   (neuesten main-Stand holen)
+2) Branch bestaetigen: git branch --show-current  -> MUSS "nas-setup" sein,
+   NICHT main. Falls main: git checkout nas-setup. Wir arbeiten NUR auf nas-setup.
+3) Lies diese Dateien aus main (nur lesen, NICHT auschecken):
+   git show origin/main:docs/DEPLOYMENT-BLUEPRINT.md
+   git show origin/main:.claude/skills/nas-rollout/SKILL.md
+   git show origin/main:.claude/rollouts/2.1.1.json
 
 Bereits entschieden (bitte nicht neu aufrollen):
 - Produktiv = die heutige NAS-Instanz, Ports/Tailscale UNVERAENDERT (3010/:9443),
@@ -24,11 +32,9 @@ Bereits entschieden (bitte nicht neu aufrollen):
 - Image-Promotion Dev->Prod, Dev-DB = periodischer Klon der Prod-DB.
 - Erst manuell ueber den /nas-rollout-Skill, CI/CD spaeter.
 
-Lies zuerst den Blueprint (git pull, dann docs/DEPLOYMENT-BLUEPRINT.md) und das
-/nas-rollout-Skill (liegt auf main: git show main:.claude/skills/nas-rollout/SKILL.md).
 Arbeite dann Phase A, Schritt A1-A5 ab - stufenweise, mit Bestaetigung vor jedem
 riskanten Schritt, Backup zuerst. Erklaere mir jeden Schritt in einfacher
-Sprache, ich bin Laie.
+Sprache, ich bin Laie. Arbeite AUSSCHLIESSLICH auf nas-setup, niemals auf main.
 
 Fang mit einer Bestandsaufnahme an: Was laeuft aktuell auf dem NAS (Container,
 Ports, Volumes), und wo liegen meine echten Daten? Dann schlag mir A1 vor.
