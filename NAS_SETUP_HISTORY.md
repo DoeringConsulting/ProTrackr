@@ -1432,7 +1432,49 @@ periodischer Klon-Job (Cron mit `--yes`).
 
 ---
 
-# Phase A / A2.2 — Dev-Stack auf NAS deployen (folgt)
+## 2026-07-02 — Phase A / A2.2: Dev-Stack auf NAS deployt
+
+**Ablauf (unter Zeitdruck vor Flug, Dev isoliert → Prod-sicher):**
+1. NAS `git pull` → b3bc6ed. Port 3011 frei verifiziert.
+2. **`.env.dev` vollautomatisch** erzeugt (4× openssl hex-32 Secrets + 2× DB-PW,
+   SMTP leer → kein manuelles Passwort). Keine Platzhalter mehr.
+3. `docker compose -f compose.dev.yml up -d mysql` → isoliertes Netz
+   `protrackr-dev_protrackr_dev_net`, Volume `protrackr-dev_mysql_data_dev`,
+   Container `protrackr-mysql-dev` healthy in 25 s.
+4. **Prod→Dev-Klon** via `./scripts/clone-prod-to-dev.sh --yes`: 16 Tabellen,
+   "KLON ERFOLGREICH". (Row-Count-Verifikation im Skript zeigte n/a — Backtick-
+   Quoting-Bug in der db_query-Funktion, siehe TODO; Klon selbst OK.)
+5. `docker compose -f compose.dev.yml up -d --build app` → Image
+   `protrackr-dev-app`, app-dev healthy in 15 s, version 2.1.8 auf Port 3011.
+   (Compose recreated dabei mysql-dev — Volume bleibt, Daten überleben.)
+6. **Prod-Beweis:** Port 3010 lieferte weiter 2.1.8 mit unverändertem buildTime
+   14:29 → Dev-Deployment hat Prod NICHT berührt.
+7. Tailscale Serve: `tailscale serve --bg --https=9444 http://localhost:3011`.
+   `serve status` zeigt beide: 9443 (Prod) + 9444 (Dev).
+
+**Ergebnis A2.2:**
+- Dev erreichbar unter `https://dcs01.taile370c2.ts.net:9444` (Prod-Klon-Daten).
+- Vollständige Isolation Prod ↔ Dev bestätigt (Container/Volume/Netz/Port).
+- Browser-Endabnahme durch User: (bei Sicherung noch offen).
+
+**Kleine TODOs (nicht zeitkritisch, nach dem Umzug):**
+- T1: `.env.dev.example` — `VITE_APP_TITLE=ProTrackr (DEV)` braucht Quotes
+  (`"ProTrackr (DEV)"`), sonst scheitert `source .env.dev` an den Klammern.
+- T2: `scripts/clone-prod-to-dev.sh` — Row-Count-Verifikation nutzt Backticks in
+  der verschachtelten `sh -c`-Query → n/a. Auf `docker exec -e MYSQL_PWD` +
+  einfache Query umstellen (Klon-Funktion selbst ist korrekt).
+- T3: DEV-Label sichtbar machen — `VITE_APP_TITLE` als Docker **build-arg** in
+  compose.dev.yml übergeben (`.dockerignore` schließt `.env*` aus Build-Context,
+  daher aktuell leer). Erst dann zeigt Dev "ProTrackr (DEV)".
+
+**Cleanup-Regel weiter aktiv:** keine Dump-/Backup-Löschung bis gesamter Umzug
+fertig + alle Bugs (task_bba37780 + T1-T3) gelöst.
+
+---
+
+# Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
+
+# Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)
 
 # Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
 
