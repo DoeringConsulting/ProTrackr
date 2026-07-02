@@ -1545,8 +1545,9 @@ mysql-dev nie healthy geworden.
 - `set -a; source .env.dev` in der interaktiven Shell vermeiden (verschmutzt
   Umgebung + bricht an ungequoteten Werten). env_file macht source überflüssig.
 
-**Status:** A2.2 abgeschlossen (Browser-Login-Abnahme bei Doku noch offen).
+**Status:** A2.2 ABGESCHLOSSEN — **Browser-Login in Dev abgenommen ✓**.
 Dev erreichbar `https://dcs01.taile370c2.ts.net:9444` (Prod-Klon).
+**→ Phase A2 komplett fertig. Prod + Dev laufen isoliert nebeneinander.**
 
 **Verbleibende TODOs:** T2 (clone-Skript Row-Count-Anzeige n/a, kosmetisch),
 T3 (VITE_APP_TITLE build-arg für sichtbares DEV-Label), M1/M2/M4, task_bba37780.
