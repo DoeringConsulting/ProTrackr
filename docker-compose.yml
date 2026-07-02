@@ -36,6 +36,15 @@ services:
       NODE_ENV: production
       PORT: 3000
 
+      # Timezone — CRITICAL. The app formats TIMESTAMP dates using the process
+      # LOCAL timezone (see server/db.ts: "Format a Date ... using local
+      # timezone (avoids UTC off-by-one near midnight)"; examples are written
+      # for Europe/Warsaw). Without this the container runs in UTC and
+      # expenses dates (stored as Warsaw-midnight = 22:00/23:00 UTC) render one
+      # day too early. Matches the notebook (Europe/Warsaw) so display is
+      # identical. Data itself is unchanged (TIMESTAMP is UTC internally).
+      TZ: Europe/Warsaw
+
       # Database connection (hostname "mysql" = service name on internal network)
       DATABASE_URL: ${DATABASE_URL}
 
@@ -107,6 +116,15 @@ services:
     command: --lower-case-table-names=1
 
     environment:
+      # Timezone — CRITICAL for TIMESTAMP columns read as strings (drizzle
+      # mode:"string", e.g. expenses.date). MySQL returns TIMESTAMP values in
+      # the server SYSTEM timezone; with the container in UTC those strings are
+      # one day early for Warsaw-midnight values. Setting TZ makes mysqld's
+      # SYSTEM tz = Europe/Warsaw so reads match the notebook. Stored values
+      # are unchanged (TIMESTAMP is UTC internally); only the read/write
+      # conversion follows this tz. Does NOT need the mysql tz tables (that is
+      # only for named `SET time_zone=...`), so MYSQL_INITDB_SKIP_TZINFO stays.
+      TZ: Europe/Warsaw
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
