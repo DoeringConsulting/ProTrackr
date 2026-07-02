@@ -1331,6 +1331,36 @@ statt production (generate-version.js Default). Kosmetik, Health-Gate prüft nur
 
 ---
 
-# Phase A / A2-A5 (folgt)
+## 2026-07-02 — Phase A / A1: ABGESCHLOSSEN (tzdata verifiziert, Browser-Abnahme)
+
+**tzdata-Rebuild verifiziert:**
+- `docker compose up -d --build app` (build-Layer gecached, nur runtime neu mit tzdata).
+- Vorher `docker exec protrackr-app date` = UTC → Nachher = **CEST** ✓,
+  `TZ env: Europe/Warsaw` ✓, app healthy, version 2.1.8.
+- version.json `buildTime` blieb alt (build-Layer gecached) — harmlos, Version stimmt.
+
+**Browser-Abnahme (User):** Reisekosten-Datumsanzeige jetzt korrekt ✓.
+
+**→ Thema 1 (Zeitzone) vollständig erledigt.** Beide Container CEST.
+
+**A1-Status: DONE.**
+- Prod v2.1.8 + echte Daten (170 timeEntries, 195 expenses), TZ korrekt,
+  erreichbar `https://dcs01.taile370c2.ts.net:9443`.
+- Rollback-Netz weiter aktiv (freeze/nas-A1-start, prod-pre-A1-*.sql,
+  prod-pre-import-*.sql, Image protrackr-app:pre-A1-v2.0.4) — bewusst behalten
+  bis Prod ein paar Tage stabil läuft.
+- Migrations-Dumps (protrackr-dump-*) zum Aufräumen freigegeben (redundant nach
+  Import); Laptop-Original-Dump vorerst behalten (Re-Import-Quelle).
+
+**Offen (Thema 2, separat):** Reisekosten-Attribution-Bug → Main-Chat,
+task_bba37780. Kein nas-setup-Thema.
+
+**Nächste Phase: A2 — Dev-Stack.**
+
+---
+
+# Phase A / A2 — Dev-Stack aufbauen (folgt)
+
+# Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
 
 # Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)
