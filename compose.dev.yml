@@ -44,34 +44,21 @@ services:
       mysql:
         condition: service_healthy
 
+    # KRITISCH: env_file liest .env.dev EXPLIZIT in den Container. Ohne dies
+    # würde `docker compose -f compose.dev.yml` die Default-Datei .env (PROD!)
+    # für ${VAR}-Interpolation heranziehen und Dev mit Prod-Credentials starten
+    # (genau der Bug in A2.2). env_file bindet die Werte fest an .env.dev,
+    # unabhängig von --env-file oder Shell-Variablen.
+    env_file:
+      - .env.dev
     environment:
-      NODE_ENV: production   # gebaute App wird serviert (kein Vite-Dev-Server);
-                             # "dev" meint die Umgebung, nicht den Node-Modus.
+      # Feste, umgebungsunabhängige Werte. Alles Übrige (DATABASE_URL, Secrets,
+      # SMTP, MYSQL_*) kommt aus .env.dev via env_file oben.
+      NODE_ENV: production
       PORT: 3000
-
-      # Timezone — wie Prod (siehe docker-compose.yml für die ausführliche
-      # Begründung: expenses.date TIMESTAMP-Shift ohne Europe/Warsaw).
       TZ: Europe/Warsaw
-
-      # DATABASE_URL zeigt auf den dev-mysql (Service "mysql" im dev-Netzwerk).
-      DATABASE_URL: ${DATABASE_URL}
-
-      SESSION_SECRET: ${SESSION_SECRET}
-      JWT_SECRET: ${JWT_SECRET}
-      SCHEDULER_API_KEY: ${SCHEDULER_API_KEY}
-      CRON_SECRET: ${CRON_SECRET}
-
       SESSION_COOKIE_SECURE: "true"
       SESSION_COOKIE_SAMESITE: lax
-
-      # SMTP — in Dev standardmäßig LEER (keine echten Mails aus der
-      # Test-Umgebung). Bei Bedarf in .env.dev füllen (z.B. Test-Postfach).
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_SECURE: ${SMTP_SECURE}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASS: ${SMTP_PASS}
-      SMTP_FROM: ${SMTP_FROM}
 
     ports:
       # Host 3011 (Prod = 3010). Tailscale Serve später: :9444 → localhost:3011.
@@ -106,12 +93,12 @@ services:
     # enthalten und Drizzle camelCase liest. Siehe docker-compose.yml.
     command: --lower-case-table-names=1
 
+    # env_file wie beim app-Service — MYSQL_* kommen fest aus .env.dev,
+    # niemals versehentlich aus der Prod-.env.
+    env_file:
+      - .env.dev
     environment:
       TZ: Europe/Warsaw
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_INITDB_SKIP_TZINFO: "1"
 
     volumes:

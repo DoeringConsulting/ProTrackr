@@ -1470,6 +1470,53 @@ periodischer Klon-Job (Cron mit `--yes`).
 **Cleanup-Regel weiter aktiv:** keine Dump-/Backup-Löschung bis gesamter Umzug
 fertig + alle Bugs (task_bba37780 + T1-T3) gelöst.
 
+## 2026-07-02 — Phase A / A2.2b: Login-Bug im Dev-Stack — Ursache + Datei-Fix
+
+**Symptom:** Dev-App (`:9444`) lädt, aber Login mit Prod-Credentials scheitert.
+
+**Root Cause (zwei verkettete Fehler, PROD UNBERÜHRT):**
+1. **`--env-file .env.dev` vergessen:** `docker compose -f compose.dev.yml`
+   liest per Default die `.env` (= PROD-Werte!) für `${VAR}`-Interpolation, nicht
+   `.env.dev`. → mysql-dev-Volume wurde beim ersten Init mit **Prod-DB-
+   Passwörtern** angelegt.
+2. **Shell-Verschmutzung:** Der frühere `set -a; source .env.dev`-Daten-Check
+   scheiterte an `VITE_APP_TITLE=ProTrackr (DEV)` (unquotete Klammern =
+   bash-Syntaxfehler), hatte aber vorher via `set -a` die **Dev-Werte** in die
+   Shell exportiert. Der folgende `up --build app` nahm diese Shell-Dev-Werte
+   → app-dev bekam Dev-DATABASE_URL.
+   → Ergebnis: app-dev (Dev-PW) ↔ mysql-dev-Volume (Prod-PW) = Mismatch →
+   keine DB-Verbindung → Login scheitert. (Bestätigt durch Access-denied bei
+   `docker exec … root`.)
+
+**Datei-Fix (Commit siehe unten) — behebt beide Wurzeln dauerhaft:**
+- `compose.dev.yml`: beide Services bekommen `env_file: [.env.dev]`. Damit
+  kommen ALLE variablen Werte fest aus `.env.dev`, unabhängig von `--env-file`
+  oder Shell-Variablen. Kein `${VAR}`-Interpolations-Fallback auf Prod-`.env`
+  mehr.
+- `.env.dev.example`: `VITE_APP_TITLE="ProTrackr (DEV)"` (gequotet) → kein
+  source-Syntaxfehler mehr (deckt T1 ab).
+
+**Wiedereinstieg — Dev sauber neu aufsetzen (Dev ist Wegwerf, Prod bleibt):**
+```bash
+cd /mnt/user/appdata/protrackr
+git fetch origin && git reset --hard origin/nas-setup   # gefixtes compose.dev.yml
+# WICHTIG: neues/frisches Web-Terminal ODER `exec bash` — verschmutzte
+#          Shell-Variablen (MYSQL_ROOT_PASSWORD etc.) loswerden.
+docker compose -f compose.dev.yml down -v                # nur Dev-Volume weg
+docker compose -f compose.dev.yml up -d mysql            # jetzt .env.dev-Creds
+#   auf healthy warten, dann:
+./scripts/clone-prod-to-dev.sh --yes                     # Prod -> Dev Klon
+docker compose -f compose.dev.yml up -d --build app      # app-dev, gleiche Creds
+#   Test: https://dcs01.taile370c2.ts.net:9444  (Login mit Prod-Credentials)
+```
+`down -v` betrifft nur den `protrackr-dev`-Stack (eigenes Volume/Netz) — Prod
+(`protrackr`-Projekt, `mysql_data`) bleibt unberührt. Die bestehende `.env.dev`
+auf dem NAS wird weiterverwendet (Credentials in sich konsistent); mit env_file
+ziehen jetzt app-dev UND mysql-dev dieselben Werte.
+
+**PROD-Status:** unverändert erreichbar auf `:9443`, buildTime 14:29 — der
+gesamte Dev-Fehler war vollständig isoliert.
+
 ---
 
 # Phase A / A3-A4 — Dev-Loop + Image-Promotion (folgt)
