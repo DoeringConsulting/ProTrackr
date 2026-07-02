@@ -225,6 +225,7 @@ export default function TimeTracking() {
   const [tempHotelNights, setTempHotelNights] = useState('1');
   const [tempFullDay, setTempFullDay] = useState(false);
   const [editingExpense, setEditingExpense] = useState<number | null>(null);
+  const [tempExpenseCustomerId, setTempExpenseCustomerId] = useState<string>("");
   const [isMobile, setIsMobile] = useState(false);
 
   // Mobile detection
@@ -348,6 +349,7 @@ export default function TimeTracking() {
     setTempHotelCheckInDate(defaultDate);
     setTempHotelNights("1");
     setTempFullDay(false);
+    setTempExpenseCustomerId("");
   };
 
   // Bulk copy functionality temporarily disabled
@@ -916,6 +918,9 @@ export default function TimeTracking() {
                                   setTempHotelCheckInDate(hotelCheckIn);
                                   setTempHotelNights(String(dayDiff(hotelCheckIn, hotelCheckOut)));
                                   setTempFullDay(Boolean(expense.fullDay));
+                                  setTempExpenseCustomerId(
+                                    expense.customerId != null ? String(expense.customerId) : ""
+                                  );
                                   setSelectedExpenseDate(parseDateKey(expenseDateKey));
                                   setIsExpensesDialogOpen(true);
                                 }}
@@ -1231,6 +1236,10 @@ export default function TimeTracking() {
                     currency: tempExpenseCurrency,
                     comment: tempExpenseComment || undefined,
                     fullDay: tempFullDay,
+                    // Manuelle Kundenzuweisung (Fehler #2, Option B): explizit
+                    // gesetzt gewinnt datumsunabhängig; null = automatische
+                    // (datumsbasierte) Zuordnung in den Berichten.
+                    customerId: tempExpenseCustomerId ? Number(tempExpenseCustomerId) : null,
                   };
 
                   if (tempExpenseCategory === "flight") {
@@ -1489,6 +1498,31 @@ export default function TimeTracking() {
                     onChange={(e) => setTempFullDay(e.target.checked)}
                   />
                   <Label htmlFor="expense-full-day">Ganzer Tag</Label>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="expense-customer">Kunde/Projekt (optional)</Label>
+                  <Select
+                    value={tempExpenseCustomerId || "none"}
+                    onValueChange={(value) =>
+                      setTempExpenseCustomerId(value === "none" ? "" : value)
+                    }
+                  >
+                    <SelectTrigger id="expense-customer">
+                      <SelectValue placeholder="Kein Kunde (automatische Zuordnung)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Kein Kunde (automatische Zuordnung)</SelectItem>
+                      {(customers ?? []).map((customer: any) => (
+                        <SelectItem key={customer.id} value={String(customer.id)}>
+                          {customer.projectName} - {customer.provider}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Nur nötig, wenn die automatische Zuordnung über den Arbeitstag
+                    nicht greift – z.B. für exklusiv abgerechnete Kunden.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="expense-comment">Kommentar (optional)</Label>
