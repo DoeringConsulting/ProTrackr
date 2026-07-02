@@ -32,6 +32,7 @@ import {
   calculateProvisionCents,
   provisionConfigFromCustomer,
 } from "@/lib/provision";
+import { getExpenseBillingCustomerId as attributeExpenseToCustomer } from "@/lib/expenseAttribution";
 
 const EXPENSE_CATEGORY_LABELS: Record<
   string,
@@ -303,6 +304,30 @@ export default function Reports() {
     [expenses, reportRateMap, entriesById, customersById]
   );
 
+  // ── Fehler #2 (Sobrietas exclusive): abrechnungsrelevanter Kunde eines Belegs ──
+  // Zentrale Zuordnungslogik (Cutover 01.07.2026 + Option-B-Override: explizite
+  // customerId gewinnt datumsunabhängig) liegt in lib/expenseAttribution und
+  // wird mit ProjectDetail geteilt.
+
+  // Datums-Key → Kunden-IDs mit einem Time-Entry an diesem Tag (für den
+  // datumsbasierten Fallback, analog zur Reisekosten-Analyse-Seite).
+  const customerIdsByDate = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+    for (const entry of timeEntries) {
+      const key = toDateKey(entry.date);
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, new Set<number>());
+      map.get(key)!.add(Number(entry.customerId));
+    }
+    return map;
+  }, [timeEntries]);
+
+  // Ermittelt den abrechnungsrelevanten Kunden eines Belegs (customerId oder
+  // null) — delegiert an das geteilte Util, damit Reports und ProjectDetail
+  // exakt dieselbe Zuordnung verwenden.
+  const getExpenseBillingCustomerId = (expense: any): number | null =>
+    attributeExpenseToCustomer(expense, { entriesById, customerIdsByDate });
+
   // Calculate accounting report data
   const calculateAccountingReport = () => {
     const fixedCostsDetailed = fixedCosts.map((cost) => {
@@ -358,10 +383,9 @@ export default function Reports() {
       0
     );
     const travelRevenueInGrossPln = expensesDetailed.reduce((sum, expense) => {
-      if (!expense.timeEntryId) return sum;
-      const relatedEntry = entriesById.get(expense.timeEntryId);
-      if (!relatedEntry) return sum;
-      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      const billingCustomerId = getExpenseBillingCustomerId(expense);
+      if (billingCustomerId == null) return sum;
+      const relatedCustomer = customersById.get(billingCustomerId);
       if (relatedCustomer?.costModel !== "exclusive") return sum;
       return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
     }, 0);
@@ -423,10 +447,9 @@ export default function Reports() {
         // Add travel revenue from exclusive customers
         for (const expense of expensesDetailed) {
           if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
-          if (!expense.timeEntryId) continue;
-          const relatedEntry = entriesById.get(expense.timeEntryId);
-          if (!relatedEntry) continue;
-          const relatedCustomer = customersById.get(relatedEntry.customerId);
+          const billingCustomerId = getExpenseBillingCustomerId(expense);
+          if (billingCustomerId == null) continue;
+          const relatedCustomer = customersById.get(billingCustomerId);
           if (relatedCustomer?.costModel !== "exclusive") continue;
           monthRevenuePln += convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
         }
@@ -493,10 +516,9 @@ export default function Reports() {
       0
     );
     const travelRevenueInGross = expensesDetailed.reduce((sum, expense) => {
-      if (!expense.timeEntryId) return sum;
-      const relatedEntry = entriesById.get(expense.timeEntryId);
-      if (!relatedEntry) return sum;
-      const relatedCustomer = customersById.get(relatedEntry.customerId);
+      const billingCustomerId = getExpenseBillingCustomerId(expense);
+      if (billingCustomerId == null) return sum;
+      const relatedCustomer = customersById.get(billingCustomerId);
       if (relatedCustomer?.costModel !== "exclusive") return sum;
       return sum + (expense.amountEur ?? 0);
     }, 0);
@@ -588,9 +610,7 @@ export default function Reports() {
 
     // Calculate expenses for this customer
     const customerExpenses = expensesDetailedAll.filter(expense => {
-      // Find the time entry for this expense
-      const timeEntry = timeEntries.find(te => te.id === expense.timeEntryId);
-      return timeEntry && timeEntry.customerId === selectedCustomerId;
+      return getExpenseBillingCustomerId(expense) === selectedCustomerId;
     });
     const customerExpensesDetailed = customerExpenses;
 

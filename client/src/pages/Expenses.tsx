@@ -60,11 +60,16 @@ export default function Expenses() {
   const { startDate, endDate } = useMemo(() => {
     if (filterPeriod === "month") {
       const [year, month] = selectedMonth.split("-");
-      const start = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const end = new Date(parseInt(year), parseInt(month), 0);
+      // Monatsgrenzen direkt als YYYY-MM-DD-String bauen — NICHT über
+      // toISOString(). new Date(y, m, 1/0) erzeugt lokale Mitternacht; bei
+      // Zeitzone UTC+2 kippt .toISOString() diese auf 22:00 UTC des Vortags
+      // und verschiebt so jeden Monat um einen Tag nach vorn (der 30.06.
+      // rutschte dadurch in den Juli-Zeitraum).
+      const mm = month.padStart(2, "0");
+      const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
       return {
-        startDate: start.toISOString().split("T")[0],
-        endDate: end.toISOString().split("T")[0],
+        startDate: `${year}-${mm}-01`,
+        endDate: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
       };
     } else if (filterPeriod === "year") {
       return {

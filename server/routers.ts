@@ -1504,6 +1504,7 @@ export const appRouter = router({
     create: protectedProcedure.input((val: unknown) => {
       return z.object({
         timeEntryId: z.number().optional(),
+        customerId: z.number().nullable().optional(), // direkte Kundenzuordnung (Standalone-Belege ab 01.07.2026)
         date: z.string().optional(), // ISO date string for standalone expenses
         category: expenseCategorySchema,
         distance: z.number().optional(),
@@ -1616,6 +1617,7 @@ export const appRouter = router({
     update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
+        customerId: z.number().nullable().optional(), // direkte Kundenzuordnung (Standalone-Belege ab 01.07.2026)
         date: z.string().optional(),
         category: expenseCategorySchema.optional(),
         distance: z.number().optional(),
@@ -1702,33 +1704,6 @@ export const appRouter = router({
 
       await deleteExpense(input.id);
       return { success: true };
-    }),
-    aggregateByCustomer: protectedProcedure.input((val: unknown) => {
-      return z.object({
-        customerId: z.number(),
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
-      }).parse(val);
-    }).query(async ({ ctx, input }) => {
-      const { getExpensesByCustomer, listUsersByMandantId } = await import("./db");
-      const startDate = input.startDate ? new Date(input.startDate) : undefined;
-      const endDate = input.endDate ? new Date(input.endDate) : undefined;
-
-      if (isWebAppAdmin(ctx.user)) {
-        return [];
-      }
-
-      if (isMandantAdmin(ctx.user) && ctx.user.mandantId) {
-        const mandantUsers = await listUsersByMandantId(ctx.user.mandantId);
-        const result = await Promise.all(
-          mandantUsers.map((user) =>
-            getExpensesByCustomer(user.id, input.customerId, startDate, endDate)
-          )
-        );
-        return result.flat();
-      }
-
-      return await getExpensesByCustomer(ctx.user.id, input.customerId, startDate, endDate);
     }),
   }),
 

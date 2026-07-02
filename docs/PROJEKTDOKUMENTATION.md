@@ -244,7 +244,7 @@ Die Anwendung basiert auf einem modernen Full-Stack-Technologie-Stack mit React 
 **damit** ich Budgets überwachen kann.
 
 **Akzeptanzkriterien:**
-- Aggregations-Endpunkt expenses.aggregateByCustomer
+- Client-seitige Aggregation über expenses.list + expenseAttribution.ts
 - ProjectDetail-Seite mit Diagramm-Visualisierung
 - Säulendiagramm und Kuchendiagramm nach Kostenart
 - Filter: Monat, Jahr, Projektlaufzeit, Durchschnitt
@@ -641,7 +641,6 @@ appRouter = {
     createBatch: protectedProcedure.input(BatchExpenseSchema).mutation(),
     update: protectedProcedure.input(ExpenseUpdateSchema).mutation(),
     delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(),
-    aggregateByCustomer: protectedProcedure.input(AggregateSchema).query(),
   },
   fixedCosts: {
     list: protectedProcedure.query(),

@@ -50,6 +50,17 @@ afterAll(async () => {
     }
 
     await conn.execute(`DELETE FROM exchangeRates WHERE source = 'Manual Test'`);
+
+    // Standalone fixtures with no FK to a test customer, so the cascade above
+    // can never reach them. Historically these leaked on every run and piled up
+    // in the dev DB (a standalone flight from expenses.test.ts; five fixedCosts
+    // rows per run from fixedCosts.test.ts + settings.test.ts). They now carry a
+    // sentinel marker so this teardown can delete exactly them and nothing real:
+    //   - the flight fixture sets comment = 'VTEST_EXPENSE_FIXTURE'
+    //   - every fixedCosts fixture uses a 'VTEST-' category prefix
+    // Real user rows never use these markers, so no production data is at risk.
+    await conn.execute(`DELETE FROM expenses WHERE comment = 'VTEST_EXPENSE_FIXTURE'`);
+    await conn.execute(`DELETE FROM fixedCosts WHERE category LIKE 'VTEST-%'`);
   } finally {
     await conn.end();
   }

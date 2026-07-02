@@ -156,6 +156,10 @@ describe("expenses", () => {
       currency: "EUR",
       flightRouteType: "international",
       departureTime: "08:20",
+      // Sentinel comment: this standalone flight has no timeEntry/customer link,
+      // so the customer-cascade teardown in vitest.setup.ts cannot reach it.
+      // The teardown deletes by exactly this marker instead.
+      comment: "VTEST_EXPENSE_FIXTURE",
     });
 
     expect(result).toBeDefined();

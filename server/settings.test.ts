@@ -153,7 +153,7 @@ describe("Settings API Tests", () => {
 
     it("should create fixed cost", async () => {
       const testCost = {
-        category: "Test Auto",
+        category: "VTEST-Auto-PLN",
         amount: 50000, // 500.00 PLN
         currency: "PLN",
         description: "Test Fixkosten",
@@ -161,7 +161,7 @@ describe("Settings API Tests", () => {
 
       await caller.fixedCosts.create(testCost);
       const costs = await caller.fixedCosts.list();
-      const created = costs.find((c: any) => c.category === "Test Auto");
+      const created = costs.find((c: any) => c.category === "VTEST-Auto-PLN");
       expect(created).toBeDefined();
       expect(created?.amount).toBe(50000);
     });
