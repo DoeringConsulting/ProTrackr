@@ -70,10 +70,16 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 # -----------------------------------------------------------------------------
 FROM node:22-alpine AS runtime
 
-# Add wget for healthcheck (Alpine includes BusyBox wget by default — fine)
+# tzdata: Alpine ships NO timezone database, so TZ=Europe/Warsaw (set in
+# docker-compose.yml) would silently fall back to UTC and the app would
+# format dates in UTC (off-by-one on Warsaw-midnight values). Installing
+# tzdata makes the TZ env var resolve, so Node's local timezone == Warsaw,
+# matching the mysql container and the notebook.
+#
 # corepack/pnpm only needed if we want to run pnpm db:push at runtime.
 # Kept enabled to allow ad-hoc drizzle-kit migrations via docker exec.
-RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+RUN apk add --no-cache tzdata \
+ && corepack enable && corepack prepare pnpm@10.4.1 --activate
 
 WORKDIR /app
 
