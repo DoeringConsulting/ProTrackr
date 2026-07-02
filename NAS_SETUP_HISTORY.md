@@ -1180,4 +1180,93 @@ Alle drei können auch in einem Rutsch erledigt werden (~75-90 Min Gesamtzeit) �
 
 ---
 
-# Phase 6 — Notebook-Server abschalten / Switchover (folgt)
+# Phase A — Zwei-Umgebungen-Rollout (Deployment-Blueprint)
+
+> Ab hier folgt die Umsetzung des `docs/DEPLOYMENT-BLUEPRINT.md` (kam mit dem
+> v2.1.8-Merge auf nas-setup). Ziel: Prod (echte Daten) + Dev (Test) auf dem
+> NAS, Image-Promotion Dev→Prod. Rollout manuell nach den Leitplanken des
+> `nas-rollout`-Skills. Phase 6 (localhost abschalten) = Schritt A5.
+
+## 2026-07-02 — Phase A / A1: Prod scharfstellen (v2.1.8 + echte Laptop-Daten)
+
+**Ausgangslage:**
+- NAS-Prod lief v2.0.4 mit Daten von Ende Mai (124 timeEntries, 170 expenses).
+- Laptop-DB war **aktueller**: 170 timeEntries, 195 expenses, v2.1.1-Schema
+  (Spalte `expenses.customerId` aus Migration 0024 vorhanden).
+- origin/main HEAD war v2.1.8; **schema-identisch** zu v2.1.1 (keine neuen
+  Migrationen zwischen v2.1.1 und v2.1.8 — nur Code/Bugfixes).
+- User-Entscheidung: Prod-Ziel = **v2.1.8** (nahtloser Übergang, Laptop-Stand).
+
+**A1.0 — Backup + Freeze:**
+- DB-Backup NAS: `db-migration/prod-pre-A1-2026-07-02_15-27-28.sql` (124 KB, 16 Tabellen).
+- Git-Freeze-Tag `freeze/nas-A1-start` → `dacbda6`, auf origin gepusht.
+- Altlast `.env.bak.before-nano` gelöscht (Secret-Hygiene).
+
+**A1.1 — Laptop-Dump + Version/Schema-Check:**
+- Laptop-DB inspiziert: 170 timeEntries, 195 expenses, customerId-Spalte vorhanden.
+- Laptop-Server läuft v2.1.8 (localhost:3001/version.json).
+- Frischer Dump via `migrate-db.ps1`: `protrackr-dump-2026-07-02_15-52-19.sql.gz`
+  (22 KB). Verifiziert: 16 Tabellen, sauberes Ende (`-- Dump completed`),
+  customerId im Schema.
+- **Skript-Beobachtung:** mysqldump warnte `Access denied ... PROCESS privilege`
+  beim Tablespace-Dump (harmlos, Dump vollständig). TODO: `--no-tablespaces`
+  in migrate-db.ps1 ergänzen (in A1.4-Backup schon manuell genutzt).
+
+**A1.3 — Code auf v2.1.8 (Merge main → nas-setup):**
+- Trockenlauf (`git merge --no-commit --no-ff origin/main`): **konfliktfrei**.
+- Verifiziert: package.json 2.0.4 → 2.1.8 (auto, kein Konflikt); **KEINE
+  NAS-Config berührt** (Dockerfile, docker-compose.yml, migrate-db.*,
+  NAS_SETUP_*, .dockerignore alle unverändert — Leitplanke eingehalten);
+  neue Migration `0024_expenses_customer_id.sql`; 32 Dateien, +1700/-220.
+- Merge-Commit `e4951fb`, gepusht. Pre-commit-Tests 11/11 grün.
+- NAS: `git fetch && git reset --hard origin/nas-setup` → Code v2.1.8 auf NAS
+  (laufende App blieb vorerst v2.0.4).
+
+**Zwischenfall — SSH-Host-Key-Wechsel:**
+- scp vom Laptop scheiterte mit `REMOTE HOST IDENTIFICATION HAS CHANGED`.
+- Ursache: Unraid-Update 7.2.5 → **7.3.1** + Tailscale-Key-Rotation. Der native
+  `/etc/ssh/ssh_host_ed25519_key.pub` existiert gar nicht → Verbindung läuft
+  über **Tailscale SSH** (Sicherheit via WireGuard-Tunnel, nicht via SSH-Host-Key).
+- Lösung: alten known_hosts-Eintrag entfernt (`ssh-keygen -R`, Backup als
+  known_hosts.old), scp erneut → Tailscale SSH authentifizierte neu (Exit 0).
+
+**A1.4 — Daten-Import + Rebuild (der zerstörerische Schritt, mit Freigabe):**
+- A1.4.1: v2.0.4-Image als Rollback gesichert: `protrackr-app:pre-A1-v2.0.4` (35d90e0).
+- A1.4.2: Dump auf NAS übertragen (scp, 22 KB, gzip OK).
+- Vorab verifiziert: **keine Auto-Migration** beim App-Start (`CMD ["node",
+  "dist/index.js"]`, kein drizzle-kit migrate in server/) → kein Schema-Konflikt
+  beim v2.1.8-Start gegen importiertes 0024-Schema.
+- Import-Ablauf (ein Block): frisches Backup `prod-pre-import-...sql` (124 KB) →
+  `docker compose stop app` → `migrate-db.sh` (auto-yes) → `docker compose up -d
+  --build app` → Health-Wait → version.json + Daten-Stichprobe.
+
+**Ergebnis A1 (Health-Gate bestanden):**
+| Check | Wert |
+|---|---|
+| Build | 32,5 s, Image `2a81e04f` |
+| App-Health | healthy in 15 s |
+| version.json | **2.1.8** (buildTime 2026-07-02T14:29) |
+| timeEntries | **170** ✓ (Laptop-Stand) |
+| expenses | **195** ✓ (Laptop-Stand) |
+| customers | 3 ✓ |
+| Crash | keiner |
+
+**Rollback-Netz (stand bereit, nicht gebraucht):**
+- Daten: `prod-pre-A1-...sql` + `prod-pre-import-...sql`
+- Code: `freeze/nas-A1-start` (dacbda6)
+- Image: `protrackr-app:pre-A1-v2.0.4` (35d90e0)
+
+**Offen nach A1:**
+- Browser-Endabnahme durch User (Login + neueste Daten sichtbar).
+- Nach Bestätigung: Dump-Dateien auf NAS sicher löschen (`shred -u`).
+- **Kosmetik:** version.json zeigt `"environment": "development"` statt production
+  (generate-version.js Default; beeinflusst Health-Gate nicht, prüft nur `version`).
+  → Maintenance-TODO M4.
+- Weiter mit A2 (Dev-Stack: compose.dev.yml, .env.dev, Port 3011, Tailscale :9444,
+  mysql-dev als Prod-Klon).
+
+---
+
+# Phase A / A2-A5 (folgt)
+
+# Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)
