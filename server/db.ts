@@ -842,7 +842,9 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
     .select({
       id: expenses.id,
       timeEntryId: expenses.timeEntryId,
-      customerId: sql<number | null>`NULL`,
+      // Direkte Kundenzuordnung des Standalone-Belegs (Spalte seit Migration
+      // 0024). Alt-Belege sind NULL (Decision D: kein Backfill).
+      customerId: expenses.customerId,
       category: expenses.category,
       amount: expenses.amount,
       currency: expenses.currency,

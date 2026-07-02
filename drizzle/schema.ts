@@ -149,6 +149,10 @@ export type InsertTimeEntry = typeof timeEntries.$inferInsert;
 export const expenses = mysqlTable("expenses", {
   id: int("id").autoincrement().primaryKey(),
   timeEntryId: int("timeEntryId").references(() => timeEntries.id, { onDelete: "cascade", onUpdate: "cascade" }),
+  // Direkte Kundenzuordnung für Standalone-Belege (ab 01.07.2026). Nullable —
+  // Alt-Belege bleiben NULL (Decision D: kein Backfill). Wird für die
+  // exclusive-Abrechnung in den Berichten genutzt.
+  customerId: int("customerId").references(() => customers.id, { onDelete: "set null", onUpdate: "cascade" }),
   userId: int("userId").references(() => users.id, { onDelete: "set null", onUpdate: "cascade" }), // owner for standalone expenses (and optional duplicate for linked)
   date: timestamp("date", { mode: "string" }).notNull(), // Direct date for standalone expenses
   category: mysqlEnum("category", [

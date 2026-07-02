@@ -1504,6 +1504,7 @@ export const appRouter = router({
     create: protectedProcedure.input((val: unknown) => {
       return z.object({
         timeEntryId: z.number().optional(),
+        customerId: z.number().nullable().optional(), // direkte Kundenzuordnung (Standalone-Belege ab 01.07.2026)
         date: z.string().optional(), // ISO date string for standalone expenses
         category: expenseCategorySchema,
         distance: z.number().optional(),
@@ -1616,6 +1617,7 @@ export const appRouter = router({
     update: protectedProcedure.input((val: unknown) => {
       return z.object({
         id: z.number(),
+        customerId: z.number().nullable().optional(), // direkte Kundenzuordnung (Standalone-Belege ab 01.07.2026)
         date: z.string().optional(),
         category: expenseCategorySchema.optional(),
         distance: z.number().optional(),
