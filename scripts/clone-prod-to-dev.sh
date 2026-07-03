@@ -63,7 +63,12 @@ echo ""
 
 # --- Helfer: Query in einem DB-Container ausfuehren (nutzt Container-internes PW)
 db_query() {  # $1 = container, $2 = sql
-  docker exec "$1" sh -c "exec mysql -u root -p\"\$MYSQL_ROOT_PASSWORD\" -N -se \"$2\"" 2>/dev/null
+  # SQL kommt via STDIN an mysql (nicht als Argument durch eine zweite Shell).
+  # Sonst interpretiert die innere sh Backticks in der SQL als Command-
+  # Substitution — genau das erzeugte die frueheren "n/a"-Row-Counts, weil die
+  # Verifikations-Query Tabellennamen in Backticks quotet. Passwort bleibt
+  # container-intern (single-quoted, wird erst in der Container-Shell expandiert).
+  printf '%s\n' "$2" | docker exec -i "$1" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" -N -s' 2>/dev/null
 }
 
 # --- Helfer: Container laeuft + healthy? -------------------------------------
