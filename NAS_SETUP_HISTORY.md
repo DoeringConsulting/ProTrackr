@@ -1736,4 +1736,53 @@ wird obsolet — neuer Main-Test-Weg zu klären).
 
 ---
 
-# Phase A / A5 — Ausführung (folgt in neuer Sitzung)
+## 2026-07-03 — Phase A / A5: ABGESCHLOSSEN (localhost aus, MySQL84 Manual)
+
+**Ausführung zweigeteilt (Welt-Trennung gewahrt):**
+
+**Main-Chat (Schritt 2 — App-Repo-Code auf `main`):**
+- Server-Restart-Block aus `.husky/post-commit` entfernt (Z. 110–123 + Kommentar);
+  Auto-Version-Bump + Production-Build + git-amend bleiben unverändert.
+- Commit `730fb94` „chore: retire localhost:3001 auto-restart from post-commit
+  (NAS is sole instance)" → **v2.1.9**, auf main + origin gepusht.
+- Validiert: der post-commit-Hook lief bereits in neuer Form (Output **ohne**
+  „Server-Restart") → kein main-Commit startet localhost:3001 mehr neu.
+- Memory `feedback_deploy_workflow` komplett auf die Post-A5-Welt umgeschrieben
+  (main-Commits nur committen+pushen; Deploy via `/nas-rollout` im NAS-Chat;
+  lokal testen via tsc/vitest/`npm run dev`/NAS-Dev :9444). Main-Handover
+  `HANDOVER-MAIN.md` erstellt (Commit `64864cc`, v2.1.10).
+
+**NAS-Chat (Schritte 1, 3, 4):**
+- **Bestandsaufnahme (read-only):** localhost:3001-Server lief bereits nicht
+  (kein Port-3001-Listener, keine node-Prozesse). Kein Windows-Autostart
+  (Scheduled Tasks / Startup-Ordner / Registry Run alle ohne ProTrackr).
+- **Schritt 1 — MySQL84:** vom User in Admin-PowerShell `Stop-Service MySQL84
+  -Force` + `Set-Service MySQL84 -StartupType Manual`. Verifiziert:
+  **`MySQL84  Stopped  Manual`** ✓. (NAS-Session selbst ist non-elevated.)
+- **Schritt 3 — Verifikation Endzustand:** Port 3001 frei, keine node-Prozesse,
+  MySQL84 Stopped/Manual. Der geplante „Test-Commit auf main"-Beweis war bereits
+  durch `730fb94` (Hook-Output ohne Restart) erbracht — nicht wiederholt
+  (NAS-Chat macht keine main-Commits, Welt-Trennung).
+- **Schritt 4 — Doku:** dieser Eintrag, Handover §6 auf erledigt, Memory
+  `project_a5_localhost_shutdown` auf DONE.
+
+**Endzustand:**
+- Laptop-`localhost:3001` **abgeschaltet und bleibt es** (kein Auto-Start, kein
+  Hook-Restart mehr). Notebook-MySQL84 gestoppt + Manual (Daten bleiben,
+  Re-Import-Quelle; vor lokalen main-Tests ggf. manuell starten).
+- **NAS = einzige laufende Instanz:** Prod `https://dcs01.taile370c2.ts.net:9443`
+  + Dev `:9444`, beide v2.1.8, Guard reboot-fest, Governance (PROD nur via
+  Promotion) aktiv.
+
+**→ PHASE A KOMPLETT.** Zwei-Umgebungen-Rollout (Prod + Dev auf dem NAS,
+Image-Promotion, Governance-Guards) vollständig live; der alte localhost-Weg ist
+stillgelegt.
+
+**Cleanup-Regel weiter aktiv:** keine Löschung von Dump-/Backup-Dateien
+(Migrations-Dumps + `prod-pre-*`) bis der GESAMTE Umzug fertig UND alle Bugs
+(v.a. `task_bba37780`) gelöst sind. task_bba37780 (Reisekosten-Attribution)
+bleibt offen → Main-Chat, siehe `HANDOVER-MAIN.md` §6.1.
+
+---
+
+# Phase A — ABGESCHLOSSEN ✓ (A1–A5 komplett; offen nur noch main-seitige App-Bugs)

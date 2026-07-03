@@ -2,8 +2,8 @@
 
 > **Zweck:** Vollständiger, self-contained Wiedereinstiegspunkt. Wer dieses
 > Dokument + die Memory-Dateien liest, hat den kompletten Stand ohne Verluste.
-> **Stand:** 2026-07-03 (2. Update, A5-Vorbereitung) · **Branch:** `nas-setup` (HEAD nach diesem Doku-Commit) · **Phase A zu ~95 %**
-> **Nächster Schritt:** A5 (localhost abschalten) — **Entscheidungen getroffen, Ausführung in neuer Sitzung** (Plan in §6). Dieses Handover ist der Wiedereinstiegspunkt.
+> **Stand:** 2026-07-03 (3. Update, **A5 DONE**) · **Branch:** `nas-setup` (HEAD nach diesem Doku-Commit) · **Phase A KOMPLETT (A1–A5)**
+> **Nächster Schritt:** Keine offenen NAS-Infra-Aufgaben. Offen nur main-seitig: App-Bug `task_bba37780` (siehe `HANDOVER-MAIN.md`) + TODOs T2/T3/M1/M2/M4.
 
 ---
 
@@ -13,11 +13,11 @@ ProTrackr wurde vom Laptop-`localhost` auf einen **Unraid-NAS (DCS01)** umgezoge
 in **zwei isolierte Umgebungen**: **PROD** (echte Daten) + **DEV** (Prod-Klon),
 mit **bit-identischer Image-Promotion** Dev→Prod und einer **Governance-Regel**
 (keine direkten Prod-Änderungen, aktiv per Mail überwacht). A1–A4 sind fertig
-und live getestet. Es fehlt nur **A5** (den alten localhost-Server abschalten) —
-dessen Entscheidungen + Ausführungsplan stehen jetzt in §6; die Ausführung läuft
-in einer **frischen Sitzung** (diese hier stieß ans Context-Limit).
+und live getestet. **A5 ist abgeschlossen:** localhost:3001 abgeschaltet
+(Hook-Restart entfernt via Main-Chat, Commit `730fb94`), Notebook-MySQL84
+gestoppt + auf Manual. **Der NAS ist die einzige laufende Instanz.**
 
-**Alles läuft, alles ist committet + auf GitHub, Prod ist geschützt + überwacht.**
+**Phase A (A1–A5) komplett. Alles committet + auf GitHub, Prod geschützt + überwacht.**
 
 ---
 
@@ -145,7 +145,14 @@ Rollback-Image-Tags `protrackr-app:rollback-*` (falls Promotions liefen).
 
 ## 6. OFFENE PUNKTE
 
-### A5 — localhost abschalten (Entscheidungen getroffen, Ausführung in neuer Sitzung)
+### A5 — localhost abschalten ✅ ABGESCHLOSSEN (2026-07-03)
+
+**Erledigt:** Hook-Restart-Block aus `.husky/post-commit` entfernt (Main-Chat,
+Commit `730fb94` / v2.1.9). MySQL84 gestoppt + StartType Manual (Admin-PS,
+verifiziert `Stopped/Manual`). localhost:3001 aus (Port 3001 frei, keine
+node-Prozesse). NAS (Prod :9443 / Dev :9444) = einzige Instanz. Voller
+Abschluss-Eintrag: HISTORY „A5: ABGESCHLOSSEN". Plan + Befund unten bleiben als
+Referenz.
 
 **Entscheidungen (2026-07-03, User):**
 - **Timing:** jetzt — unabhängig von `task_bba37780`.
