@@ -5,7 +5,7 @@ import net from "net";
 import crypto from "crypto";
 import session from "express-session";
 import cookieParser from "cookie-parser";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import helmet from "helmet";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
@@ -95,7 +95,7 @@ async function startServer() {
       const mandant = normalizeRateLimitValue(body?.mandant);
       const email = normalizeRateLimitValue(body?.email);
       const identityHash = hashRateLimitIdentity(mandant, email);
-      return `${req.ip}:${identityHash}`;
+      return `${ipKeyGenerator(req.ip ?? "")}:${identityHash}`;
     },
   });
   const passwordResetLimiter = rateLimit({
@@ -109,7 +109,7 @@ async function startServer() {
       const mandant = normalizeRateLimitValue(body?.mandant);
       const email = normalizeRateLimitValue(body?.email);
       const identityHash = hashRateLimitIdentity(mandant, email);
-      return `${req.ip}:${identityHash}`;
+      return `${ipKeyGenerator(req.ip ?? "")}:${identityHash}`;
     },
   });
   const registerLimiter = rateLimit({
@@ -127,7 +127,7 @@ async function startServer() {
     message: { error: "Zu viele Passwort-Aenderungsversuche. Bitte in 15 Minuten erneut versuchen." },
     keyGenerator: (req) => {
       const userId = (req as any).user?.id ?? "anon";
-      return `${req.ip}:${userId}`;
+      return `${ipKeyGenerator(req.ip ?? "")}:${userId}`;
     },
   });
   app.use("/api/auth/login", loginLimiter);
