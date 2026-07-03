@@ -1786,3 +1786,29 @@ bleibt offen → Main-Chat, siehe `HANDOVER-MAIN.md` §6.1.
 ---
 
 # Phase A — ABGESCHLOSSEN ✓ (A1–A5 komplett; offen nur noch main-seitige App-Bugs)
+
+---
+
+# Wartungs-TODOs — Abarbeitung (post-A5)
+
+## 2026-07-03 — T2 (clone-prod-to-dev Row-Count) ✅ ERLEDIGT
+**Bug:** `db_query` bettete die SQL in ein zweites `sh -c` ein; die
+Verifikations-Query mit backtick-gequoteten Namen wurde von der inneren Shell als
+Command-Substitution interpretiert → leer → `n/a`. Die backtick-losen
+Bestandsaufnahme-Queries waren nie betroffen.
+**Fix (`3195803`):** SQL via **stdin** an mysql (`printf | docker exec -i … mysql
+-N -s`) statt als Argument durch eine zweite Shell — Backticks bleiben literal,
+Passwort bleibt container-intern. `bash -n` grün.
+**NAS-Verifikation:** gefixte Logik gegen Prod → echte Zahlen (mandanten 3,
+users 2, customers 3, timeEntries 170, expenses 197, exchangeRates 22), kein n/a.
+Angepasster NAS-Loop (Implementierung + Selbst-Review + Syntax-Gate + NAS-Test).
+
+## 2026-07-03 — T3 (VITE_APP_TITLE DEV-Label) — umqualifiziert → main
+**Befund (verifiziert):** `VITE_APP_TITLE` ist im Code **verwaist** — Titel
+hardcoded in `client/index.html:14`, kein `import.meta.env`-Konsum, `vite.config`
+ohne HTML-Env-Mechanismus. Ein build-arg (T3b) allein wäre wirkungslos.
+**Konsequenz:** Wirksamer Kern (T3a: Client liest die Var **mit Fallback**, sonst
+leerer Prod-Titel = Regression) ist App-Code → **main-Welt**; T3b (build-arg in
+compose.dev.yml + Dockerfile) zieht erst danach hier nach. Kosmetisch/Sicherheits-
+Label, niedrige Prio → ins main-Paket.
+**M1/M2/M4:** ebenfalls App-Code (server/_core, generate-version.js) → main-Welt.

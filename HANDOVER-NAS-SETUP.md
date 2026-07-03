@@ -211,10 +211,16 @@ gehört in die A5-Abschluss-Doku + eine kurze Main-Chat-Abstimmung.
   nutzen `timeEntryId`-only statt `getExpenseBillingCustomerId`,
   `client/src/pages/Reports.tsx:1091`). **Gehört auf `main`** (App-Code), NICHT
   nas-setup. Siehe Memory `project_open_fix_expense_attribution_main`.
-- **T2** clone-Skript Row-Count-Anzeige · **T3** VITE_APP_TITLE als build-arg
-  (sichtbares DEV-Label) · **M1** MemoryStore→MySQL-Session · **M2** IPv6
-  Rate-Limit-Key · **M4** version.json `environment:development` (kosmetisch).
-  (Details in `NAS_SETUP_HISTORY.md` Maintenance-Sektion.)
+- **T2** ✅ ERLEDIGT (2026-07-03) — clone-prod-to-dev Row-Count via stdin gefixt
+  (Commit `3195803`), auf NAS verifiziert (echte Zahlen statt n/a).
+- **T3** VITE_APP_TITLE-DEV-Label — **umqualifiziert → main** (Befund 2026-07-03):
+  Var im Code verwaist (Titel hardcoded `client/index.html:14`, kein
+  `import.meta.env`-Konsum). Wirksamer Kern (T3a: Client liest Var **mit Fallback**)
+  = App-Code → main; build-arg (T3b) zieht danach hier nach. Kosmetisch/
+  Sicherheits-Label, niedrige Prio.
+- **M1** MemoryStore→MySQL-Session · **M2** IPv6 Rate-Limit-Key · **M4**
+  version.json `environment:development` — alle **App-Code → main**.
+  (Details: `NAS_SETUP_HISTORY.md` Wartungs-Sektion.)
 
 ### Cleanup-Regel (User, verbindlich)
 KEINE Löschung von Dump-/Backup-Dateien (Migrations-Dumps + `prod-pre-*`) bis der
