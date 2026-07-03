@@ -1679,8 +1679,21 @@ Der Guard nutzt `notify` → Dashboard + Mail.
 **Ehrliche Grenze (unverändert):** root kann den Watcher selbst stoppen — der
 Guard macht direkte Eingriffe **sichtbar** (Alarm), nicht unmöglich.
 
-**Offen:** NAS-Setup (git pull, User Script anlegen, Watcher starten) + Test
-(direkter Event z.B. `docker restart protrackr-app` → Alarm-Mail).
+**Getestet + eingerichtet ✓ (2026-07-03):**
+- Watcher gestartet, `docker restart protrackr-app` (direkter Event) →
+  Guard-Log `DIREKTER Event 'die'/'start' -> ALARM`, `notify OK` → **Alarm-Mail
+  kam an** (a.doering@doering-consulting.eu). Prod danach healthy.
+- Bug gefunden+gefixt (`c1b8995`): Docker 29.x nutzt `.Action` statt `.Status`
+  im events-Format.
+- Autostart: User-Script `protrackr-prod-guard` unter
+  `/boot/config/plugins/user.scripts/scripts/` angelegt (startet den Watcher
+  per nohup, pkill gegen Doppelstart), Schedule **„At Startup of Array"** gesetzt
+  + „Schedule Applied" → **reboot-fest**.
+- Hinweis: `pgrep` zeigt 2 PIDs = 1 Watcher (Haupt-bash + Pipe-Subshell), normal.
+
+**→ A4 KOMPLETT.** Governance-Regel voll umgesetzt: Promotion-Weg
+(deploy-prod.sh) + passiver Guard (Compose-Warnung) + aktiver Guard (Watcher +
+Dashboard + Mail, reboot-fest). Ehrliche Grenze (root) bleibt bestehen.
 
 ---
 
