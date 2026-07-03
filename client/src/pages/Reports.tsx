@@ -33,6 +33,8 @@ import {
   provisionConfigFromCustomer,
 } from "@/lib/provision";
 import { getExpenseBillingCustomerId as attributeExpenseToCustomer } from "@/lib/expenseAttribution";
+import { buildCustomerReportRows } from "@/lib/customerReportRows";
+import { capRateStichtagKey } from "@shared/dateStichtag";
 
 const EXPENSE_CATEGORY_LABELS: Record<
   string,
@@ -143,7 +145,15 @@ export default function Reports() {
       consider(effectiveEnd);
     }
 
-    return maxKey;
+    const youngest = maxKey;
+    if (youngest === null) return null;
+    // Kurs-Stichtag auf den letzten Werktag vor heute cappen (Polish-VAT §9):
+    // Kurse haben keine Zukunft. Liegt das jüngste Leistungs-/Kostendatum in der
+    // Zukunft (laufender Monat / vorab erfasste Termine), liefe der NBP-Call sonst
+    // auf ein Zukunftsdatum → 404-Kaskade → stale Notfall-Kurs (task_bba37780 K1).
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    return capRateStichtagKey(youngest, todayKey);
   }, [timeEntries, expenses, startDate, endDate]);
   const reportPairs = useMemo(() => {
     const currencies = new Set<string>(["EUR", "PLN", targetCurrency]);
@@ -382,11 +392,16 @@ export default function Reports() {
       (sum, entry) => sum + convertAmountToPlnForTax(entry.calculatedAmount, entry.sourceCurrency),
       0
     );
-    const travelRevenueInGrossPln = expensesDetailed.reduce((sum, expense) => {
+    // Abrechenbare Reisekosten (exclusive-Kunde) zählen als Umsatz, nicht als
+    // (Anzeige-)Kosten — sonst Doppelzählung (task_bba37780 Fehler A).
+    const isBillableExclusiveTravel = (expense: any): boolean => {
       const billingCustomerId = getExpenseBillingCustomerId(expense);
-      if (billingCustomerId == null) return sum;
+      if (billingCustomerId == null) return false;
       const relatedCustomer = customersById.get(billingCustomerId);
-      if (relatedCustomer?.costModel !== "exclusive") return sum;
+      return relatedCustomer?.costModel === "exclusive";
+    };
+    const travelRevenueInGrossPln = expensesDetailed.reduce((sum, expense) => {
+      if (!isBillableExclusiveTravel(expense)) return sum;
       return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
     }, 0);
     const grossRevenuePln = timeRevenuePln + travelRevenueInGrossPln;
@@ -423,10 +438,10 @@ export default function Reports() {
       0
     );
     const totalFixedCostsPln = monthlyFixedCostsPln * periodMonthCount;
-    const variableCostsPln = expensesDetailed.reduce(
-      (sum, expense) => sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency),
-      0
-    );
+    const variableCostsPln = expensesDetailed.reduce((sum, expense) => {
+      if (isBillableExclusiveTravel(expense)) return sum;
+      return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
+    }, 0);
 
     const isInMonth = (value: string | Date | null | undefined, ms: string, me: string): boolean => {
       if (!value) return false;
@@ -503,23 +518,19 @@ export default function Reports() {
 
     // Kompatibilitätsfelder in EUR für bestehende Exporte/Anzeige.
     //
-    // WICHTIG: timeRevenue / travelRevenueInGross / grossRevenue werden direkt
-    // aus den bereits zu EUR konvertierten Entry-Werten (.amountEur) summiert,
-    // NICHT aus den PLN-Aggregaten zurückgerechnet. Sonst entsteht eine doppelte
-    // Konversion (EUR→PLN pro Entry, dann PLN-Summe→EUR), die durch zwei
-    // Rundungsstufen einen 1-Cent-Drift gegenüber dem tatsächlichen Rechnungs-
-    // betrag erzeugt. Die PLN-Aggregate timeRevenuePln/grossRevenuePln bleiben
-    // erhalten, weil die Steuer-Engine (aggregateMonthlyTaxResults) sie zwingend
-    // in PLN braucht — aber sie sind nicht mehr Quelle der EUR-Anzeige.
+    // timeRevenue / travelRevenueInGross / grossRevenue werden direkt aus den bereits
+    // zu EUR konvertierten Entry-Werten (.amountEur) summiert. Anzeige- und
+    // PLN-Steuerpfad nutzen denselben Report-Stichtagskurs (reportRateMap) und stimmen
+    // daher überein — sofern der Stichtag einen gültigen Kurs liefert (siehe Komplex 1:
+    // Wechselkurs-Stichtag bei Zukunfts-Leistungsdatum). Ein früher vermuteter
+    // RK-Single-Rundungs-Fix entfällt bewusst: die 0,66-EUR-Divergenz war ein Symptom
+    // des Stichtag-Bugs (zwei verschiedene Fallback-Kurse), keine Doppel-Rundung.
     const timeRevenue = timeEntriesDetailed.reduce(
       (sum, entry) => sum + (entry.amountEur ?? 0),
       0
     );
     const travelRevenueInGross = expensesDetailed.reduce((sum, expense) => {
-      const billingCustomerId = getExpenseBillingCustomerId(expense);
-      if (billingCustomerId == null) return sum;
-      const relatedCustomer = customersById.get(billingCustomerId);
-      if (relatedCustomer?.costModel !== "exclusive") return sum;
+      if (!isBillableExclusiveTravel(expense)) return sum;
       return sum + (expense.amountEur ?? 0);
     }, 0);
     const grossRevenue = timeRevenue + travelRevenueInGross;
@@ -540,10 +551,9 @@ export default function Reports() {
       }))
     );
     const variableCostsByCurrency = aggregateByCurrency(
-      expensesDetailed.map((expense) => ({
-        amount: expense.amount,
-        currency: expense.sourceCurrency,
-      }))
+      expensesDetailed
+        .filter((expense) => !isBillableExclusiveTravel(expense))
+        .map((expense) => ({ amount: expense.amount, currency: expense.sourceCurrency }))
     );
 
     const missingConversionCount =
@@ -579,7 +589,18 @@ export default function Reports() {
   const calculateCustomerReport = () => {
     if (!selectedCustomerId) return null;
 
-    const customerEntries = timeEntriesDetailed.filter((e) => e.customerId === selectedCustomerId);
+    // Chronologisch aufsteigend sortieren, damit ALLE Kundenbericht-Ansichten
+    // dieselbe Reihenfolge haben: die rows-basierten Pfade (UI-Detailtabelle,
+    // Kostenaufstellung-PDF, Excel) sortiert der Row-Builder ohnehin aufsteigend;
+    // die entries-basierten Pfade (Kundenbericht-PDF, Stundennachweis) müssen dazu
+    // passen, sonst driftet Screen (ASC) gegen PDF (DESC) auseinander.
+    const customerEntries = timeEntriesDetailed
+      .filter((e) => e.customerId === selectedCustomerId)
+      .sort((a, b) => {
+        const ka = toDateKey(a.date) ?? "";
+        const kb = toDateKey(b.date) ?? "";
+        return ka < kb ? -1 : ka > kb ? 1 : 0;
+      });
     const customer = customers.find(c => c.id === selectedCustomerId);
 
     if (!customer) return null;
@@ -626,6 +647,7 @@ export default function Reports() {
     return {
       customer,
       entries: customerEntries,
+      rows: buildCustomerReportRows(customerEntries, customerExpensesDetailed),
       totalHours,
       totalAmount,
       totalManDays,
@@ -842,55 +864,34 @@ export default function Reports() {
       return convertAmountCents(amount, source, customerCurrency, reportRateMap);
     };
 
-    const rows = customerData.entries.map((entry) => {
-      const entryExpenses = customerData.customerExpensesDetailed.filter(
-        (expense) => expense.timeEntryId === entry.id
-      );
-
+    // Kanonisches Zeilenmodell (bereits chronologisch sortiert, jeder Beleg genau
+    // einer Zeile zugeordnet) → kein separates Anhängen von Orphan-Zeilen mehr.
+    const allRows = customerData.rows.map((row) => {
+      const entry = row.entry;
       const convertedService =
-        convertToCustomerCurrency(entry.calculatedAmount, entry.sourceCurrency) ?? 0;
-      const convertedTravel = entryExpenses.reduce((sum, expense) => {
+        entry ? (convertToCustomerCurrency(entry.calculatedAmount, entry.sourceCurrency) ?? 0) : null;
+      const convertedTravel = row.expenses.reduce((sum, expense) => {
         const converted = convertToCustomerCurrency(expense.amount, expense.sourceCurrency);
         return converted === null ? sum : sum + converted;
       }, 0);
-
+      const travelCategories = row.expenses
+        .map((exp) => {
+          const labels = EXPENSE_CATEGORY_LABELS[exp.category] || EXPENSE_CATEGORY_LABELS.other;
+          const label =
+            reportLanguage === "en" ? labels.en : reportLanguage === "pl" ? labels.pl : labels.de;
+          return `${label} (${exp.sourceCurrency})`;
+        })
+        .filter(Boolean)
+        .join(", ");
       return {
-        date: entry.date,
-        hours: entry.hours,
-        manDays: entry.manDays,
+        date: row.date,
+        hours: entry ? entry.hours : null,
+        manDays: entry ? entry.manDays : null,
         serviceAmount: convertedService,
         travelAmount: convertedTravel,
-        travelCategories: entryExpenses
-          .map((exp) => {
-            const labels = EXPENSE_CATEGORY_LABELS[exp.category] || EXPENSE_CATEGORY_LABELS.other;
-            const label =
-              reportLanguage === "en" ? labels.en : reportLanguage === "pl" ? labels.pl : labels.de;
-            return `${label} (${exp.sourceCurrency})`;
-          })
-          .filter(Boolean)
-          .join(", "),
+        travelCategories,
       };
     });
-
-    // Direktzuordnungs-Belege (customerId gesetzt, aber kein/fremder timeEntry)
-    // haben keine natürliche Zeiterfassungszeile — je Beleg eine eigene Zeile mit
-    // Beleg-Datum; Stunden/Manntage/Leistung bleiben leer (null), nur Reisekosten.
-    const orphanRows = customerData.customerExpensesDetailed
-      .filter((expense) => !customerData.entries.some((entry) => entry.id === expense.timeEntryId))
-      .map((expense) => {
-        const labels = EXPENSE_CATEGORY_LABELS[expense.category] || EXPENSE_CATEGORY_LABELS.other;
-        const label =
-          reportLanguage === "en" ? labels.en : reportLanguage === "pl" ? labels.pl : labels.de;
-        return {
-          date: expense.date,
-          hours: null,
-          manDays: null,
-          serviceAmount: null,
-          travelAmount: convertToCustomerCurrency(expense.amount, expense.sourceCurrency) ?? 0,
-          travelCategories: `${label} (${expense.sourceCurrency})`,
-        };
-      });
-    const allRows = [...rows, ...orphanRows];
 
     const serviceTotal = allRows.reduce((sum, row) => sum + (row.serviceAmount ?? 0), 0);
     const travelTotal = allRows.reduce((sum, row) => sum + row.travelAmount, 0);
@@ -903,7 +904,7 @@ export default function Reports() {
       projectName: customerData.customer.projectName,
       customerCurrency,
       rows: allRows.map((row) => ({
-        date: row.date,
+        date: row.date as string | Date,
         hours: row.hours,
         manDays: row.manDays,
         serviceAmount: row.serviceAmount,
@@ -1333,12 +1334,12 @@ export default function Reports() {
                               consultant: "Berater",
                               startDate,
                               endDate,
-                              entries: customerData.entries.map(e => ({
-                                date: new Date(e.date).toLocaleDateString("de-DE"),
-                                hours: e.hours / 60,
-                                rate: e.rate || 0,
-                                amount: e.amountEur ?? 0,
-                                expenses: 0,
+                              entries: customerData.rows.map((row) => ({
+                                date: new Date(row.date as any).toLocaleDateString("de-DE"),
+                                hours: row.entry ? row.entry.hours : null,      // Minuten; null bei reinen RK-Tagen
+                                rate: row.entry ? (row.entry.rate || 0) : 0,
+                                amount: row.entry ? (row.entry.amountEur ?? 0) : null, // Leistung EUR
+                                expenses: row.expenses.reduce((s, e) => s + (e.amountEur ?? 0), 0), // Reisekosten EUR
                               })),
                               totalHours: customerData.totalHours,
                               totalAmount: customerData.totalAmount,
@@ -1446,33 +1447,31 @@ export default function Reports() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {customerData.entries.map((entry) => {
-                          // Calculate expenses for this entry
-                          const entryExpenses = customerData.customerExpensesDetailed.filter(
-                            (expense) => expense.timeEntryId === entry.id
-                          );
-                          const entryExpenseTotalEur = entryExpenses.reduce(
+                        {customerData.rows.map((row) => {
+                          const entryExpenseTotalEur = row.expenses.reduce(
                             (sum, expense) => sum + (expense.amountEur ?? 0),
                             0
                           );
                           const entryExpenseByCurrency = aggregateByCurrency(
-                            entryExpenses.map((expense) => ({
+                            row.expenses.map((expense) => ({
                               amount: expense.amount,
                               currency: expense.sourceCurrency,
                             }))
                           );
-                          
+                          const rowKey = row.entry ? `entry-${row.entry.id}` : `rk-${row.dateKey}`;
                           return (
-                            <TableRow key={entry.id}>
-                              <TableCell>
-                                {new Date(entry.date).toLocaleDateString("de-DE")}
-                              </TableCell>
-                              <TableCell>{entry.weekday}</TableCell>
-                              <TableCell className="capitalize">{entry.entryType}</TableCell>
-                              <TableCell className="text-right">{formatHours(entry.hours)}</TableCell>
-                              <TableCell className="text-right">{formatManDays(entry.manDays)}</TableCell>
+                            <TableRow key={rowKey}>
+                              <TableCell>{new Date(row.date as any).toLocaleDateString("de-DE")}</TableCell>
+                              <TableCell>{row.entry?.weekday ?? ""}</TableCell>
+                              <TableCell className="capitalize">{row.entry?.entryType ?? ""}</TableCell>
                               <TableCell className="text-right">
-                                {formatCalculatedCurrency(entry.amountEur ?? 0)}
+                                {row.entry ? formatHours(row.entry.hours) : ""}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.entry ? formatManDays(row.entry.manDays) : ""}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {row.entry ? formatCalculatedCurrency(row.entry.amountEur ?? 0) : ""}
                               </TableCell>
                               <TableCell className="text-right">
                                 {showUnifiedCurrency
@@ -1482,28 +1481,6 @@ export default function Reports() {
                             </TableRow>
                           );
                         })}
-                        {customerData.customerExpensesDetailed
-                          .filter((expense) => !customerData.entries.some((entry) => entry.id === expense.timeEntryId))
-                          .map((expense) => {
-                            const orphanByCurrency = aggregateByCurrency([
-                              { amount: expense.amount, currency: expense.sourceCurrency },
-                            ]);
-                            return (
-                              <TableRow key={`orphan-expense-${expense.id}`}>
-                                <TableCell>{new Date(expense.date).toLocaleDateString("de-DE")}</TableCell>
-                                <TableCell />
-                                <TableCell />
-                                <TableCell className="text-right" />
-                                <TableCell className="text-right" />
-                                <TableCell className="text-right" />
-                                <TableCell className="text-right">
-                                  {showUnifiedCurrency
-                                    ? formatCalculatedCurrency(expense.amountEur ?? 0)
-                                    : renderCurrencyBadges(orphanByCurrency)}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
                         <TableRow className="border-t-2 font-semibold">
                           <TableCell colSpan={3}>Gesamt</TableCell>
                           <TableCell className="text-right">{formatHours(customerData.totalHours)}</TableCell>
@@ -1523,7 +1500,7 @@ export default function Reports() {
                   <p className="font-medium mb-2">Angewendete Wechselkurse</p>
                   <p className="text-xs text-muted-foreground mb-2">
                     {reportStichtag
-                      ? `Stichtag (letzter Leistungs-/Kosten-Tag im Bericht): ${new Date(`${reportStichtag}T00:00:00`).toLocaleDateString("de-DE")}`
+                      ? `Kurs-Stichtag (jüngstes Leistungs-/Kostendatum, max. letzter Werktag vor heute): ${new Date(`${reportStichtag}T00:00:00`).toLocaleDateString("de-DE")}`
                       : "Kein Stichtag — Bericht enthält keine Einträge"}
                     {reportRatesQuery.isLoading ? " · Kurse werden geladen…" : ""}
                   </p>

@@ -24,6 +24,7 @@ import {
   type ReceiptExpenseCandidate,
 } from "./receiptAi";
 import { toScopeContext } from "./scope";
+import { capRateStichtagKey } from "@shared/dateStichtag";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
   if (!actorMandantId) return false;
@@ -3517,6 +3518,15 @@ export const appRouter = router({
       const todayKey = new Date().toISOString().slice(0, 10);
       const todayUtc = new Date(`${todayKey}T00:00:00Z`);
 
+      // Defensiver Cap (der Client cappt reportStichtag bereits): der Kurs-Stichtag
+      // darf nie in der Zukunft liegen → min(Stichtag, gestern). Polish-VAT §9 +
+      // verhindert die NBP-Zukunfts-404-Kaskade, die sonst in den stale Notfall-
+      // Fallback läuft (task_bba37780 Komplex 1). NBP's eigener 404-Fallback deckt
+      // Wochenende/Feiertag ab, sodass "gestern" zum letzten Werktag wird.
+      const stichtagKey = stichtag.toISOString().slice(0, 10);
+      const rateStichtagKey = capRateStichtagKey(stichtagKey, todayKey);
+      const rateStichtag = new Date(`${rateStichtagKey}T00:00:00Z`);
+
       const results: Array<{
         pair: string;
         rate: number | null;
@@ -3553,7 +3563,7 @@ export const appRouter = router({
           //    genau diesen Stichtag-Tag und dieses Paar? Wenn ja, nehmen wir
           //    den — kein NBP-Call. Das deckt den Standard-Fall ab, dass
           //    Berichte für vergangene Monate immer denselben Stichtag haben.
-          const stichtagMatch = await getExchangeRateByDate(pair, stichtag, 0);
+          const stichtagMatch = await getExchangeRateByDate(pair, rateStichtag, 0);
           if (stichtagMatch) {
             results.push(buildResult(stichtagMatch, { isManual: false, sourceLabel: String(stichtagMatch.source ?? "NBP") }));
             continue;
@@ -3563,7 +3573,7 @@ export const appRouter = router({
           //    Datum. NBP's eigener 404-Fallback geht bis zu 7 Tage rückwärts
           //    (Wochenende / Feiertag / noch nicht publiziert).
           const baseCurrency = pair.split("/")[0];
-          const archivedForStichtag = await fetchNBPExchangeRateWithMeta(baseCurrency, stichtag);
+          const archivedForStichtag = await fetchNBPExchangeRateWithMeta(baseCurrency, rateStichtag);
           const stichtagEffective = new Date(`${archivedForStichtag.effectiveDate}T00:00:00Z`);
           const stichtagRateInt = Math.round(archivedForStichtag.rate * 10000);
           await createExchangeRate({

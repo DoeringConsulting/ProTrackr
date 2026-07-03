@@ -33,9 +33,9 @@ interface CustomerReportData {
   endDate: string;
   entries: {
     date: string;
-    hours: number;
+    hours: number | null;
     rate: number;
-    amount: number;
+    amount: number | null;
     expenses: number;
   }[];
   totalHours: number;
@@ -208,11 +208,11 @@ export async function exportCustomerReportToExcel(data: CustomerReportData) {
     ["Datum", "Stunden", "Tagessatz", "Betrag", "Reisekosten", "Gesamt"],
     ...data.entries.map((entry) => [
       entry.date,
-      entry.hours,
-      entry.rate / 100,
-      entry.amount / 100,
+      entry.hours == null ? "" : formatHours(entry.hours),
+      entry.amount == null ? "" : entry.rate / 100,
+      entry.amount == null ? "" : entry.amount / 100,
       entry.expenses / 100,
-      (entry.amount + (isExclusive ? entry.expenses : 0)) / 100,
+      ((entry.amount ?? 0) + (isExclusive ? entry.expenses : 0)) / 100,
     ]),
     [],
     ["Summe (hh:mm)", formatHours(data.totalHours), "", data.totalAmount / 100, data.totalExpenses / 100, data.grandTotal / 100],
