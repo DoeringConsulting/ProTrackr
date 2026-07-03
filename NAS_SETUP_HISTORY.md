@@ -1812,3 +1812,57 @@ leerer Prod-Titel = Regression) ist App-Code → **main-Welt**; T3b (build-arg i
 compose.dev.yml + Dockerfile) zieht erst danach hier nach. Kosmetisch/Sicherheits-
 Label, niedrige Prio → ins main-Paket.
 **M1/M2/M4:** ebenfalls App-Code (server/_core, generate-version.js) → main-Welt.
+
+---
+
+# Phase A / Dev-Loop — Erster Produktiv-Einsatz (main-Fixes → Dev-Abnahme)
+
+## 2026-07-03 — Dev-Deploy v2.1.15 + P1-Abnahme GESCHEITERT (2 Bug-Komplexe → zurück an main)
+
+**Kontext:** Erster echter Dev-Loop-Durchlauf (Modell 1). Main-Chat hat P1
+(task_bba37780 Reisekosten-Attribution) + P2/P4/P5 (Wartung) gefixt und gepusht
+(main **v2.1.15**). Ziel: P1 isoliert in NAS-Dev an den echten Belegen abnehmen,
+bevor Prod.
+
+**Ablauf (NAS-Chat):**
+- **Sync `main → nas-setup`** (Merge, konfliktfrei, 7 Commits, NAS-Infra unberührt —
+  Trockenlauf + Leitplanken): Commit `4168368`, nas-setup übernimmt v2.1.15.
+- **T3b** (VITE_APP_TITLE als build-arg, Dockerfile + compose.dev.yml): Commit
+  `b8a4051` — macht den P4-Client-Code (Titel-Konsum) in Dev sichtbar. Umsetzung
+  via `.env.production.local` im build-Stage (robuster als process.env-Exposition).
+- **`deploy-dev.sh`**: Image neu gebaut, app-dev healthy in 15 s, Health-Gate
+  `version.json :9444 = 2.1.15`. Prod (:9443) strukturell unberührt.
+
+**Abnahme (User, Browser :9444, Kunde „Fritzmeier Gruppe - Sobrietas GmbH", exclusive, Juli 2026):**
+- **B) DEV-Label ✓** — Tab zeigt „ProTrackr (DEV)" (T3b wirkt).
+- **A) P1 Reisekosten ❌** — Belege erscheinen, aber es traten Fehler auf → Abnahme nicht bestanden.
+
+**Gefundene Bugs (alle App-Code → main, NICHT nas-setup; read-only geortet):**
+1. **Wechselkurs-Stichtag bei Zukunfts-Leistungsdatum (NEU, hohe Prio).** Stichtag =
+   jüngstes Leistungsdatum (31.7.2026) liegt in der Zukunft rel. zum Erstellungstag
+   (2.–3.7.). `routers.ts:3566` fetcht NBP für 31.7 → `nbp.ts:59-64` 7-Tage-Fallback
+   erschöpft (alle Zukunft, 404) → **throw** → `catch` (routers.ts:3610) nimmt den
+   letzten DB-Kurs (3.6 bzw. 3.7) als Notfall; die aktuellster-Kurs-Mitnahme
+   (routers.ts:3578-3600) wird übersprungen. Folge: veralteter Kurs in ALLEN
+   PLN↔EUR-Umrechnungen. Live-Beweis: „NBP-Datum 3.6/3.7.2026" bei Stichtag 31.7.2026.
+2. **Doppelzählung** (task_bba37780-Nachbesserung): abrechenbare exclusive-RK als Umsatz
+   UND als „Variable Kosten" (Reports.tsx:426-429/542-547 filtern nicht, während
+   travelRevenueInGross Z.518-524 korrekt filtert).
+3. **Kundenbericht-Chronologie**: orphanRows (RK ohne timeEntryId) hinten angehängt
+   statt einsortiert (Reports.tsx:893, PDF reportPdfExports.ts:721).
+4. **0,66-EUR-Drift** = Symptom von Bug 1 (zwei Fallback-Kurse gleichzeitig: 2.7
+   `4.2905` → 59,67 vs 3.6 `4.2433` → 60,33). Kein separater Rundungs-Fix nötig.
+
+**Ergebnis:** Dev-Abnahme NICHT bestanden → **NICHT nach Prod** (Governance-Gate greift
+wie vorgesehen — unvollständiger Fix vor Prod gefangen). Präzises Bug-Paket (2 Komplexe,
+Datei:Zeile, Fix-Richtungen) an den Main-Chat übergeben. **Nächste Runde:** Main fixt →
+push → hier Sync + Dev-Deploy → erneute Abnahme an denselben Belegen auf :9444, inkl.
+Kontrolle der „Angewendete Wechselkurse"-Box (Stichtag darf nicht in der Zukunft liegen).
+
+**Dev-Loop-Werkzeuge bewährt:** `deploy-dev.sh` (Health-Gate), T3b-build-arg und die
+isolierte Dev-Abnahme haben ihren Zweck erfüllt. Prod blieb über den gesamten Durchlauf
+unberührt. **T3 damit komplett:** T3a (Client-Code VITE_APP_TITLE-Konsum) kam mit
+v2.1.15 aus main, T3b (build-arg) ist `b8a4051` — DEV-Label live bestätigt ✓.
+
+**Offene nas-seitige TODOs nach dieser Runde:** keine. Alles Weitere (Kurs-Stichtag-Bug
+Komplex 1, task_bba37780-Nachbesserung Komplex 2, M1/M2/M4) ist App-Code → main.
