@@ -2,20 +2,22 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue
 > Main-Sitzung kann allein auf Basis dieses Dokuments + der Memory-Dateien
-> lückenlos weiterarbeiten. Stand: **2026-07-03, v2.1.9, HEAD `730fb94`**.
+> lückenlos weiterarbeiten. Stand: **2026-07-03, v2.1.15, HEAD `ee6cd2b`**
+> (Backlog P1/P2/P4/P5 erledigt; dieses Doku-Update bumpt auf v2.1.16).
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt).
 
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich).
-- **Stand:** v2.1.9 auf main + origin, Baum sauber. Fehler #1/#2/#3 erledigt,
-  NAS-Rollout-Tooling + Deployment-Blueprint stehen, A5-Hook-Schritt erledigt.
-- **Offen (App-Bug):** `task_bba37780` — Reisekosten-Attribution wird in 2 Render-
-  Pfaden nicht angewandt (`Reports.tsx:1091` + PDF-Kostenaufstellung). **Bei
-  Wiederaufnahme User fragen, wie vorgegangen wird.** Details §6 + Memory
-  `project_open_fix_expense_attribution_main`.
-- **Deploy (nach A5!):** committen + `git push origin main` — **kein localhost
-  mehr**. Ausrollen auf den NAS läuft im **NAS-Setup-Chat** via `/nas-rollout`.
+- **Stand:** v2.1.15 auf main + origin, Baum sauber. Fehler #1/#2/#3 erledigt,
+  NAS-Rollout-Tooling + Deployment-Blueprint stehen, A5 komplett. **Backlog
+  P1/P2/P4/P5 erledigt** (2026-07-03, je 3-Agenten-Workflow, siehe §6).
+- **Offen (Backlog):** nur noch **P3 — persistenter Session-Store** (Infra +
+  neue Dependency, bewusst vertagt). Details §6.1.
+- **NAS-seitige Nachzügler** (eigener Chat, nicht hier): P1-Funktionsabnahme in
+  NAS-Dev (`:9444`, Belege 580/581, Kunde 278) + P4-`build-arg` T3b.
+- **Deploy:** committen + `git push origin main` — **kein localhost mehr**.
+  Ausrollen auf den NAS läuft im **NAS-Setup-Chat** via `/nas-rollout`.
 
 ## 1. WIEDEREINSTIEGS-PROZEDUR (zuerst in der neuen Sitzung)
 
@@ -25,11 +27,11 @@
    NIE in `ProTrackr_developing_path` arbeiten (= nas-setup, NAS-Welt).
 2. **Memory lesen:** `MEMORY.md` + verlinkte Einträge, v.a.
    [[feedback_deploy_workflow]] (nach A5 geändert!), [[feedback_worktree_separation]],
-   [[project_open_fix_expense_attribution_main]], [[feedback_prod_only_via_dev_promotion]].
+   [[feedback_3agent_workflow]], [[feedback_prod_only_via_dev_promotion]].
 3. **Dieses Handover lesen.**
-4. **Für den offenen Bug:** erst den User fragen, wie vorgegangen wird (war beim
-   Pausieren offen), dann fixen → `npx tsc --noEmit` + `npx vitest run` grün →
-   committen + pushen.
+4. **Nächste Aufgabe:** P3 (Session-Store, §6.1) — vor Beginn Vorgehen/Test-
+   Strategie mit dem User klären (Dependency + DB + Laufzeit-Test). Alle Code-
+   Änderungen über den 3-Agenten-Workflow + Post-A5-Commit-Ablauf (§3, §6.3).
 
 ## 2. PROJEKT-KONTEXT (Stack)
 
@@ -85,23 +87,31 @@ am **DB-Fixture-Cleanup** in `server/vitest.setup.ts` (`ECONNREFUSED
 **`SKIP_TEST_CLEANUP=1 git commit …`** (überspringt nur den Cleanup, Tests laufen
 normal; Skip-Check in `vitest.setup.ts:22` vor dem DB-Connect). Steht auch in
 Memory [[feedback_deploy_workflow]].
+**Praxis (2026-07-03, P1/P2/P4/P5):** Alle vier Commits liefen problemlos mit
+`SKIP_TEST_CLEANUP=1` — die betroffenen Änderungen legten keine DB-Fixtures an,
+die 2 pre-commit-Tests sind DB-frei und grün. MySQL84 musste nicht gestartet
+werden (A5-Zustand blieb erhalten).
 
 ## 4. AKTUELLER STAND
 
-- **Version:** v2.1.9 · **HEAD:** `730fb94` (= origin/main, synchron).
-- **Letzte Arbeit (diese Sitzung):** A5-Teilschritt — Server-Restart-Block aus
-  `.husky/post-commit` entfernt (Bump/Build/Amend unverändert). Commit `730fb94`
-  „chore: retire localhost:3001 auto-restart …". Validiert: Hook-Output ohne
-  „Server-Restart".
-- **Davor (Kontext):** Fehler #2 (Sobrietas exclusive) komplett live auf **v2.1.0**
-  (Tag `v2.1.0-phase3c-done`) — geteilte Attribution `client/src/lib/expenseAttribution.ts`
-  (Option B), UI-Kundenauswahl im Beleg-Dialog. Tech-Debt aggregateByCustomer
-  entfernt (v2.1.1). NAS-Rollout-Tooling + Deployment-Blueprint (v2.1.2–v2.1.8):
-  `docs/DEPLOYMENT-BLUEPRINT.md`, `docs/NAS-CHAT-START.md`,
-  `.claude/skills/nas-rollout/SKILL.md`, `.claude/rollouts/`,
-  `scripts/generate-rollout-manifest.mjs`, `scripts/rollout-to-nas.ps1`.
-- **Freeze-Tags:** letzter Feature-Freeze `v2.1.0-phase3c-done`; v2.1.1–v2.1.9
-  sind Tooling/Docs/Chore (kein App-Logik-/Schema-Change).
+- **Version:** v2.1.15 · **HEAD:** `ee6cd2b` (= origin/main, synchron).
+- **Letzte Arbeit (diese Sitzung, 2026-07-03):** Backlog P1/P2/P4/P5 abgearbeitet,
+  jeweils Junior→Senior(APPROVE)→QA(tsc + 11 pre-commit-Tests grün), eigener
+  Commit + Push:
+  - **P1** `c8b9691` (v2.1.12) — Reisekosten-Attribution (`task_bba37780`): 3
+    Render-Pfade auf `getExpenseBillingCustomerId` umgestellt, verwaiste
+    Direktzuordnungs-Belege als eigene Zeilen (Bildschirm + PDF). Client-only.
+  - **P2** `6c7ebe6` (v2.1.13) — `server/_core/index.ts`: rateLimit-keyGenerator
+    IPv6-sicher via `ipKeyGenerator(req.ip ?? "")` (behebt `ERR_ERL_KEY_GEN_IPV6`).
+  - **P4** `2924665` (v2.1.14) — `client/src/main.tsx`: `VITE_APP_TITLE`-Konsum
+    verdrahtet (`document.title`, zwingender Fallback). NAS-Nachzügler: T3b.
+  - **P5** `ee6cd2b` (v2.1.15) — `scripts/generate-version.js`: environment-Default
+    `development`→`production` (kosmetisch, kein Konsument des Feldes).
+- **Davor (Kontext):** Fehler #2 komplett live auf **v2.1.0** (`v2.1.0-phase3c-done`);
+  Tech-Debt aggregateByCustomer entfernt (v2.1.1); NAS-Rollout-Tooling +
+  Deployment-Blueprint (v2.1.2–v2.1.8); A5-Hook-Schritt (v2.1.9).
+- **Freeze-Tags:** letzter Feature-Freeze `v2.1.0-phase3c-done`; v2.1.1–v2.1.15
+  sind Tooling/Docs/Chore + kleine Fixes (kein Schema-Change).
 
 ## 5. VERHÄLTNIS ZUR NAS-WELT
 
@@ -116,74 +126,52 @@ Memory [[feedback_deploy_workflow]].
 - **Zielarchitektur:** zwei Server-Umgebungen (Prod :9443 / Dev :9444) auf Unraid
   **7.3.1**, Image-Promotion Dev→Prod. Vollplan `docs/DEPLOYMENT-BLUEPRINT.md`.
   Governance: PROD nur via Dev→Promotion ([[feedback_prod_only_via_dev_promotion]]).
+- **Offene NAS-Nachzügler aus dieser main-Sitzung** (im NAS-Chat abzuarbeiten):
+  1. **P1-Funktionsabnahme** in NAS-Dev `:9444` mit den echten Belegen (Kunde
+     `customers.id=278` exclusive, `expenses` 580 flight 20000 EUR + 581 taxi
+     25600 PLN, beide `date=2026-07-02`, `customerId=278`, `timeEntryId=NULL`).
+     Erwartung: beide erscheinen in Buchhaltungsbericht-Detailzeile „Reisekosten
+     (abrechenbar, nur Exclusive)", Kundenbericht-Detailtabelle (eigene Zeilen)
+     und PDF-Kostenaufstellung (nicht mehr 0,00). Danach `task_bba37780` schließen.
+  2. **P4-T3b:** build-arg für `VITE_APP_TITLE` im Container-Build setzen, damit
+     die Var im Prod-Bundle ankommt (sonst greift der Fallback).
 
-## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE (nach Nutzen priorisiert)
+## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE
 
-**Reihenfolge:** P1 (Funktionsbug) → P2 (Quick Win) → P3 → P4 → P5. Alle Code-
-Änderungen laufen über den **3-Agenten-Workflow** + den Post-A5-Commit-Ablauf
-(§6.3 Rahmen-Regeln + §3-Stolperfalle).
+**Erledigt in dieser Sitzung:** P1, P2, P4, P5 (siehe §4). **Verbleibend: nur P3.**
 
-### P1 — `task_bba37780`: Reisekosten-Attribution (FUNKTIONALER BUG, Prio 1)
-Ausführlich in Memory `project_open_fix_expense_attribution_main`. **Laut Memory
-bei Aufnahme ZUERST den User fragen**, wie vorgegangen wird.
-- **Symptom:** Beleg mit `expenses.customerId` gesetzt, aber `timeEntryId = NULL`
-  („Option B"-Direktzuordnung, gültig ab Cutover 2026-07-01) wird inkonsistent
-  behandelt: Kundenbericht-Summary korrekt ✅; Buchhaltungsbericht-Zeile
-  „Reisekosten (abrechenbar, nur Exclusive)" **leer**, Betrag rutscht unter
-  „Variable Kosten (Reisen)" ❌; PDF-Kostenaufstellung **0,00** ❌. Endsumme
-  rechnerisch korrekt (via `travelRevenueInGross`) — reiner Anzeige-/
-  Kategorisierungs-Bug.
-- **Root Cause:** zwei Render-Pfade nutzen noch die alte
-  `if (!expense.timeEntryId) return false`-Logik statt der zentralen
-  `getExpenseBillingCustomerId(expense, maps)` aus
-  `client/src/lib/expenseAttribution.ts` (berücksichtigt customerId UND timeEntryId):
-  1. `client/src/pages/Reports.tsx:1091` (Filter „abrechenbar, nur Exclusive")
-  2. Datenpfad, der `exportCustomerCostStatementToPDF` in
-     `client/src/lib/reportPdfExports.ts` speist (Reisekosten kommen vorberechnet
-     aus Reports.tsx).
-  Gegencheck: `getExpenseBillingCustomerId` wird in Reports.tsx bereits korrekt
-  bei ~Z.386/450/519/613 genutzt — Z.1091 + PDF sind die Ausreißer.
-  **(Zeilennummern gegen aktuellen Code verifizieren.)**
-- **Testdaten (NUR in Prod/NAS-DB, NICHT auf Laptop):** Kunde `customers.id=278`
-  (exclusive), `expenses.id` 580 (flight 20000 EUR) + 581 (taxi 25600 PLN), beide
-  `date=2026-07-02`, `customerId=278`, `timeEntryId=NULL`. Für lokalen Test eigene
-  Fixtures anlegen (Sentinel `VTEST-…`/`VTEST_…`, damit der vitest-Teardown sie fängt).
-
-### P2 — M2: rateLimit IPv6-KeyGen (Quick Win, ~15 Min)
-`server/_core/index.ts`: 3× `rateLimit()` nutzen `keyGenerator:(req)=>req.ip` →
-Fehler `ERR_ERL_KEY_GEN_IPV6`. Umstellen auf
-`import { rateLimit, ipKeyGenerator } from "express-rate-limit"` +
-`keyGenerator:(req)=>ipKeyGenerator(req.ip)`.
-
-### P3 — M1: persistenter Session-Store (~40 Min)
-`server/_core/index.ts`: Express-Session nutzt `MemoryStore` → auf
-`express-mysql-session` umstellen (`pnpm add express-mysql-session` +
-`-D @types/express-mysql-session`; `MySQLStore` aus `DATABASE_URL`,
-`createDatabaseTable:true`). Test: Login → Restart → noch eingeloggt?
-
-### P4 — T3a: `VITE_APP_TITLE` verdrahten (+FALLBACK zwingend, niedrig)
-`VITE_APP_TITLE` ist verwaist (Titel hardcoded `client/index.html:14`, kein
-`import.meta.env`-Konsum). Client soll die Var lesen:
-`document.title = import.meta.env.VITE_APP_TITLE || "Döring Consulting - Projekt & Abrechnungsmanagement"`.
-**FALLBACK ZWINGEND** (sonst leerer Prod-Titel). Nach Merge dem **NAS-Chat
-zurückmelden** → dort zieht **T3b** nach (build-arg, damit `VITE_*` im Container-
-Build ankommt).
-
-### P5 — M4: version.json environment-Default (kosmetisch)
-`scripts/generate-version.js` setzt `"environment":"development"` als Default → im
-Build fälschlich `development`. Health-Gate prüft nur `version` (kein Blocker).
+### 6.1 — P3 / M1: persistenter Session-Store (Infra, ~40 Min + Test) — VERTAGT
+**Vom User am 2026-07-03 bewusst vertagt** (Infra + Dependency + Laufzeit-Test
+brauchen eine fokussierte Runde). Vor Beginn Vorgehen/Test-Strategie klären.
+- **Ist-Zustand:** `server/_core/index.ts` (~Z.66) ruft `session({...})` **ohne
+  `store`** → Default `MemoryStore` (in-memory). Folge: jeder Server-Restart/Deploy
+  loggt alle Nutzer aus; MemoryStore ist nicht production-tauglich.
+- **Fix:** `express-mysql-session` als Store einsetzen (`sessions`-Tabelle, Sessions
+  überleben Restart). `pnpm add express-mysql-session` + `-D
+  @types/express-mysql-session`. Store aus `DATABASE_URL`; sauberer wäre, den
+  **bestehenden mysql2-Pool wiederzuverwenden** statt DATABASE_URL neu zu parsen
+  (im Code prüfen, ob ein Pool exportiert ist). `createDatabaseTable:true` legt die
+  Tabelle automatisch an (alternativ echte drizzle-Migration).
+- **Umfang/Achtung:** neue Dependency (package.json + Lockfile — der NAS-Container-
+  Build muss sie ziehen); `sessions`-Tabelle = DB-Effekt; Session-Funktion wird
+  DB-abhängig (bei DB-Ausfall keine Sessions — App braucht DB aber ohnehin).
+- **Verifikation:** „Login → Restart → noch eingeloggt?" braucht laufende Instanz +
+  DB. Lokal nur mit `Start-Service MySQL84` + `npm run dev` (durchbricht A5) — oder
+  natürlicher in **NAS-Dev** (Governance-Funktionsabnahme durch User).
 
 ### 6.2 A5 (localhost-Shutdown) — Status
-- **Main-Teil ERLEDIGT** (Vor-Sitzung): Hook-Restart-Block entfernt (v2.1.9).
-- **Offen im NAS-Chat:** MySQL84 stop + StartType Manual, Verifikation (Test-
-  Commit → Port 3001 frei), Doku. Plan: `HANDOVER-NAS-SETUP.md` §6. Siehe
+- **Komplett abgeschlossen** (main + NAS): Hook-Restart-Block entfernt (v2.1.9),
+  MySQL84 gestoppt/Manual, localhost:3001 aus. NAS = einzige Instanz. Siehe
   [[project_a5_localhost_shutdown]].
 
 ### 6.3 Rahmen-Regeln für die Umsetzung (verbindlich)
 - **3-Agenten-Workflow** (Junior/Senior/QA) für ALLE Code-Änderungen
-  ([[feedback_3agent_workflow]]).
-- **Vor Code-Commits `Start-Service MySQL84`** (Admin-PS) — sonst scheitert
-  pre-commit am DB-Cleanup (§3-Stolperfalle).
+  ([[feedback_3agent_workflow]]). Bewährt in dieser Sitzung: präzise Junior-Spec →
+  unabhängiger Senior-Review (APPROVE) → QA (tsc + vitest) → Commit → Push.
+- **Commit-Ablauf:** `SKIP_TEST_CLEANUP=1 git commit …` reicht für Nicht-DB-Fixes;
+  post-commit bumpt + baut + amended (Version-Dateien einfolden, dist/ nicht
+  versioniert). Nach Push Drift prüfen (`0 0`); sw.js kann driften → ggf.
+  `git checkout -- client/public/sw.js`.
 - **Nach main-Änderungen NUR committen + pushen**; NAS-Deploy separat im NAS-Chat
   via `/nas-rollout`; **niemals `nas-setup → main`** ohne Freigabe.
 
@@ -208,12 +196,18 @@ Build fälschlich `development`. Health-Gate prüft nur `version` (kein Blocker)
 - **Attribution = eine Wahrheitsquelle:** `getExpenseBillingCustomerId` in
   `client/src/lib/expenseAttribution.ts`. Option B: explizite `customerId` gewinnt
   datumsunabhängig; ohne customerId gilt Alt-Logik (timeEntryId), Datums-Fallback
-  nur ab Cutover 2026-07-01.
+  nur ab Cutover 2026-07-01. `customerData.customerExpensesDetailed` ist bereits
+  via diese Funktion gefiltert → Summen stimmen; nur Pro-Zeile-Zuordnung
+  (`timeEntryId === entry.id`) verlor „verwaiste" Belege (P1-Fix, 2026-07-03).
+- **`import.meta.env.VITE_*`** ist im Client typkonform (Präzedenz `Map.tsx`).
+  Für Titel/Fallback `||` statt `??` (fängt auch leeren String ab).
 
 ## 9. ROLLBACK-/SICHERHEITSPUNKTE
 
-- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main` = `730fb94`
-  (v2.1.9). Freeze-Tags für Meilensteine (`v2.1.0-phase3c-done` etc.).
-- Kein Datenverlustrisiko durch main-Arbeit — App-Code, kein DB-Zugriff nötig für
-  den offenen Bug (reiner Render-Fix); Tests mit eigenen Fixtures.
+- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main` = `ee6cd2b`
+  (v2.1.15). Freeze-Tags für Meilensteine (`v2.1.0-phase3c-done` etc.).
+- Kein Datenverlustrisiko durch die bisherige main-Arbeit — P1/P2/P4/P5 waren
+  reine Code-/Config-Fixes ohne Schema-/DB-Eingriff; Tests grün. **P3 wird das
+  ändern** (DB-`sessions`-Tabelle + Dependency) → dort vor Umsetzung Backup/Test-
+  Strategie festlegen.
 - NAS bleibt unberührt, solange kein Rollout im NAS-Chat gefahren wird.
