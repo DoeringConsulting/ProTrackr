@@ -41,6 +41,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # DEV-Label (T3b): VITE_APP_TITLE als build-arg -> Dockerfile schreibt es in
+      # .env.production.local, Vite backt es ein -> Tab/Titel zeigen "ProTrackr (DEV)".
+      # Prod (docker-compose.yml) uebergibt keinen arg -> Code-Fallback "Doering...".
+      args:
+        VITE_APP_TITLE: "ProTrackr (DEV)"
     restart: unless-stopped
 
     depends_on:

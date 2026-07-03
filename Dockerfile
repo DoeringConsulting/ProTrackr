@@ -43,6 +43,16 @@ FROM deps AS build
 # Copy full source. .dockerignore filters out node_modules, dist, logs, .env*
 COPY . .
 
+# DEV-Titel (T3b): Vite backt VITE_* zur Build-Zeit aus einer Env-Datei in das
+# Client-Bundle. .dockerignore schliesst .env* aus dem Build-Context aus — daher
+# schreiben wir den per build-arg uebergebenen Titel INNERHALB des Images in
+# .env.production.local, das `vite build` (mode=production) sicher laedt. Prod
+# uebergibt kein build-arg -> keine Datei -> der Client faellt auf den Default-
+# Titel zurueck (client/src/main.tsx). Die Datei bleibt im build-Stage; das
+# runtime-Image kopiert sie nicht.
+ARG VITE_APP_TITLE=""
+RUN if [ -n "$VITE_APP_TITLE" ]; then printf 'VITE_APP_TITLE=%s\n' "$VITE_APP_TITLE" > .env.production.local; fi
+
 # package.json scripts:
 #   prebuild: node scripts/generate-version.js && node scripts/update-version.js
 #   build:    vite build (-> dist/public/) && esbuild server/_core/index.ts (-> dist/index.js)
