@@ -872,8 +872,28 @@ export default function Reports() {
       };
     });
 
-    const serviceTotal = rows.reduce((sum, row) => sum + row.serviceAmount, 0);
-    const travelTotal = rows.reduce((sum, row) => sum + row.travelAmount, 0);
+    // Direktzuordnungs-Belege (customerId gesetzt, aber kein/fremder timeEntry)
+    // haben keine natürliche Zeiterfassungszeile — je Beleg eine eigene Zeile mit
+    // Beleg-Datum; Stunden/Manntage/Leistung bleiben leer (null), nur Reisekosten.
+    const orphanRows = customerData.customerExpensesDetailed
+      .filter((expense) => !customerData.entries.some((entry) => entry.id === expense.timeEntryId))
+      .map((expense) => {
+        const labels = EXPENSE_CATEGORY_LABELS[expense.category] || EXPENSE_CATEGORY_LABELS.other;
+        const label =
+          reportLanguage === "en" ? labels.en : reportLanguage === "pl" ? labels.pl : labels.de;
+        return {
+          date: expense.date,
+          hours: null,
+          manDays: null,
+          serviceAmount: null,
+          travelAmount: convertToCustomerCurrency(expense.amount, expense.sourceCurrency) ?? 0,
+          travelCategories: `${label} (${expense.sourceCurrency})`,
+        };
+      });
+    const allRows = [...rows, ...orphanRows];
+
+    const serviceTotal = allRows.reduce((sum, row) => sum + (row.serviceAmount ?? 0), 0);
+    const travelTotal = allRows.reduce((sum, row) => sum + row.travelAmount, 0);
 
     await exportCustomerCostStatementToPDF({
       language: reportLanguage,
@@ -882,7 +902,7 @@ export default function Reports() {
       customerName: customerData.customer.provider,
       projectName: customerData.customer.projectName,
       customerCurrency,
-      rows: rows.map((row) => ({
+      rows: allRows.map((row) => ({
         date: row.date,
         hours: row.hours,
         manDays: row.manDays,
@@ -1088,13 +1108,13 @@ export default function Reports() {
                               aggregateByCurrency(
                                 accountingData.expensesDetailed
                                   .filter((expense) => {
-                                    if (!expense.timeEntryId) return false;
-                                    const relatedEntry = timeEntries.find(
-                                      (entry) => entry.id === expense.timeEntryId
-                                    );
-                                    if (!relatedEntry) return false;
+                                    // Zentrale Attribution nutzen (Option B: explizite customerId gewinnt,
+                                    // auch ohne timeEntryId) — sonst fehlen Direktzuordnungs-Belege in dieser
+                                    // Detailzeile, obwohl sie in der Gesamtsumme (travelRevenueInGross) stecken.
+                                    const billingCustomerId = getExpenseBillingCustomerId(expense);
+                                    if (billingCustomerId == null) return false;
                                     const relatedCustomer = customers.find(
-                                      (customer) => customer.id === relatedEntry.customerId
+                                      (customer) => customer.id === billingCustomerId
                                     );
                                     return relatedCustomer?.costModel === "exclusive";
                                   })
@@ -1462,6 +1482,28 @@ export default function Reports() {
                             </TableRow>
                           );
                         })}
+                        {customerData.customerExpensesDetailed
+                          .filter((expense) => !customerData.entries.some((entry) => entry.id === expense.timeEntryId))
+                          .map((expense) => {
+                            const orphanByCurrency = aggregateByCurrency([
+                              { amount: expense.amount, currency: expense.sourceCurrency },
+                            ]);
+                            return (
+                              <TableRow key={`orphan-expense-${expense.id}`}>
+                                <TableCell>{new Date(expense.date).toLocaleDateString("de-DE")}</TableCell>
+                                <TableCell />
+                                <TableCell />
+                                <TableCell className="text-right" />
+                                <TableCell className="text-right" />
+                                <TableCell className="text-right" />
+                                <TableCell className="text-right">
+                                  {showUnifiedCurrency
+                                    ? formatCalculatedCurrency(expense.amountEur ?? 0)
+                                    : renderCurrencyBadges(orphanByCurrency)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         <TableRow className="border-t-2 font-semibold">
                           <TableCell colSpan={3}>Gesamt</TableCell>
                           <TableCell className="text-right">{formatHours(customerData.totalHours)}</TableCell>

@@ -628,9 +628,9 @@ export async function exportCustomerCostStatementToPDF(input: {
   customerCurrency: string;
   rows: Array<{
     date: string | Date;
-    hours: number;
-    manDays: number;
-    serviceAmount: number;
+    hours: number | null;
+    manDays: number | null;
+    serviceAmount: number | null;
     travelAmount: number;
     travelCategories: string;
   }>;
@@ -720,9 +720,9 @@ export async function exportCustomerCostStatementToPDF(input: {
     head: [[t.date, t.hours, t.md, t.service, t.travel, t.travelTypes]],
     body: input.rows.map((row) => [
       formatDateDe(row.date),
-      formatHours(row.hours),
-      formatManDays(row.manDays),
-      formatMoney(row.serviceAmount, input.customerCurrency),
+      row.hours == null ? "" : formatHours(row.hours),
+      row.manDays == null ? "" : formatManDays(row.manDays),
+      row.serviceAmount == null ? "" : formatMoney(row.serviceAmount, input.customerCurrency),
       formatMoney(row.travelAmount, input.customerCurrency),
       sanitizeForPdf(row.travelCategories || "-"),
     ]),

@@ -107,17 +107,8 @@ git add \
 touch "$MARKER"
 git commit --amend --no-edit --no-verify >/dev/null
 
-# Restart the local production server so it picks up the freshly built dist/.
-# (Node loads the bundle once at startup, so without a restart the running
-# server keeps serving the old version even though the new artifacts exist.)
-#
-# We detach the restart entirely (no stdin/stdout/stderr ties to the parent
-# bash) so the calling shell — typically a `git commit` subshell from an
-# editor or terminal — does NOT wait on the long-running Node child process.
-# Without this, every commit leaves a "still running" zombie shell behind
-# until the server itself shuts down.
-if [ -f "protrackr.ps1" ]; then
-  echo "[post-commit] Server-Restart (detached)..."
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','protrackr.ps1','Restart'" </dev/null >/dev/null 2>&1 &
-  disown 2>/dev/null || true
-fi
+# HINWEIS (A5, 2026-07-02): Der frühere localhost:3001-Auto-Restart wurde hier
+# entfernt — der NAS ist ab sofort die EINZIGE laufende Instanz (Prod :9443 /
+# Dev :9444). Der Hook bumpt + baut + amendet nur noch; es wird KEIN lokaler
+# Server mehr gestartet. Lokal testen ad hoc via `npm run dev` oder gegen den
+# NAS-Dev (:9444).

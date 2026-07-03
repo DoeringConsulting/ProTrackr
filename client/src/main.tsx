@@ -11,6 +11,11 @@ import "./i18n";
 import { registerServiceWorker } from "./registerSW";
 import { ensureCsrfToken, getCsrfHeaderName, getCsrfToken } from "./lib/csrf";
 
+// App-Titel aus VITE_APP_TITLE (Build-Zeit) setzen; zwingender Fallback, damit
+// der Titel bei fehlender Env-Var nicht leer bleibt (Konsistenz mit index.html).
+document.title =
+  import.meta.env.VITE_APP_TITLE || "Döring Consulting - Projekt & Abrechnungsmanagement";
+
 const queryClient = new QueryClient();
 
 // Weiterleitung zur Login-Seite bei UNAUTHORIZED (401)
