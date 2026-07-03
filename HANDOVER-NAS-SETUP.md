@@ -2,8 +2,8 @@
 
 > **Zweck:** Vollständiger, self-contained Wiedereinstiegspunkt. Wer dieses
 > Dokument + die Memory-Dateien liest, hat den kompletten Stand ohne Verluste.
-> **Stand:** 2026-07-03 · **Branch:** `nas-setup` @ `09ccaf7` · **Phase A zu ~95 %**
-> **Nächster Schritt:** A5 (localhost abschalten) — braucht User-Entscheidung.
+> **Stand:** 2026-07-03 (2. Update, A5-Vorbereitung) · **Branch:** `nas-setup` (HEAD nach diesem Doku-Commit) · **Phase A zu ~95 %**
+> **Nächster Schritt:** A5 (localhost abschalten) — **Entscheidungen getroffen, Ausführung in neuer Sitzung** (Plan in §6). Dieses Handover ist der Wiedereinstiegspunkt.
 
 ---
 
@@ -13,7 +13,9 @@ ProTrackr wurde vom Laptop-`localhost` auf einen **Unraid-NAS (DCS01)** umgezoge
 in **zwei isolierte Umgebungen**: **PROD** (echte Daten) + **DEV** (Prod-Klon),
 mit **bit-identischer Image-Promotion** Dev→Prod und einer **Governance-Regel**
 (keine direkten Prod-Änderungen, aktiv per Mail überwacht). A1–A4 sind fertig
-und live getestet. Es fehlt nur **A5** (den alten localhost-Server abschalten).
+und live getestet. Es fehlt nur **A5** (den alten localhost-Server abschalten) —
+dessen Entscheidungen + Ausführungsplan stehen jetzt in §6; die Ausführung läuft
+in einer **frischen Sitzung** (diese hier stieß ans Context-Limit).
 
 **Alles läuft, alles ist committet + auf GitHub, Prod ist geschützt + überwacht.**
 
@@ -143,15 +145,58 @@ Rollback-Image-Tags `protrackr-app:rollback-*` (falls Promotions liefen).
 
 ## 6. OFFENE PUNKTE
 
-### A5 — localhost abschalten (nächster Schritt, hier)
-Der Laptop-`localhost:3001`-Server (aus main-Klon, via post-commit-Hooks) wird
-überflüssig. **4 Klärungen vor A5:**
-1. Server stoppen **+ Auto-Start-Hooks entschärfen** (sonst startet er wieder).
-2. Notebook-MySQL **behalten** (Backup, Cleanup-Regel) — nur Server aus.
-3. **Nutzt der User localhost noch aktiv** (main-Session-Tests)? Falls ja: nur
-   Auto-Starts stoppen, Server als manuellen Fallback lassen.
-4. Optional: erst offene Bugs (task_bba37780) durch, dann Switchover.
-→ **User muss A) jetzt / B) später wählen** + Info ob localhost noch gebraucht.
+### A5 — localhost abschalten (Entscheidungen getroffen, Ausführung in neuer Sitzung)
+
+**Entscheidungen (2026-07-03, User):**
+- **Timing:** jetzt — unabhängig von `task_bba37780`.
+- **Umfang:** komplett aus. localhost:3001 wird NICHT mehr für main-Tests gebraucht;
+  der NAS (Prod :9443 / Dev :9444) ist ab sofort die einzige laufende Instanz.
+- **Notebook-MySQL:** auch stoppen, StartType `Automatic → Manual` (Daten +
+  Re-Import-Quelle bleiben; Cleanup-Regel gewahrt).
+- **Hook-Entschärfung:** via **Main-Chat** (Option 1) — main-Welt-Trennung strikt gewahrt.
+
+**Befund der Bestandsaufnahme (2026-07-03, read-only, Laptop):**
+- localhost:3001-Server läuft **bereits nicht** (kein Port-3001-Listener, keine
+  node-Prozesse, curl refused).
+- **KEIN** Windows-Autostart: keine Scheduled Tasks „protrackr", nichts im
+  Startup-Ordner (User+Common), keine Registry Run-Keys (HKCU+HKLM).
+- Service **`MySQL84`**: Running, StartType **Automatic**.
+- **Einzige Server-Wiederbelebungs-Quelle:** `.husky/post-commit` (aktuell Zeilen
+  110–123, gated auf `main`) → ruft `protrackr.ps1 Restart` beim nächsten
+  qualifizierenden main-Commit. Ohne Hook-Fix käme der Server beim nächsten
+  main-Commit zurück.
+- `C:\Projects\ProTrackr_main` existiert (Branch `main`) = main-Worktree des Main-Chats.
+
+**A5-Ausführungsplan (neue Sitzung):**
+
+1. **MySQL84 stoppen + Manual** (Laptop, Admin-PowerShell nötig):
+   `Stop-Service MySQL84` → `Set-Service MySQL84 -StartupType Manual` →
+   `Get-Service MySQL84 | Select-Object Name,Status,StartType` (erwartet: Stopped / Manual).
+
+2. **Hook-Restart-Block entfernen — im MAIN-CHAT auf `main`** (NICHT nas-setup!):
+   In `.husky/post-commit` den **letzten Block** löschen (aktuell Z. 110–123),
+   beginnend beim Kommentar `# Restart the local production server …` bis
+   einschließlich des `fi`. Es ist der Block `if [ -f "protrackr.ps1" ]; then …
+   powershell.exe … 'protrackr.ps1','Restart' … & ; disown … ; fi`.
+   **Auto-Version-Bump + Production-Build + Amend (Z. ~65–108) bleiben unangetastet.**
+   Commit-Vorschlag auf main:
+   `chore: retire localhost:3001 auto-restart from post-commit (NAS is sole instance)`.
+   (Auto-Bump greift auf main = patch, harmlos; ggf. Hash-Drift wie üblich.)
+
+3. **Verifikation:**
+   - Nach Schritt 2 ein Test-Commit auf main → Port 3001 bleibt frei (kein Node-Start).
+   - Optional Reboot-Test: nach Windows-Neustart läuft weder `MySQL84` noch ein
+     ProTrackr-node-Prozess.
+
+4. **Doku + Memory nachziehen:**
+   - HISTORY „A5 DONE"-Eintrag, dieses Handover aktualisieren.
+   - Memory `feedback_deploy_workflow` anpassen: der „restart auf localhost:3001"-
+     Schritt entfällt. Neuer Main-Test-Weg festlegen (ad-hoc `npm run dev` lokal
+     ODER gegen NAS-Dev :9444) — **Main-Chat-Abstimmung nötig** (Welt-Trennung).
+
+**Wichtige Folge:** `feedback_deploy_workflow` wird durch A5 obsolet. Der Main-Chat
+testet main-Änderungen dann nicht mehr gegen localhost:3001 — der neue Test-Weg
+gehört in die A5-Abschluss-Doku + eine kurze Main-Chat-Abstimmung.
 
 ### Weitere offene Punkte / TODOs
 - **Tailscale-Serve-Reboot-Persistenz** prüfen (evtl. User-Script wie beim Guard).

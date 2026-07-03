@@ -1697,6 +1697,43 @@ Dashboard + Mail, reboot-fest). Ehrliche Grenze (root) bleibt bestehen.
 
 ---
 
-# Phase A / A5 — Notebook-Server abschalten / Switchover (folgt)
+# Phase A / A5 — Notebook-Server abschalten / Switchover
 
-# Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)
+## 2026-07-03 — Phase A / A5.0: Entscheidungen + Bestandsaufnahme (Ausführung folgt in neuer Sitzung)
+
+**Kontext:** Wiedereinstiegs-Sitzung nach dem A4-Handover. Laptop-Branch `nas-setup`
+verifiziert (HEAD `f2edfb0` = origin, Working Tree clean). NAS-Live-Stand vom User
+im Web-Terminal bestätigt: Prod (`protrackr-app` + `-mysql`) healthy, Dev
+(`-app-dev` + `-mysql-dev`) healthy, Guard läuft (2 PIDs), Prod + Dev
+`version.json` = 2.1.8, **Prod-buildTime unverändert 14:29** (Governance hält).
+Phase A damit zu ~95 % live bestätigt.
+
+**Entscheidungen (User) für A5:**
+| Frage | Entscheidung |
+|---|---|
+| Timing | **jetzt** — unabhängig von `task_bba37780` |
+| Umfang | **komplett aus** — localhost:3001 nicht mehr für main-Tests; NAS ist einzige Instanz |
+| Notebook-MySQL | **auch stoppen**, StartType Automatic → **Manual** (Daten + Re-Import bleiben) |
+| Hook-Entschärfung | via **Main-Chat** (Option 1) — main-Welt-Trennung strikt gewahrt |
+
+**Bestandsaufnahme (read-only, Laptop, 2026-07-03):**
+- localhost:3001-Server läuft **bereits nicht** (kein Listener, keine node-Prozesse, curl refused).
+- **Kein Windows-Autostart:** keine Scheduled Tasks, nichts im Startup-Ordner
+  (User + Common), keine Registry Run-Keys (HKCU + HKLM) für ProTrackr.
+- Service **`MySQL84`**: Running, StartType Automatic.
+- **Einzige Server-Wiederbelebungs-Quelle:** `.husky/post-commit` Z. 110–123
+  (gated auf `main`) → `protrackr.ps1 Restart` beim nächsten qualifizierenden main-Commit.
+- `C:\Projects\ProTrackr_main` existiert (Branch `main`) = Main-Chat-Worktree.
+
+**Warum Ausführung in neuer Sitzung:** Context-Limit dieser Sitzung nahezu erreicht.
+User-Entscheidung: umfangreiches Handover fortschreiben (wie nach A4), neue Sitzung
+auf dessen Basis starten. Vollständiger A5-Ausführungsplan in `HANDOVER-NAS-SETUP.md` §6.
+
+**Nächste Schritte (neue Sitzung):** (1) MySQL84 stop + Manual (Admin-PS),
+(2) Hook-Restart-Block via Main-Chat auf `main` entfernen, (3) Verifikation
+(Test-Commit → Port 3001 frei), (4) Doku + Memory (`feedback_deploy_workflow`
+wird obsolet — neuer Main-Test-Weg zu klären).
+
+---
+
+# Phase A / A5 — Ausführung (folgt in neuer Sitzung)
