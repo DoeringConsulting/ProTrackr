@@ -139,6 +139,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo -e "${GRAY}  (Dry-Run Ende — nichts verändert.)${NC}"
   exit 0
 fi
+# Marker für guard-prod-watch.sh: die folgenden protrackr-app-Events sind
+# LEGITIM (dieser Deploy), nicht ein direkter Eingriff → kein Fehlalarm.
+date +%s > /tmp/protrackr-prod-deploy.marker 2>/dev/null || true
 docker compose -f "$PROD_COMPOSE" up -d --no-build app 2>&1 | tail -8
 
 # -----------------------------------------------------------------------------

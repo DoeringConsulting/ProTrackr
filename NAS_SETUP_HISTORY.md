@@ -1658,6 +1658,32 @@ Reisekosten-Fix) — mit frischem Kopf, nicht jetzt.
 
 ---
 
-# Phase A / A4.2 — aktiver Prod-Guard (SMTP-Watcher) + A5 Switchover (folgt)
+## 2026-07-02 — Phase A / A4.2: aktiver Prod-Guard (Docker-Event-Watcher)
+
+**Mail-Kanal:** Unraid-Notification-Mail von Outlook (funktionierte nie) auf
+**hoste.pl** (office@doering-consulting.eu) umgestellt — Test-Mail kam an ✓.
+Der Guard nutzt `notify` → Dashboard + Mail.
+
+**Gebaut:**
+- **`scripts/guard-prod-watch.sh`** — `docker events` auf `protrackr-app`
+  (start/die). Marker-Logik: Event ≤ GRACE (300 s) nach dem Marker von
+  deploy-prod.sh = legitim (nur Log); Event ohne gültigen Marker = DIREKTER
+  Eingriff → `notify -i alert` (Dashboard + Mail). Reconnect-Loop, falls
+  `docker events` abbricht.
+- **`deploy-prod.sh`**: setzt vor `up` einen Marker (`/tmp/protrackr-prod-
+  deploy.marker`) → legitime Promotions lösen keinen Fehlalarm aus.
+
+**Dauerbetrieb:** Unraid User Scripts, Schedule „At Startup of Array":
+`nohup .../scripts/guard-prod-watch.sh >/var/log/protrackr-guard.log 2>&1 &`
+
+**Ehrliche Grenze (unverändert):** root kann den Watcher selbst stoppen — der
+Guard macht direkte Eingriffe **sichtbar** (Alarm), nicht unmöglich.
+
+**Offen:** NAS-Setup (git pull, User Script anlegen, Watcher starten) + Test
+(direkter Event z.B. `docker restart protrackr-app` → Alarm-Mail).
+
+---
+
+# Phase A / A5 — Notebook-Server abschalten / Switchover (folgt)
 
 # Phase 6 / A5 — Notebook-Server abschalten / Switchover (folgt)
