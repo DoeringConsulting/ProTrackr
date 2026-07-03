@@ -4,7 +4,8 @@
 # =============================================================================
 # Überwacht den PROD-Container (protrackr-app) via `docker events` und meldet
 # JEDEN direkten Eingriff (start/die), der NICHT über deploy-prod.sh lief, per
-# Unraid-Notification (Dashboard + Mail an office@doering-consulting.eu).
+# Unraid-Notification (Dashboard + Mail an den in Unraid konfigurierten
+# Empfänger — aktuell a.doering@doering-consulting.eu, via hoste.pl).
 #
 # Legitim vs. direkt:
 #   deploy-prod.sh setzt vor dem Deploy einen Marker mit Timestamp. Ein Event
@@ -46,11 +47,13 @@ log "Watcher gestartet (container=$PROD_CONTAINER, grace=${GRACE}s, marker=$MARK
 
 while true; do
   # start ODER die des Prod-Containers (Docker behandelt mehrere event-Filter als OR)
+  # Docker 20.10+/29.x: das Event-Feld heißt .Action (nicht mehr .Status).
+  # .Status gäbe "can't evaluate field Status in type *events.Message".
   docker events \
     --filter "container=$PROD_CONTAINER" \
     --filter 'event=start' \
     --filter 'event=die' \
-    --format '{{.Time}} {{.Status}}' \
+    --format '{{.Time}} {{.Action}}' \
   | while read -r EVENT_TIME STATUS; do
       NOW=$(date +%s)
       LEGIT=false
