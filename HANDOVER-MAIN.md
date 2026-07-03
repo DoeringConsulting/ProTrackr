@@ -2,20 +2,24 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue
 > Main-Sitzung kann allein auf Basis dieses Dokuments + der Memory-Dateien
-> lückenlos weiterarbeiten. Stand: **2026-07-03, v2.1.15, HEAD `ee6cd2b`**
-> (Backlog P1/P2/P4/P5 erledigt; dieses Doku-Update bumpt auf v2.1.16).
+> lückenlos weiterarbeiten. Stand: **2026-07-04, v2.1.17, HEAD `5196a72`**
+> (Backlog P1/P2/P4/P5 + task_bba37780-Nachbesserung erledigt; dieses Doku-Update
+> bumpt auf v2.1.18).
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt).
 
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich).
-- **Stand:** v2.1.15 auf main + origin, Baum sauber. Fehler #1/#2/#3 erledigt,
-  NAS-Rollout-Tooling + Deployment-Blueprint stehen, A5 komplett. **Backlog
-  P1/P2/P4/P5 erledigt** (2026-07-03, je 3-Agenten-Workflow, siehe §6).
+- **Stand:** v2.1.17 auf main + origin, Baum sauber. Fehler #1/#2/#3 + Backlog
+  P1/P2/P4/P5 erledigt; **task_bba37780-Nachbesserung** (Kurs-Stichtag-Cap K1 +
+  Doppelzählung 2a + Kundenbericht-Chronologie 2c) erledigt (2026-07-04, v2.1.17,
+  `5196a72`, siehe §4). NAS-Rollout-Tooling + Blueprint stehen, A5 komplett.
 - **Offen (Backlog):** nur noch **P3 — persistenter Session-Store** (Infra +
   neue Dependency, bewusst vertagt). Details §6.1.
-- **NAS-seitige Nachzügler** (eigener Chat, nicht hier): P1-Funktionsabnahme in
-  NAS-Dev (`:9444`, Belege 580/581, Kunde 278) + P4-`build-arg` T3b.
+- **NAS-seitige Nachzügler** (eigener Chat, nicht hier): **erneute Dev-Abnahme der
+  Nachbesserung** in NAS-Dev (`:9444`, Kunde exclusive, laufender Monat 07/2026 —
+  „Angewendete Wechselkurse"-Box: Stichtag ≠ Zukunft; Doppelzählung weg; RK
+  chronologisch) + P4-`build-arg` T3b.
 - **Deploy:** committen + `git push origin main` — **kein localhost mehr**.
   Ausrollen auf den NAS läuft im **NAS-Setup-Chat** via `/nas-rollout`.
 
@@ -94,7 +98,7 @@ werden (A5-Zustand blieb erhalten).
 
 ## 4. AKTUELLER STAND
 
-- **Version:** v2.1.15 · **HEAD:** `ee6cd2b` (= origin/main, synchron).
+- **Version:** v2.1.17 · **HEAD:** `5196a72` (= origin/main, synchron).
 - **Letzte Arbeit (diese Sitzung, 2026-07-03):** Backlog P1/P2/P4/P5 abgearbeitet,
   jeweils Junior→Senior(APPROVE)→QA(tsc + 11 pre-commit-Tests grün), eigener
   Commit + Push:
@@ -107,6 +111,23 @@ werden (A5-Zustand blieb erhalten).
     verdrahtet (`document.title`, zwingender Fallback). NAS-Nachzügler: T3b.
   - **P5** `ee6cd2b` (v2.1.15) — `scripts/generate-version.js`: environment-Default
     `development`→`production` (kosmetisch, kein Konsument des Feldes).
+- **task_bba37780-Nachbesserung (2026-07-04, `5196a72`, v2.1.17):** Dev-Abnahme
+  v2.1.15 fand 3 Folgefehler; behoben in einem Commit (3-Agenten-Workflow,
+  Senior-APPROVE, tsc + 25 DB-freie Tests + esbuild-Bundle grün):
+  - **K1 Kurs-Stichtag:** bei Zukunfts-Leistungsdatum (laufender Monat) lief der
+    NBP-Call auf ein Zukunftsdatum → 404-Kaskade → stale Notfall-Kurs. Neuer Helper
+    `shared/dateStichtag.ts` (`capRateStichtagKey`, min(jüngstes, gestern), Polish-
+    VAT §9), Client (`reportStichtag`+Label) + Server (`rateStichtag` in
+    `routers.ts:resolveForReportDate`, ersetzt `stichtag` vor beiden NBP-Calls).
+  - **2a Doppelzählung:** exclusive-RK zählten als Umsatz UND Kosten; jetzt via
+    `isBillableExclusiveTravel` aus `variableCostsPln`/`variableCostsByCurrency`
+    ausgeschlossen. Steuer-Engine (`getMonthlyAmounts`) unangetastet (netto null).
+  - **2c Chronologie:** neuer getesteter Row-Builder
+    `client/src/lib/customerReportRows.ts` (RK an Tages-Erst-Eintrag, reine RK-Tage
+    eigene chronologische Zeile, jeder Beleg genau einmal) in UI/Kostenaufstellung-
+    PDF/Excel; `customerEntries` aufsteigend sortiert (PDF+Timesheet konsistent).
+  - **B (Rundung) verworfen:** die 0,66-EUR-Divergenz war Symptom von K1, keine
+    Doppel-Rundung — der zunächst geplante Single-Rundungs-Fix entfiel.
 - **Davor (Kontext):** Fehler #2 komplett live auf **v2.1.0** (`v2.1.0-phase3c-done`);
   Tech-Debt aggregateByCustomer entfernt (v2.1.1); NAS-Rollout-Tooling +
   Deployment-Blueprint (v2.1.2–v2.1.8); A5-Hook-Schritt (v2.1.9).
@@ -127,12 +148,14 @@ werden (A5-Zustand blieb erhalten).
   **7.3.1**, Image-Promotion Dev→Prod. Vollplan `docs/DEPLOYMENT-BLUEPRINT.md`.
   Governance: PROD nur via Dev→Promotion ([[feedback_prod_only_via_dev_promotion]]).
 - **Offene NAS-Nachzügler aus dieser main-Sitzung** (im NAS-Chat abzuarbeiten):
-  1. **P1-Funktionsabnahme** in NAS-Dev `:9444` mit den echten Belegen (Kunde
-     `customers.id=278` exclusive, `expenses` 580 flight 20000 EUR + 581 taxi
-     25600 PLN, beide `date=2026-07-02`, `customerId=278`, `timeEntryId=NULL`).
-     Erwartung: beide erscheinen in Buchhaltungsbericht-Detailzeile „Reisekosten
-     (abrechenbar, nur Exclusive)", Kundenbericht-Detailtabelle (eigene Zeilen)
-     und PDF-Kostenaufstellung (nicht mehr 0,00). Danach `task_bba37780` schließen.
+  1. **Erneute Dev-Abnahme der task_bba37780-Nachbesserung** (v2.1.17) in NAS-Dev
+     `:9444`, Kunde exclusive, laufender Monat 07/2026. Prüfen: (a) „Angewendete
+     Wechselkurse"-Box zeigt Stichtag ≠ Zukunft (letzter Werktag vor heute, nicht
+     3.6/3.7 bei Stichtag 31.7); (b) abrechenbare RK NICHT mehr doppelt (Umsatz vs.
+     „Variable Kosten"); (c) Kundenbericht-Detail/PDF/Excel chronologisch, verwaiste
+     RK-Belege in Tages-/eigener Zeile (nicht mehr hinten/0,00). Belege 580 (flight
+     20000 EUR) + 581 (taxi 25600 PLN), Kunde 278, `date=2026-07-02`. Danach
+     `task_bba37780` schließen.
   2. **P4-T3b:** build-arg für `VITE_APP_TITLE` im Container-Build setzen, damit
      die Var im Prod-Bundle ankommt (sonst greift der Fallback).
 
@@ -148,10 +171,12 @@ brauchen eine fokussierte Runde). Vor Beginn Vorgehen/Test-Strategie klären.
   loggt alle Nutzer aus; MemoryStore ist nicht production-tauglich.
 - **Fix:** `express-mysql-session` als Store einsetzen (`sessions`-Tabelle, Sessions
   überleben Restart). `pnpm add express-mysql-session` + `-D
-  @types/express-mysql-session`. Store aus `DATABASE_URL`; sauberer wäre, den
-  **bestehenden mysql2-Pool wiederzuverwenden** statt DATABASE_URL neu zu parsen
-  (im Code prüfen, ob ein Pool exportiert ist). `createDatabaseTable:true` legt die
-  Tabelle automatisch an (alternativ echte drizzle-Migration).
+  @types/express-mysql-session`. Store braucht einen **dedizierten mysql2-Pool aus
+  `DATABASE_URL`** — `server/db.ts` nutzt `drizzle(process.env.DATABASE_URL)` und
+  exportiert KEINEN wiederverwendbaren Pool (Stand v2.1.17 im Code verifiziert); die
+  frühere „Pool wiederverwenden"-Idee ist damit überholt. `sessions`-Tabelle per
+  echter drizzle-Migration `0025_sessions.sql` + `schema.ts`-Sync (Repo-Konvention),
+  nicht `createDatabaseTable:true`. Sessions NICHT ins Backup (flüchtiger Auth-State).
 - **Umfang/Achtung:** neue Dependency (package.json + Lockfile — der NAS-Container-
   Build muss sie ziehen); `sessions`-Tabelle = DB-Effekt; Session-Funktion wird
   DB-abhängig (bei DB-Ausfall keine Sessions — App braucht DB aber ohnehin).
