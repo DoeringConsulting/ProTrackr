@@ -77,6 +77,15 @@ abgeschaltet, der NAS ist die **einzige laufende Instanz** (Prod
 laufende App ad hoc `npm run dev` oder gegen NAS-Dev `:9444`. Notebook-`MySQL84`
 wird gestoppt (StartType Manual) — DB für lokale Tests ggf. erst starten.
 
+**⚠ Post-A5-Stolperfalle (Commits!):** Weil `MySQL84` jetzt Manual/aus ist,
+scheitert der **`pre-commit`-Hook** — NICHT an den Tests (die sind grün), sondern
+am **DB-Fixture-Cleanup** in `server/vitest.setup.ts` (`ECONNREFUSED
+127.0.0.1:3306`). Lösung: **vor Code-Commits `Start-Service MySQL84`**
+(Admin-PowerShell); für reine Doku-/Nicht-DB-Commits
+**`SKIP_TEST_CLEANUP=1 git commit …`** (überspringt nur den Cleanup, Tests laufen
+normal; Skip-Check in `vitest.setup.ts:22` vor dem DB-Connect). Steht auch in
+Memory [[feedback_deploy_workflow]].
+
 ## 4. AKTUELLER STAND
 
 - **Version:** v2.1.9 · **HEAD:** `730fb94` (= origin/main, synchron).
@@ -108,10 +117,15 @@ wird gestoppt (StartType Manual) — DB für lokale Tests ggf. erst starten.
   **7.3.1**, Image-Promotion Dev→Prod. Vollplan `docs/DEPLOYMENT-BLUEPRINT.md`.
   Governance: PROD nur via Dev→Promotion ([[feedback_prod_only_via_dev_promotion]]).
 
-## 6. OFFENE PUNKTE
+## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE (nach Nutzen priorisiert)
 
-### 6.1 App-Bug `task_bba37780` — Reisekosten-Attribution (OFFEN, priorisiert)
-Ausführlich in Memory `project_open_fix_expense_attribution_main`.
+**Reihenfolge:** P1 (Funktionsbug) → P2 (Quick Win) → P3 → P4 → P5. Alle Code-
+Änderungen laufen über den **3-Agenten-Workflow** + den Post-A5-Commit-Ablauf
+(§6.3 Rahmen-Regeln + §3-Stolperfalle).
+
+### P1 — `task_bba37780`: Reisekosten-Attribution (FUNKTIONALER BUG, Prio 1)
+Ausführlich in Memory `project_open_fix_expense_attribution_main`. **Laut Memory
+bei Aufnahme ZUERST den User fragen**, wie vorgegangen wird.
 - **Symptom:** Beleg mit `expenses.customerId` gesetzt, aber `timeEntryId = NULL`
   („Option B"-Direktzuordnung, gültig ab Cutover 2026-07-01) wird inkonsistent
   behandelt: Kundenbericht-Summary korrekt ✅; Buchhaltungsbericht-Zeile
@@ -122,29 +136,56 @@ Ausführlich in Memory `project_open_fix_expense_attribution_main`.
 - **Root Cause:** zwei Render-Pfade nutzen noch die alte
   `if (!expense.timeEntryId) return false`-Logik statt der zentralen
   `getExpenseBillingCustomerId(expense, maps)` aus
-  `client/src/lib/expenseAttribution.ts`:
+  `client/src/lib/expenseAttribution.ts` (berücksichtigt customerId UND timeEntryId):
   1. `client/src/pages/Reports.tsx:1091` (Filter „abrechenbar, nur Exclusive")
   2. Datenpfad, der `exportCustomerCostStatementToPDF` in
      `client/src/lib/reportPdfExports.ts` speist (Reisekosten kommen vorberechnet
      aus Reports.tsx).
   Gegencheck: `getExpenseBillingCustomerId` wird in Reports.tsx bereits korrekt
   bei ~Z.386/450/519/613 genutzt — Z.1091 + PDF sind die Ausreißer.
-  **(Zeilennummern gegen aktuellen Code verifizieren — v2.1.9.)**
+  **(Zeilennummern gegen aktuellen Code verifizieren.)**
 - **Testdaten (NUR in Prod/NAS-DB, NICHT auf Laptop):** Kunde `customers.id=278`
   (exclusive), `expenses.id` 580 (flight 20000 EUR) + 581 (taxi 25600 PLN), beide
   `date=2026-07-02`, `customerId=278`, `timeEntryId=NULL`. Für lokalen Test eigene
-  Fixtures anlegen (Namenskonvention Sentinel `VTEST-…`/`VTEST_…`, damit der
-  vitest-Teardown sie fängt).
-- **Vorgehen:** Fix auf `main` (dieser Worktree). **Zuerst User fragen** (war beim
-  Pausieren offen), dann Attribution über die zentrale Funktion vereinheitlichen,
-  `tsc`+`vitest` grün, gezielter Test für customerId-ohne-timeEntryId, committen +
-  pushen (Deploy auf NAS via NAS-Chat).
+  Fixtures anlegen (Sentinel `VTEST-…`/`VTEST_…`, damit der vitest-Teardown sie fängt).
+
+### P2 — M2: rateLimit IPv6-KeyGen (Quick Win, ~15 Min)
+`server/_core/index.ts`: 3× `rateLimit()` nutzen `keyGenerator:(req)=>req.ip` →
+Fehler `ERR_ERL_KEY_GEN_IPV6`. Umstellen auf
+`import { rateLimit, ipKeyGenerator } from "express-rate-limit"` +
+`keyGenerator:(req)=>ipKeyGenerator(req.ip)`.
+
+### P3 — M1: persistenter Session-Store (~40 Min)
+`server/_core/index.ts`: Express-Session nutzt `MemoryStore` → auf
+`express-mysql-session` umstellen (`pnpm add express-mysql-session` +
+`-D @types/express-mysql-session`; `MySQLStore` aus `DATABASE_URL`,
+`createDatabaseTable:true`). Test: Login → Restart → noch eingeloggt?
+
+### P4 — T3a: `VITE_APP_TITLE` verdrahten (+FALLBACK zwingend, niedrig)
+`VITE_APP_TITLE` ist verwaist (Titel hardcoded `client/index.html:14`, kein
+`import.meta.env`-Konsum). Client soll die Var lesen:
+`document.title = import.meta.env.VITE_APP_TITLE || "Döring Consulting - Projekt & Abrechnungsmanagement"`.
+**FALLBACK ZWINGEND** (sonst leerer Prod-Titel). Nach Merge dem **NAS-Chat
+zurückmelden** → dort zieht **T3b** nach (build-arg, damit `VITE_*` im Container-
+Build ankommt).
+
+### P5 — M4: version.json environment-Default (kosmetisch)
+`scripts/generate-version.js` setzt `"environment":"development"` als Default → im
+Build fälschlich `development`. Health-Gate prüft nur `version` (kein Blocker).
 
 ### 6.2 A5 (localhost-Shutdown) — Status
-- **Main-Teil ERLEDIGT** (diese Sitzung): Hook-Restart-Block entfernt (v2.1.9).
+- **Main-Teil ERLEDIGT** (Vor-Sitzung): Hook-Restart-Block entfernt (v2.1.9).
 - **Offen im NAS-Chat:** MySQL84 stop + StartType Manual, Verifikation (Test-
   Commit → Port 3001 frei), Doku. Plan: `HANDOVER-NAS-SETUP.md` §6. Siehe
   [[project_a5_localhost_shutdown]].
+
+### 6.3 Rahmen-Regeln für die Umsetzung (verbindlich)
+- **3-Agenten-Workflow** (Junior/Senior/QA) für ALLE Code-Änderungen
+  ([[feedback_3agent_workflow]]).
+- **Vor Code-Commits `Start-Service MySQL84`** (Admin-PS) — sonst scheitert
+  pre-commit am DB-Cleanup (§3-Stolperfalle).
+- **Nach main-Änderungen NUR committen + pushen**; NAS-Deploy separat im NAS-Chat
+  via `/nas-rollout`; **niemals `nas-setup → main`** ohne Freigabe.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
