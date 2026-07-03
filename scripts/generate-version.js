@@ -35,7 +35,11 @@ const versionInfo = {
   version: getVersion(),
   buildTime: new Date().toISOString(),
   gitCommit: process.env.GIT_COMMIT || "unknown",
-  environment: process.env.NODE_ENV || "development",
+  // Dieses Skript laeuft im Rahmen des Production-Builds (vite build). Ohne
+  // explizit gesetztes NODE_ENV war der alte Default "development" im Prod-Build
+  // irrefuehrend. NODE_ENV bleibt Override — NAS-Stacks koennen es je Umgebung
+  // (dev/prod) setzen fuer eine praezise Zuordnung.
+  environment: process.env.NODE_ENV || "production",
 };
 
 const outputPath = join(__dirname, "../client/public/version.json");
