@@ -2,18 +2,19 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue
 > Main-Sitzung kann allein auf Basis dieses Dokuments + der Memory-Dateien
-> lückenlos weiterarbeiten. Stand: **2026-07-04, v2.1.17, HEAD `5196a72`**
-> (Backlog P1/P2/P4/P5 + task_bba37780-Nachbesserung erledigt; dieses Doku-Update
-> bumpt auf v2.1.18).
+> lückenlos weiterarbeiten. Stand: **2026-07-04, v2.1.19, HEAD `13f64f1`**
+> (Backlog P1/P2/P4/P5 + task_bba37780-Nachbesserung inkl. TZ-Fix erledigt; dieses
+> Doku-Update bumpt auf v2.1.20).
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt).
 
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich).
-- **Stand:** v2.1.17 auf main + origin, Baum sauber. Fehler #1/#2/#3 + Backlog
+- **Stand:** v2.1.19 auf main + origin, Baum sauber. Fehler #1/#2/#3 + Backlog
   P1/P2/P4/P5 erledigt; **task_bba37780-Nachbesserung** (Kurs-Stichtag-Cap K1 +
-  Doppelzählung 2a + Kundenbericht-Chronologie 2c) erledigt (2026-07-04, v2.1.17,
-  `5196a72`, siehe §4). NAS-Rollout-Tooling + Blueprint stehen, A5 komplett.
+  Doppelzählung 2a + Kundenbericht-Chronologie 2c, v2.1.17 `5196a72`) + **TZ-Fix**
+  (heute/gestern in Europe/Warsaw statt UTC, v2.1.19 `13f64f1`) erledigt (siehe §4).
+  NAS-Rollout-Tooling + Blueprint stehen, A5 komplett.
 - **Offen (Backlog):** nur noch **P3 — persistenter Session-Store** (Infra +
   neue Dependency, bewusst vertagt). Details §6.1.
 - **NAS-seitige Nachzügler** (eigener Chat, nicht hier): **erneute Dev-Abnahme der
@@ -98,7 +99,7 @@ werden (A5-Zustand blieb erhalten).
 
 ## 4. AKTUELLER STAND
 
-- **Version:** v2.1.17 · **HEAD:** `5196a72` (= origin/main, synchron).
+- **Version:** v2.1.19 · **HEAD:** `13f64f1` (= origin/main, synchron).
 - **Letzte Arbeit (diese Sitzung, 2026-07-03):** Backlog P1/P2/P4/P5 abgearbeitet,
   jeweils Junior→Senior(APPROVE)→QA(tsc + 11 pre-commit-Tests grün), eigener
   Commit + Push:
@@ -128,6 +129,15 @@ werden (A5-Zustand blieb erhalten).
     PDF/Excel; `customerEntries` aufsteigend sortiert (PDF+Timesheet konsistent).
   - **B (Rundung) verworfen:** die 0,66-EUR-Divergenz war Symptom von K1, keine
     Doppel-Rundung — der zunächst geplante Single-Rundungs-Fix entfiel.
+- **TZ-Fix (2026-07-04, `13f64f1`, v2.1.19):** „heute/gestern" für den Kurs-Stichtag
+  wurde per UTC (`toISOString`) bzw. browser-lokal bestimmt → im Fenster 00:00–02:00
+  Warschau (UTC+1/+2) Off-by-one, Cap 1 Tag zu früh. Neue gemeinsame
+  `shared/dateStichtag.ts` `warsawDateKey()` (Intl/Europe-Warsaw, DST-sicher,
+  `RangeError` bei Invalid Date) an allen 3 Stellen (Server `resolveForReportDate` +
+  „Kurse von NBP abrufen"; Client `reportStichtag`) → Client+Server konsistent
+  Warschau. 4 Tests, Senior-APPROVE. **Offen (niedrig-prio, separat):** `Reports.tsx`
+  Default-Monatsgrenzen (`startDate`/`endDate`) + `scheduler.ts` Monatsend-
+  Notification bleiben browser-lokal/UTC — TZ-Kohärenz-Folge-Ticket-Kandidaten.
 - **Davor (Kontext):** Fehler #2 komplett live auf **v2.1.0** (`v2.1.0-phase3c-done`);
   Tech-Debt aggregateByCustomer entfernt (v2.1.1); NAS-Rollout-Tooling +
   Deployment-Blueprint (v2.1.2–v2.1.8); A5-Hook-Schritt (v2.1.9).
@@ -148,10 +158,11 @@ werden (A5-Zustand blieb erhalten).
   **7.3.1**, Image-Promotion Dev→Prod. Vollplan `docs/DEPLOYMENT-BLUEPRINT.md`.
   Governance: PROD nur via Dev→Promotion ([[feedback_prod_only_via_dev_promotion]]).
 - **Offene NAS-Nachzügler aus dieser main-Sitzung** (im NAS-Chat abzuarbeiten):
-  1. **Erneute Dev-Abnahme der task_bba37780-Nachbesserung** (v2.1.17) in NAS-Dev
+  1. **Erneute Dev-Abnahme der task_bba37780-Nachbesserung** (v2.1.19) in NAS-Dev
      `:9444`, Kunde exclusive, laufender Monat 07/2026. Prüfen: (a) „Angewendete
      Wechselkurse"-Box zeigt Stichtag ≠ Zukunft (letzter Werktag vor heute, nicht
-     3.6/3.7 bei Stichtag 31.7); (b) abrechenbare RK NICHT mehr doppelt (Umsatz vs.
+     3.6/3.7 bei Stichtag 31.7) — inkl. TZ: bei Bericht-Erstellung 00:00–02:00
+     Warschau kein zusätzlicher Tag-Rückfall; (b) abrechenbare RK NICHT mehr doppelt (Umsatz vs.
      „Variable Kosten"); (c) Kundenbericht-Detail/PDF/Excel chronologisch, verwaiste
      RK-Belege in Tages-/eigener Zeile (nicht mehr hinten/0,00). Belege 580 (flight
      20000 EUR) + 581 (taxi 25600 PLN), Kunde 278, `date=2026-07-02`. Danach
