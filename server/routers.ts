@@ -24,6 +24,7 @@ import {
   type ReceiptExpenseCandidate,
 } from "./receiptAi";
 import { toScopeContext } from "./scope";
+import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
   if (!actorMandantId) return false;
@@ -3512,10 +3513,20 @@ export const appRouter = router({
 
       // Anker für den "aktuellsten Kurs"-Mit-Abruf, wenn der Bericht-Stichtag
       // selbst einen NBP-Call erzwingt (siehe weiter unten). Wir nehmen HEUTE
-      // (UTC-Mitternacht). NBP's eigener 404-Fallback springt automatisch auf
-      // gestern, falls heute noch nicht publiziert.
-      const todayKey = new Date().toISOString().slice(0, 10);
+      // in Europe/Warsaw (Projekt-Zeitzone, CLAUDE.md §4 — NICHT UTC, sonst
+      // Off-by-one im Fenster 00:00–02:00 Warschau). NBP's eigener 404-Fallback
+      // springt automatisch auf gestern, falls heute noch nicht publiziert.
+      const todayKey = warsawDateKey();
       const todayUtc = new Date(`${todayKey}T00:00:00Z`);
+
+      // Defensiver Cap (der Client cappt reportStichtag bereits): der Kurs-Stichtag
+      // darf nie in der Zukunft liegen → min(Stichtag, gestern). Polish-VAT §9 +
+      // verhindert die NBP-Zukunfts-404-Kaskade, die sonst in den stale Notfall-
+      // Fallback läuft (task_bba37780 Komplex 1). NBP's eigener 404-Fallback deckt
+      // Wochenende/Feiertag ab, sodass "gestern" zum letzten Werktag wird.
+      const stichtagKey = stichtag.toISOString().slice(0, 10);
+      const rateStichtagKey = capRateStichtagKey(stichtagKey, todayKey);
+      const rateStichtag = new Date(`${rateStichtagKey}T00:00:00Z`);
 
       const results: Array<{
         pair: string;
@@ -3553,7 +3564,7 @@ export const appRouter = router({
           //    genau diesen Stichtag-Tag und dieses Paar? Wenn ja, nehmen wir
           //    den — kein NBP-Call. Das deckt den Standard-Fall ab, dass
           //    Berichte für vergangene Monate immer denselben Stichtag haben.
-          const stichtagMatch = await getExchangeRateByDate(pair, stichtag, 0);
+          const stichtagMatch = await getExchangeRateByDate(pair, rateStichtag, 0);
           if (stichtagMatch) {
             results.push(buildResult(stichtagMatch, { isManual: false, sourceLabel: String(stichtagMatch.source ?? "NBP") }));
             continue;
@@ -3563,7 +3574,7 @@ export const appRouter = router({
           //    Datum. NBP's eigener 404-Fallback geht bis zu 7 Tage rückwärts
           //    (Wochenende / Feiertag / noch nicht publiziert).
           const baseCurrency = pair.split("/")[0];
-          const archivedForStichtag = await fetchNBPExchangeRateWithMeta(baseCurrency, stichtag);
+          const archivedForStichtag = await fetchNBPExchangeRateWithMeta(baseCurrency, rateStichtag);
           const stichtagEffective = new Date(`${archivedForStichtag.effectiveDate}T00:00:00Z`);
           const stichtagRateInt = Math.round(archivedForStichtag.rate * 10000);
           await createExchangeRate({
@@ -3661,13 +3672,14 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
       }
 
-      // Anchor on TODAY (UTC midnight) so the user sees the most recent
-      // published rate when clicking "Kurse von NBP abrufen". NBP's own
-      // 404-fallback (in nbp.ts, up to 7 days backward) handles the cases
-      // where today is not yet published (call before ~12:00 PL) or non-
-      // working-day (weekend / Polish holiday) — it walks back to the latest
-      // available working day automatically.
-      const todayUtc = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+      // Anchor on TODAY in Europe/Warsaw (project timezone, CLAUDE.md §4 — not
+      // UTC, else an off-by-one in the 00:00–02:00 Warsaw window) so the user
+      // sees the most recent published rate when clicking "Kurse von NBP
+      // abrufen". NBP's own 404-fallback (in nbp.ts, up to 7 days backward)
+      // handles the cases where today is not yet published (call before ~12:00
+      // PL) or non-working-day (weekend / Polish holiday) — it walks back to the
+      // latest available working day automatically.
+      const todayUtc = new Date(`${warsawDateKey()}T00:00:00Z`);
 
       const results = [];
       for (const currency of input.currencies) {
