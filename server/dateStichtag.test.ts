@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { capRateStichtagKey, previousDayKey } from "@shared/dateStichtag";
+import { capRateStichtagKey, previousDayKey, warsawDateKey } from "@shared/dateStichtag";
 
 describe("previousDayKey", () => {
   it("subtrahiert einen Tag innerhalb des Monats", () => {
@@ -40,5 +40,27 @@ describe("capRateStichtagKey", () => {
 
   it("lässt exakt gestern unverändert", () => {
     expect(capRateStichtagKey("2026-07-02", today)).toBe("2026-07-02");
+  });
+});
+
+describe("warsawDateKey", () => {
+  it("gibt in der Sommerzeit (CEST, UTC+2) das Warschauer Datum zurück — nicht UTC", () => {
+    // 23:30 UTC am 3.7. = 01:30 Warschau am 4.7. → Warschau-Datum ist der 4.7.
+    // (toISOString().slice(0,10) läge hier falsch beim 3.7. — genau der Bug.)
+    expect(warsawDateKey(new Date("2026-07-03T23:30:00Z"))).toBe("2026-07-04");
+  });
+
+  it("stimmt tagsüber mit dem Kalendertag überein", () => {
+    expect(warsawDateKey(new Date("2026-07-04T10:00:00Z"))).toBe("2026-07-04");
+  });
+
+  it("kippt kurz vor Mitternacht Warschau noch nicht auf morgen", () => {
+    // 21:30 UTC am 4.7. = 23:30 Warschau am 4.7. (noch derselbe Tag)
+    expect(warsawDateKey(new Date("2026-07-04T21:30:00Z"))).toBe("2026-07-04");
+  });
+
+  it("berücksichtigt die Winterzeit (CET, UTC+1)", () => {
+    // 23:30 UTC am 15.1. = 00:30 Warschau am 16.1.
+    expect(warsawDateKey(new Date("2026-01-15T23:30:00Z"))).toBe("2026-01-16");
   });
 });

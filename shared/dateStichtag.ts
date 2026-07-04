@@ -1,9 +1,10 @@
 // Kurs-Stichtag-Kappung für Berichte (task_bba37780 Komplex 1).
 //
-// Reine, TZ-sichere Datums-Key-Arithmetik (YYYY-MM-DD), von Client UND Server
-// genutzt — eine Wahrheitsquelle, damit beide Seiten nicht auseinanderdriften.
-// Bewusst KEIN toISOString auf lokalen Datumsobjekten (Europe/Warsaw-Off-by-one),
-// sondern reine UTC-Komponenten-Arithmetik auf bereits lokal gebildeten Keys.
+// TZ-sichere Datums-Key-Helfer (YYYY-MM-DD) für den Kurs-Stichtag, von Client UND
+// Server genutzt — eine Wahrheitsquelle, damit beide Seiten nicht auseinanderdriften.
+// "Heute/gestern" wird IMMER in Europe/Warsaw bestimmt (verbindliche Projekt-
+// Zeitzone, CLAUDE.md §4), nie über toISOString (das liefert UTC und kippt im
+// Fenster 00:00–02:00 Warschau auf den Vortag).
 
 /** Kalendarischer Vortag zu einem YYYY-MM-DD-Key (monats-/jahresübergreifend). */
 export function previousDayKey(dayKey: string): string {
@@ -32,4 +33,24 @@ export function previousDayKey(dayKey: string): string {
 export function capRateStichtagKey(youngestKey: string, todayKey: string): string {
   const yesterday = previousDayKey(todayKey);
   return youngestKey < yesterday ? youngestKey : yesterday;
+}
+
+/**
+ * Kalender-Datumskey (YYYY-MM-DD) eines Zeitpunkts in Europe/Warsaw. Bewusst über
+ * Intl (IANA-Zeitzone inkl. Sommer-/Winterzeit), NICHT über toISOString: letzteres
+ * liefert das UTC-Datum und kippt im Fenster 00:00–02:00 Warschau (UTC+1/+2) auf den
+ * Vortag → falscher Kurs-Stichtag (task_bba37780 TZ-Nachbesserung). Default = jetzt.
+ */
+export function warsawDateKey(instant: Date = new Date()): string {
+  if (Number.isNaN(instant.getTime())) {
+    throw new RangeError("warsawDateKey: ungültiges Date");
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Warsaw",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }

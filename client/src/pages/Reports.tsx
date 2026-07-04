@@ -34,7 +34,7 @@ import {
 } from "@/lib/provision";
 import { getExpenseBillingCustomerId as attributeExpenseToCustomer } from "@/lib/expenseAttribution";
 import { buildCustomerReportRows } from "@/lib/customerReportRows";
-import { capRateStichtagKey } from "@shared/dateStichtag";
+import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
 
 const EXPENSE_CATEGORY_LABELS: Record<
   string,
@@ -151,8 +151,10 @@ export default function Reports() {
     // Kurse haben keine Zukunft. Liegt das jüngste Leistungs-/Kostendatum in der
     // Zukunft (laufender Monat / vorab erfasste Termine), liefe der NBP-Call sonst
     // auf ein Zukunftsdatum → 404-Kaskade → stale Notfall-Kurs (task_bba37780 K1).
-    const now = new Date();
-    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    // "Heute" verbindlich in Europe/Warsaw (Projekt-Zeitzone, CLAUDE.md §4) —
+    // identisch zum Server, statt browser-lokal (robust auch bei abweichender
+    // Browser-Zeitzone).
+    const todayKey = warsawDateKey();
     return capRateStichtagKey(youngest, todayKey);
   }, [timeEntries, expenses, startDate, endDate]);
   const reportPairs = useMemo(() => {

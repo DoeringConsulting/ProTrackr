@@ -24,7 +24,7 @@ import {
   type ReceiptExpenseCandidate,
 } from "./receiptAi";
 import { toScopeContext } from "./scope";
-import { capRateStichtagKey } from "@shared/dateStichtag";
+import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
   if (!actorMandantId) return false;
@@ -3513,9 +3513,10 @@ export const appRouter = router({
 
       // Anker für den "aktuellsten Kurs"-Mit-Abruf, wenn der Bericht-Stichtag
       // selbst einen NBP-Call erzwingt (siehe weiter unten). Wir nehmen HEUTE
-      // (UTC-Mitternacht). NBP's eigener 404-Fallback springt automatisch auf
-      // gestern, falls heute noch nicht publiziert.
-      const todayKey = new Date().toISOString().slice(0, 10);
+      // in Europe/Warsaw (Projekt-Zeitzone, CLAUDE.md §4 — NICHT UTC, sonst
+      // Off-by-one im Fenster 00:00–02:00 Warschau). NBP's eigener 404-Fallback
+      // springt automatisch auf gestern, falls heute noch nicht publiziert.
+      const todayKey = warsawDateKey();
       const todayUtc = new Date(`${todayKey}T00:00:00Z`);
 
       // Defensiver Cap (der Client cappt reportStichtag bereits): der Kurs-Stichtag
@@ -3671,13 +3672,14 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "WebApp-Admin hat keinen Dateneinblick" });
       }
 
-      // Anchor on TODAY (UTC midnight) so the user sees the most recent
-      // published rate when clicking "Kurse von NBP abrufen". NBP's own
-      // 404-fallback (in nbp.ts, up to 7 days backward) handles the cases
-      // where today is not yet published (call before ~12:00 PL) or non-
-      // working-day (weekend / Polish holiday) — it walks back to the latest
-      // available working day automatically.
-      const todayUtc = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+      // Anchor on TODAY in Europe/Warsaw (project timezone, CLAUDE.md §4 — not
+      // UTC, else an off-by-one in the 00:00–02:00 Warsaw window) so the user
+      // sees the most recent published rate when clicking "Kurse von NBP
+      // abrufen". NBP's own 404-fallback (in nbp.ts, up to 7 days backward)
+      // handles the cases where today is not yet published (call before ~12:00
+      // PL) or non-working-day (weekend / Polish holiday) — it walks back to the
+      // latest available working day automatically.
+      const todayUtc = new Date(`${warsawDateKey()}T00:00:00Z`);
 
       const results = [];
       for (const currency of input.currencies) {
