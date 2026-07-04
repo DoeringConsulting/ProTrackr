@@ -1,0 +1,60 @@
+{
+  "schema": "nas-rollout/v1",
+  "version": "2.1.20",
+  "generatedAt": "2026-07-04 (im NAS-Chat erzeugt — main lieferte kein Manifest; Werte aus origin/main verifiziert)",
+  "source": {
+    "branch": "main",
+    "commit": "b622422ea01a2e0f09758dbc8cfac73cd9c7007c",
+    "shortCommit": "b622422",
+    "freezeTag": null
+  },
+  "target": {
+    "branch": "nas-setup",
+    "deploy": "docker compose (Unraid, via Web-Terminal)"
+  },
+  "environments": {
+    "dev": {
+      "role": "dev/staging (Prod-Klon)",
+      "composeFile": "compose.dev.yml",
+      "envFile": ".env.dev",
+      "appContainer": "protrackr-app-dev",
+      "dbContainer": "protrackr-mysql-dev",
+      "hostPort": 3011,
+      "healthUrl": "http://localhost:3011/version.json",
+      "tailscale": ":9444",
+      "requireExtraConfirm": false
+    },
+    "prod": {
+      "role": "produktiv (echte Daten)",
+      "composeFile": "docker-compose.yml",
+      "envFile": ".env",
+      "appContainer": "protrackr-app",
+      "dbContainer": "protrackr-mysql",
+      "hostPort": 3010,
+      "healthUrl": "http://localhost:3010/version.json",
+      "tailscale": ":9443",
+      "requireExtraConfirm": true
+    }
+  },
+  "app": {
+    "expectVersion": "2.1.20"
+  },
+  "database": {
+    "backupBeforeMigrate": true,
+    "migrations": [],
+    "applyNote": "KEINE neuen Migrationen seit nas-setup-Stand (v2.1.15). App migriert nicht beim Start (CMD node dist/index.js). DB-Backup (Dev) trotzdem als Sicherheit vor dem Deploy."
+  },
+  "nas": {
+    "note": "Rollout fasst NAS-Config NICHT an. Verifiziert: NAS-Infra-Dateien unberuehrt (Dockerfile/compose*/deploy-*/guard-*).",
+    "sharedConfigChanged": ["package.json (nur Auto-Version-Bump)"]
+  },
+  "breaking": {
+    "value": false,
+    "note": "Reine App-Bugfixes (task_bba37780-Nachbesserung + Kurs-Stichtag-TZ). Keine Schema-/Breaking-Aenderung."
+  },
+  "verified": {
+    "note": "origin/main HEAD verifiziert: b622422 = v2.1.20. 5 Commits (nas-setup..main), 15 Dateien +678/-229, keine neuen Migrationen, NAS-Infra unberuehrt. tsc/vitest auf main durch Main-Chat (3-Agenten-Workflow) gruen."
+  },
+  "notes": "task_bba37780-Nachbesserung: Komplex 1 = Kurs-Stichtag-Cap (min juengstes/gestern, Polish-VAT §9) + TZ-Fix (shared/dateStichtag.ts warsawDateKey, Europe/Warsaw statt UTC). Komplex 2a = Doppelzaehlung abrechenbarer exclusive-Reisekosten behoben. Komplex 2c = Kundenbericht-Chronologie (Row-Builder). Ziel: Dev-Abnahme an Belegen 580/581 (Kunde 278) auf :9444.",
+  "rollback": "Vor Merge-Commit: git merge --abort. Nach Deploy-Fehler: nas-setup auf Pre-Merge-SHA (siehe Preflight) zuruecksetzen + Dev-Image/DB aus Pre-Deploy-Backup wiederherstellen."
+}
