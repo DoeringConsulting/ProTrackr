@@ -6,6 +6,10 @@
 > Stand sichern"). Es wurde **noch kein Code geschrieben** — nur die vollständige
 > Code-Analyse (unten eingearbeitet). Main-only, Worktree `C:\Projects\ProTrackr_main`,
 > Branch `main`.
+>
+> **Reihenfolge (festgelegt 2026-07-05): Diese Aufgabe kommt als ZWEITE** — zuerst
+> `APP_ENV_LABEL` Runtime-Titel (`HANDOVER-MAIN.md` §6.5), das den bestätigt wartenden
+> NAS-Chat (NAS §6.4) entblockt. Danach dieser Umsatzchart (v2.2.0).
 
 ## 0. Stand / Rahmen
 - `main` synchron mit origin. package.json aktuell **2.1.23** (Auto-Bump aus dem
