@@ -866,6 +866,15 @@ export default function Reports() {
       return convertAmountCents(amount, source, customerCurrency, reportRateMap);
     };
 
+    // Original-Belegbetrag je Reisekostenbeleg in Original-Währung ausweisen
+    // (Kundenwunsch): Zahl sprachgerecht, Währung als Code (eindeutig bei B2B-
+    // Multi-Currency). Der konvertierte Gesamtbetrag bleibt in der Spalte
+    // „Reisekosten" (Kundenwährung).
+    const originalAmountFmt = new Intl.NumberFormat(
+      reportLanguage === "en" ? "en-GB" : reportLanguage === "pl" ? "pl-PL" : "de-DE",
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+    );
+
     // Kanonisches Zeilenmodell (bereits chronologisch sortiert, jeder Beleg genau
     // einer Zeile zugeordnet) → kein separates Anhängen von Orphan-Zeilen mehr.
     const allRows = customerData.rows.map((row) => {
@@ -881,7 +890,7 @@ export default function Reports() {
           const labels = EXPENSE_CATEGORY_LABELS[exp.category] || EXPENSE_CATEGORY_LABELS.other;
           const label =
             reportLanguage === "en" ? labels.en : reportLanguage === "pl" ? labels.pl : labels.de;
-          return `${label} (${exp.sourceCurrency})`;
+          return `${label} ${originalAmountFmt.format((exp.amount ?? 0) / 100)} ${exp.sourceCurrency}`;
         })
         .filter(Boolean)
         .join(", ");
