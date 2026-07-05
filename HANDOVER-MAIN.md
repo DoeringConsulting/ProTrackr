@@ -177,14 +177,17 @@ werden (A5-Zustand blieb erhalten).
      RK-Belege in Tages-/eigener Zeile (nicht mehr hinten/0,00). Belege 580 (flight
      20000 EUR) + 581 (taxi 25600 PLN), Kunde 278, `date=2026-07-02`. Danach
      `task_bba37780` schließen.
-  2. **P4-T3b:** build-arg für `VITE_APP_TITLE` im Container-Build setzen, damit
-     die Var im Prod-Bundle ankommt (sonst greift der Fallback).
+  2. **P4-T3b (ABGELÖST):** der frühere build-arg-Ansatz für `VITE_APP_TITLE` wird
+     **verworfen** — er ist die Ursache des „(DEV)"-auf-Prod-Bugs (build-time-Label bei
+     bit-identischer Image-Promotion). Ersetzt durch das **Runtime-Label `APP_ENV_LABEL`**
+     (main-Anteil in §6.5; NAS-Chat entfernt T3b + setzt die Env-Werte pro Umgebung).
 
 ## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE
 
 task_bba37780 ist abgeschlossen + LIVE auf Prod (§4). **Primär offen: der
 Umsatzentwicklung-Chart (§6.1, main/App-Code).** Dazu drei Folge-Punkte aus der
-Prod-Promotion (§6.2). Rahmen-Regeln §6.4.
+Prod-Promotion (§6.2) und die Runtime-Umgebungslabel-Aufgabe (§6.5, main/App-Code,
+aus der NAS-Setup-Sitzung). Rahmen-Regeln §6.4.
 
 ### 6.1 — Umsatzentwicklung-Chart erweitern (PRIMÄR, main/App-Code)
 > **STATUS 2026-07-05 (gesichert, pausiert):** Code-Analyse abgeschlossen, **noch kein
@@ -280,6 +283,43 @@ NAS-Chat nach User-Entscheidung.
   `git checkout -- client/public/sw.js`.
 - **Nach main-Änderungen NUR committen + pushen**; NAS-Deploy separat im NAS-Chat
   via `/nas-rollout`; **niemals `nas-setup → main`** ohne Freigabe.
+
+### 6.5 — Runtime-Umgebungslabel `APP_ENV_LABEL` (Prod-Tab zeigt fälschlich „(DEV)")
+**Herkunft:** NAS-Setup-Sitzung (2026-07-05), main/App-Code-Anteil. **Noch nicht begonnen.**
+3-Agenten-Workflow; **vor Code-Commits `Start-Service MySQL84`** (Admin-PowerShell) — dieser
+Change hat einen Server-Anteil, ist NICHT rein client-only. Nach main-Push **an die
+NAS-Setup-Sitzung zurückmelden**. Verwandt: [[project_app_env_label_runtime_title]].
+
+**Bug:** Der Prod-Tab zeigt „ProTrackr (DEV)". Ursache: `VITE_APP_TITLE` wird **build-time**
+in den Client gebacken (NAS-T3b build-arg), und `deploy-prod.sh` promotet das Dev-Image
+**bit-identisch** nach Prod → das eingebackene „(DEV)" landet auf Prod. Grundkonflikt:
+build-time-Label ↔ bit-identische Image-Promotion. **Ziel:** EIN umgebungsneutrales Image,
+Titel zur **Laufzeit** aus der Umgebung (DEV → „ProTrackr (DEV)", PROD → Prod-Titel).
+**Löst §5-Nachzügler #2 (P4-T3b build-arg) ab** — der Ansatz wird verworfen.
+
+**Aufgabe (main/App-Code):**
+1. Neue **RUNTIME**-Env-Var `APP_ENV_LABEL` (server-lesbar via `process.env`, **KEIN**
+   `VITE_`-Prefix). Semantik: leer/ungesetzt = Prod (Prod-Titel); gesetzt (z.B. „DEV") =
+   „ProTrackr (<LABEL>)". Die Env-WERTE pro Umgebung (`.env.dev`/`.env`) setzt der NAS-Chat —
+   hier nur der Mechanismus.
+2. Server exponiert `APP_ENV_LABEL` **zur Laufzeit** an den Client. Sauber bevorzugt:
+   (a) `index.html` beim Ausliefern injizieren (Platzhalter / `window.__APP_ENV_LABEL__`),
+   ODER (b) kleiner dynamischer Endpoint `/api/app-config` (bzw. `version.json` dynamisch aus
+   `process.env`, **falls es aktuell statisch ausgeliefert wird — prüfen**). **Wichtig:**
+   RUNTIME aus `process.env`, NICHT build-time (sonst wieder ins Image gebacken).
+3. `client/src/main.tsx`: `document.title` aus dem Runtime-Label bauen (das bisherige
+   `import.meta.env.VITE_APP_TITLE` **ENTFERNEN**, T3a raus):
+   ```js
+   document.title = label ? `ProTrackr (${label})` : "Döring Consulting - Projekt & Abrechnungsmanagement";
+   ```
+4. `client/index.html` `<title>` darf als initialer Fallback der Prod-Titel bleiben (kurz
+   sichtbar bis JS greift).
+5. `tsc` + `vitest` grün, Senior-APPROVE → committen/pushen + **Rollout-Manifest** erzeugen
+   ([[feedback_rollout_manifest]]).
+
+**NICHT anfassen:** NAS-Dateien (`Dockerfile`/`compose.dev.yml`/`.env*`) — T3b-Entfernung +
+Env-Werte macht der **NAS-Chat**. Verwandt: §4 P4 (v2.1.14, führte `VITE_APP_TITLE` ein — wird
+hier rückgebaut), §8 (VITE_*-Lesson).
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
