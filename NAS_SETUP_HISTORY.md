@@ -1866,3 +1866,38 @@ v2.1.15 aus main, T3b (build-arg) ist `b8a4051` — DEV-Label live bestätigt �
 
 **Offene nas-seitige TODOs nach dieser Runde:** keine. Alles Weitere (Kurs-Stichtag-Bug
 Komplex 1, task_bba37780-Nachbesserung Komplex 2, M1/M2/M4) ist App-Code → main.
+
+---
+
+# Phase A / Dev→Prod-Promotion — task_bba37780 ABGESCHLOSSEN
+
+## 2026-07-04/05 — Rollouts v2.1.20 → v2.1.22, Dev-Abnahme + Prod-Promotion
+
+**v2.1.20** (Kurs-Stichtag-Cap + TZ + Doppelzählung + Chronologie): Sync
+`main→nas-setup` (Merge `649e109`) + `deploy-dev.sh`, Health-Gate v2.1.20. Fachliche
+Dev-Abnahme (Belege 580/581, Kunde exclusive) bestanden: Stichtag nicht mehr in
+Zukunft, keine Doppelzählung, Kundenbericht chronologisch. **Bug notiert:**
+`rollout-to-nas.ps1` `-e`-Parameter (PowerShell-Ambiguität Z.50) → manueller Merge
+als Umgehung.
+
+**v2.1.22** (PDF-Original-Belegbeträge): Erstes Rollout **mit** Main-Manifest
+`.claude/rollouts/2.1.22.json` (pinnt 698d912, keine neuen Migrationen, breaking=false).
+Sync (Merge `2ea26c6`, main HEAD `9e82aa3` = App-Code identisch zu 698d912 + Manifest)
++ `deploy-dev.sh`, Health-Gate v2.1.22. Kurz-Abnahme (Kostenaufstellung-PDF „Typ Betrag
+Code" je Beleg) bestanden.
+
+**Prod-Promotion v2.1.22** (`deploy-prod.sh`, bit-identisch, 2026-07-05):
+Prod vorher v2.1.8 · Success-Gate „PROMOTE" · Prod-Backup
+`prod-pre-promote-2026-07-05_17-47-17.sql` (119 KB) · Rollback-Image
+`protrackr-app:rollback-2026-07-05_17-47-17` · `docker tag` → **Image `8a3f855c4e41`
+bit-identisch (Dev==Prod)** · `up --no-build` · Health-Gate :3010 healthy in 15 s ·
+**Prod live v2.1.22** · Guard kein Fehlalarm. Tag `nas-rollout/2.1.22` gesetzt+gepusht.
+
+**→ task_bba37780 KOMPLETT ABGESCHLOSSEN, LIVE AUF PROD (v2.1.8 → v2.1.22):**
+Attribution · Doppelzählung · Kundenbericht-Chronologie · Wechselkurs-Stichtag-Cap
+(Zukunfts-Leistungsdatum) · TZ-Fix (Europe/Warsaw) · PDF-Original-Belegbeträge.
+
+**Rollback-Netz steht bereit:** Prod-Backup + Rollback-Image (behalten — frische
+Promotion + Cleanup-Regel). **Offene NAS-Folge-TODOs:** `rollout-to-nas.ps1`
+`-e`-Bug fixen (damit /nas-rollout künftig den formalen Skript-Weg nutzen kann).
+App-seitig offen (main, unkritisch): P3/M1 MySQL-Session-Store.
