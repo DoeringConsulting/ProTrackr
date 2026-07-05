@@ -127,7 +127,7 @@ PDF-Original-Belegbeträge. Prod-Promotion bit-identisch (Image `8a3f855c4e41`),
 - `deploy-prod.sh` — Promotion Dev→Prod (Success-Gate `PROMOTE`, Backup, Rollback-Tag,
   `docker tag` bit-identisch, `--no-build`, Health-Gate, Auto-Rollback).
 - `guard-prod-watch.sh` — Docker-Event-Watcher → `notify` bei direktem Eingriff.
-- `rollout-to-nas.ps1` — Git-Merge-Helfer für `/nas-rollout`. **⚠ Bug (Z.50 `-e`), siehe §6.**
+- `rollout-to-nas.ps1` — Git-Merge-Helfer für `/nas-rollout`. (Z.50 `-e`-Bug behoben 2026-07-05, §6.3.)
 
 **Rollout-Tooling:** `/nas-rollout`-Skill (`.claude/skills/nas-rollout/`) liest
 `.claude/rollouts/<version>.json` (Manifest, von main via `generate-rollout-manifest.mjs`).
@@ -163,11 +163,14 @@ kann aufgeräumt werden (User entscheidet, Ausführung hier).
   `server/_core/index.ts`. Unkritisch (Single-User). Laufzeit-Test nur in NAS-Dev.
 → Ein Main-Chat-Prompt dafür wurde bereits erstellt (siehe letzte NAS-Chat-Nachricht).
 
-### 6.3 — NAS-Folge-TODO: `rollout-to-nas.ps1` `-e`-Bug (hier)
-`scripts/rollout-to-nas.ps1` Z.50 `Invoke-Git cat-file -e "$commit^{commit}"` bricht mit
-„parameter name 'e' is ambiguous" ab (PowerShell bindet `-e` an `-ErrorAction`/
-`-ErrorVariable`). Deshalb liefen v2.1.20/2.1.22 über **manuellen Merge** statt des
-Skript-Wegs. Fix (klein): Array-Splatting `Invoke-Git @('cat-file','-e',"$commit^{commit}")`.
+### 6.3 — ✅ ERLEDIGT (2026-07-05): `rollout-to-nas.ps1` `-e`-Bug behoben
+`scripts/rollout-to-nas.ps1` Z.50 auf Array-Literal `Invoke-Git @('cat-file','-e',
+"$commit^{commit}")` umgestellt (+ WARUM-Kommentar). Ursache war die Advanced-Function-
+Parameter-Ambiguität von `-e` gegen `-ErrorAction`/`-ErrorVariable`. Empirisch abgesichert:
+**nur** Z.50 war betroffen (alle anderen `Invoke-Git`-Aufrufe binden sauber über
+`ValueFromRemainingArguments`); Fix gegen echtes git verifiziert (`Code=0`, Gegenprobe
+`128`). `/nas-rollout` kann den formalen Skript-Weg wieder nutzen — manueller Merge nicht
+mehr nötig. Details: `NAS_SETUP_HISTORY.md` (2026-07-05 §6.3).
 
 ### 6.4 — ⚠ Prod-Tab zeigt „ProTrackr (DEV)" (Bug: T3b build-time × bit-identische Promotion)
 **Symptom:** Die **Prod**-App (`:9443`) zeigt im Browser-Tab/Titel **„ProTrackr (DEV)"**
@@ -241,9 +244,11 @@ Health-Gate+keine DB-Fehler · manuelle Dev-Abnahme · kein kritischer Bug · Pr
    am DB-Fixture-Cleanup (`vitest.setup.ts`, ECONNREFUSED 3306), NICHT an den Tests.
    Lösung: `Start-Service MySQL84` (Admin) **oder** `SKIP_TEST_CLEANUP=1 git commit …` für
    Nicht-DB-Commits (Skip-Check `vitest.setup.ts:22`, vor dem DB-Connect).
-2. **`rollout-to-nas.ps1` `-e`-Bug** (§6.3) → bis Fix manueller Merge:
-   `git merge --no-commit --no-ff origin/main` (Konfliktcheck) → `--abort` → echter Merge.
-   Konflikt-Leitplanke: nur Versionsdateien auto zu main, App-Konflikte STOPP.
+2. **`rollout-to-nas.ps1` `-e`-Bug** (§6.3, **behoben 2026-07-05**) → Skript-Weg wieder nutzbar.
+   Manueller Merge bleibt als Fallback-Wissen: `git merge --no-commit --no-ff origin/main`
+   (Konfliktcheck) → `--abort` → echter Merge. Konflikt-Leitplanke: nur Versionsdateien auto
+   zu main, App-Konflikte STOPP. Root-Cause: `-e` band mehrdeutig gegen Common-Parameter einer
+   PowerShell-Advanced-Function → als Array-Element übergeben.
 3. **Kurs-Stichtag-Bug-Ortung:** Eine EUR/PLN-Berichts-Divergenz über der Sub-Cent-je-Beleg-
    Rundung ist ein **Kurs-/Stichtag**-Symptom, nicht Rundung. Die „0,66 €" waren zwei
    gleichzeitige Fallback-Kurse (Zukunfts-Stichtag → stale letzter DB-Kurs).

@@ -47,7 +47,10 @@ Write-Host "  Ziel    : $target`n"
 
 # ---- Preflight ----
 Invoke-Git fetch origin | Out-Null
-if ((Invoke-Git cat-file -e "$commit^{commit}").Code -ne 0) { Fail "Quell-Commit $commit lokal nicht vorhanden (git fetch nötig?)." }
+# Array-Literal statt "cat-file -e ...": Das bloße Token -e würde sonst von PowerShells
+# Parameter-Binder als mehrdeutig zu den Common-Parametern -ErrorAction/-ErrorVariable
+# gewertet und der Aufruf bräche ab. Als Array-Element erreicht -e git unverändert.
+if ((Invoke-Git @('cat-file', '-e', "$commit^{commit}")).Code -ne 0) { Fail "Quell-Commit $commit lokal nicht vorhanden (git fetch nötig?)." }
 
 $branch = (Invoke-Git rev-parse --abbrev-ref HEAD).Out
 if ($branch -ne $target) { Fail "Aktueller Branch ist '$branch', erwartet '$target'. Bitte erst: git checkout $target" }

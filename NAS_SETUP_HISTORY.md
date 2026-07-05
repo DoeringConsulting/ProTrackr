@@ -1901,3 +1901,41 @@ Attribution · Doppelzählung · Kundenbericht-Chronologie · Wechselkurs-Sticht
 Promotion + Cleanup-Regel). **Offene NAS-Folge-TODOs:** `rollout-to-nas.ps1`
 `-e`-Bug fixen (damit /nas-rollout künftig den formalen Skript-Weg nutzen kann).
 App-seitig offen (main, unkritisch): P3/M1 MySQL-Session-Store.
+
+---
+
+# NAS-Folge-TODOs (nach Phase A)
+
+## 2026-07-05 — §6.3: `rollout-to-nas.ps1` `-e`-Bug behoben
+
+**Was:**
+`scripts/rollout-to-nas.ps1` Z.50 von `Invoke-Git cat-file -e "$commit^{commit}"` auf
+Array-Literal `Invoke-Git @('cat-file', '-e', "$commit^{commit}")` umgestellt (+ WARUM-
+Kommentar). Einzige inhaltliche Änderung; alle übrigen `Invoke-Git`-Aufrufe unangetastet.
+
+**Warum:**
+`Invoke-Git` ist eine Advanced Function (`[Parameter()]` ⇒ Common Parameters aktiv). Das
+bloße Token `-e` band PowerShells Parameter-Binder **mehrdeutig** gegen `-ErrorAction`/
+`-ErrorVariable` → Abbruch „parameter name 'e' is ambiguous", **bevor** `ValueFromRemaining-
+Arguments` greifen konnte. Deshalb liefen v2.1.20/2.1.22 nur über **manuellen Merge** statt
+des Skript-Wegs. Als Array-**Element** ist `-e` ein Wert, kein Parameter-Token → erreicht
+git unverändert.
+
+**Faktenbasierte Scope-Bestimmung (empirisch, nicht geraten):**
+- Exakt-Nachbildung des `param`-Blocks als Stub, alle 10 realen Aufrufmuster geprüft:
+  **NUR Z.50 (`-e`) bricht.** `--abbrev-ref`, `--porcelain`, `--oneline`, `--stat`,
+  `--no-ff`, `-m`, `--theirs`, `--no-edit`, `commit --no-edit` binden alle sauber über
+  `ValueFromRemainingArguments` (`-e` ist der Sonderfall: prefix-mehrdeutig zu ZWEI Common-
+  Parametern; `-m` matcht keinen → fällt durch). ⇒ Kein Over-Fix, nur Z.50.
+- Produktions-Expression `"$commit^{commit}"` im Array-Literal verifiziert: `$commit`
+  expandiert, `^{commit}`-Rev-Suffix bleibt intakt.
+
+**QA (read-only, kein Deploy — der volle Skriptlauf wurde vom Auto-Mode-Guard korrekt als
+Production-Deploy geblockt und NICHT umgangen):**
+- AST-Parse-Check des editierten Files: keine Syntaxfehler.
+- Verbatim-`Invoke-Git` + gefixte Zeile gegen echtes git: `Code=0` (Commit `698d912`
+  erreichbar, kein `-e`-Crash). Gegenprobe Fake-Commit: `Code=128` → `Fail`-Pfad intakt.
+
+**Ergebnis:** §6.3 erledigt. `/nas-rollout` kann den formalen Skript-Weg wieder nutzen
+(manueller Merge als Umgehung nicht mehr nötig). Reiner nas-setup-Fix, main-unabhängig,
+keine Berührung mit §6.4 (wartet weiter auf `APP_ENV_LABEL` aus main).
