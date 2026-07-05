@@ -46,11 +46,13 @@ case "$PARENTS" in
 esac
 
 # Skip if this commit only touches version-bearing files (e.g. a manual
-# version fix-up commit), so we don't double-bump.
+# version fix-up commit) OR rollout manifests (.claude/rollouts/<version>.json).
+# Ein Rollout-Manifest pinnt eine BESTEHENDE Release und darf KEINE neue Version
+# erzeugen — sonst wuerde HEAD-Version != gepinnte Release-Version (Phantom-Bump).
 HAS_NON_VERSION=""
 for FILE in $(git show --pretty=format: --name-only HEAD | grep -v '^$'); do
   case "$FILE" in
-    package.json|CHANGELOG.json|client/public/CHANGELOG.json|client/public/version.json|client/src/hooks/useUpdateCheck.ts|client/src/components/VersionFooter.tsx|client/index.html)
+    package.json|CHANGELOG.json|client/public/CHANGELOG.json|client/public/version.json|client/src/hooks/useUpdateCheck.ts|client/src/components/VersionFooter.tsx|client/index.html|.claude/rollouts/*.json)
       ;;
     *)
       HAS_NON_VERSION="yes"
