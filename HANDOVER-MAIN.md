@@ -306,29 +306,40 @@ build-time-Label ↔ bit-identische Image-Promotion. **Ziel:** EIN umgebungsneut
 Titel zur **Laufzeit** aus der Umgebung (DEV → „ProTrackr (DEV)", PROD → Prod-Titel).
 **Löst §5-Nachzügler #2 (P4-T3b build-arg) ab** — der Ansatz wird verworfen.
 
-**Aufgabe (main/App-Code):**
-1. Neue **RUNTIME**-Env-Var `APP_ENV_LABEL` (server-lesbar via `process.env`, **KEIN**
-   `VITE_`-Prefix). Semantik: leer/ungesetzt = Prod (Prod-Titel); gesetzt (z.B. „DEV") =
-   „ProTrackr (<LABEL>)". Die Env-WERTE pro Umgebung (`.env.dev`/`.env`) setzt der NAS-Chat —
-   hier nur der Mechanismus.
-2. Server exponiert `APP_ENV_LABEL` **zur Laufzeit** an den Client. Sauber bevorzugt:
-   (a) `index.html` beim Ausliefern injizieren (Platzhalter / `window.__APP_ENV_LABEL__`),
-   ODER (b) kleiner dynamischer Endpoint `/api/app-config` (bzw. `version.json` dynamisch aus
-   `process.env`, **falls es aktuell statisch ausgeliefert wird — prüfen**). **Wichtig:**
-   RUNTIME aus `process.env`, NICHT build-time (sonst wieder ins Image gebacken).
-3. `client/src/main.tsx`: `document.title` aus dem Runtime-Label bauen (das bisherige
-   `import.meta.env.VITE_APP_TITLE` **ENTFERNEN**, T3a raus):
-   ```js
-   document.title = label ? `ProTrackr (${label})` : "Döring Consulting - Projekt & Abrechnungsmanagement";
-   ```
-4. `client/index.html` `<title>` darf als initialer Fallback der Prod-Titel bleiben (kurz
-   sichtbar bis JS greift).
-5. `tsc` + `vitest` grün, Senior-APPROVE → committen/pushen + **Rollout-Manifest** erzeugen
-   ([[feedback_rollout_manifest]]).
+**VERBINDLICHER VERTRAG (finalisiert 2026-07-05 vom NAS-Chat — Name/Semantik NICHT ändern,
+der NAS-Chat richtet sich EXAKT danach):**
+- **Env-Var: `APP_ENV_LABEL`** — server-seitig via `process.env`, **KEIN `VITE_`-Prefix**
+  (`VITE_*` wäre wieder build-time und bräche die Promotion erneut — das ist der ganze Punkt).
+- **Semantik:** gesetzt → `document.title = "ProTrackr (" + APP_ENV_LABEL + ")"`;
+  leer/unset → `document.title = "Döring Consulting - Projekt & Abrechnungsmanagement"`.
+- **NAS setzt später** (nicht hier): `.env.dev` → `APP_ENV_LABEL=DEV`; Prod-`.env` → leer/unset.
 
-**NICHT anfassen:** NAS-Dateien (`Dockerfile`/`compose.dev.yml`/`.env*`) — T3b-Entfernung +
-Env-Werte macht der **NAS-Chat**. Verwandt: §4 P4 (v2.1.14, führte `VITE_APP_TITLE` ein — wird
-hier rückgebaut), §8 (VITE_*-Lesson).
+**Aufgaben main (nur App-Code auf main):**
+1. Server reicht `APP_ENV_LABEL` **RUNTIME** an den Client. **Empfohlen: `index.html`-Injektion
+   beim Ausliefern** (Platzhalter/Meta bzw. `window.__APP_ENV_LABEL__`) — synchron VOR dem
+   React-Render → **kein Flash** des Default-Titels. Alternative (zulässig): kleiner
+   Config-Endpoint (z.B. `GET /api/config` → `{ envLabel }`), den der Client beim Boot liest.
+2. `client/src/main.tsx:16-17` umbauen: Titel NICHT mehr aus `import.meta.env.VITE_APP_TITLE`,
+   sondern aus dem Runtime-Label (Fallback-String **EXAKT** wie im Vertrag).
+3. `VITE_APP_TITLE`-Konsum (T3a) **vollständig entfernen**; verwaiste `.env`/Doku-Referenzen prüfen.
+4. `tsc --noEmit` + `vitest` grün, Senior-APPROVE. **Kein BREAKING CHANGE (kein „!")** — Bump nach
+   Ermessen: `fix(client)` = PATCH (behebt den sichtbaren Prod-Bug) bzw. `feat` falls
+   Config-Endpoint als Feature. (Repo-Mechanik: vor Commit `Start-Service MySQL84` ODER
+   `SKIP_TEST_CLEANUP=1` — Server-Anteil, aber voraussichtlich keine DB-Fixtures.)
+5. commit + push auf main. Danach **`node scripts/generate-rollout-manifest.mjs`** →
+   `.claude/rollouts/<version>.json` committen + pushen ([[feedback_rollout_manifest]]) —
+   **das Manifest ist der NAS-Trigger.**
+
+**Verifikation VOR Push (lokal, beide Fälle):** mit `APP_ENV_LABEL=DEV` → Titel „ProTrackr (DEV)";
+ohne (unset) → „Döring Consulting - Projekt & Abrechnungsmanagement".
+
+**Deliverable / Rückmeldung an den NAS-Chat (erst dann startet dort §6.4):** Version +
+Commit-Hash, „Manifest liegt vor", **welcher Transport** gewählt wurde (index.html-Injektion vs.
+Config-Endpoint), Bestätigung **exakter Var-Name `APP_ENV_LABEL`, unset ⇒ Prod-Titel**.
+
+**NICHT TUN:** nichts an `Dockerfile`/`compose*`/Env-Files (macht der NAS-Chat); **nicht nach
+`nas-setup` mergen**; nur App-Code auf main. Verwandt: §4 P4 (v2.1.14 führte `VITE_APP_TITLE`
+ein — wird hier rückgebaut), §8 (VITE_*-Lesson), [[project_app_env_label_runtime_title]].
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
