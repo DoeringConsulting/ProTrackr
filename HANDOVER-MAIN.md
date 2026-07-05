@@ -187,6 +187,12 @@ Umsatzentwicklung-Chart (§6.1, main/App-Code).** Dazu drei Folge-Punkte aus der
 Prod-Promotion (§6.2). Rahmen-Regeln §6.4.
 
 ### 6.1 — Umsatzentwicklung-Chart erweitern (PRIMÄR, main/App-Code)
+> **STATUS 2026-07-05 (gesichert, pausiert):** Code-Analyse abgeschlossen, **noch kein
+> Code geschrieben**. Entscheidungen **gelockt**: (1) **Option 1** — geteiltes Modul
+> `client/src/lib/monthlyFinancials.ts` in Dashboard UND Reports; (2) Version **v2.2.0
+> (MINOR)**, Commit `feat(dashboard): …`. **Turnkey-Umsetzungsplan (startklar ab
+> 2026-07-06): `HANDOVER-UMSATZCHART.md`** (committet). Fortsetzung: dort §4 abarbeiten.
+
 **Konzept mit User abgestimmt (2026-07-05, Mockup gezeigt).** Datei
 `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart` (~Z.168, nutzt heute
 NUR `entry.calculatedAmount` = reiner Zeitumsatz, keine Reisekosten).
