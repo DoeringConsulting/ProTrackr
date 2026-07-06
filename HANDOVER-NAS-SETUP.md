@@ -2,26 +2,25 @@
 
 > **Zweck:** Vollständiger, self-contained Wiedereinstiegspunkt für den **NAS-Setup-Chat**.
 > Wer dieses Dokument + die Memory-Dateien liest, hat den kompletten Stand ohne Verluste.
-> **Stand:** 2026-07-05 · **Branch:** `nas-setup` @ `cc7c4d0` (v2.1.22) · in Sync mit origin.
-> **Status:** Phase A (Zwei-Umgebungen-Rollout) **komplett** · Dev-Loop etabliert & 3× genutzt ·
-> `task_bba37780` **abgeschlossen und LIVE auf Prod v2.1.22**.
-> **Nächster Schritt:** Prod-Tab-„(DEV)"-Bug (§6.4) — **Lösung (a) Runtime-Label
-> (`APP_ENV_LABEL`) in Umsetzung** (main baut den Mechanismus, NAS-Teil zieht danach nach:
-> T3b raus + Env-Werte + Rollout) — plus niedrig-prio Folge-TODOs (§6).
+> **Stand:** 2026-07-06 · **Branch:** `nas-setup` @ `0a70b66` (v2.1.28) · in Sync mit origin.
+> **Status:** Phase A (Zwei-Umgebungen-Rollout) **komplett** · Dev-Loop etabliert & 4× genutzt ·
+> `task_bba37780` **abgeschlossen und LIVE auf Prod** · **§6.4 (Prod-Tab-„(DEV)") behoben — v2.1.28 live**.
+> **Nächster Schritt:** nur noch niedrig-prio §6.1 (Rollback-Backups-Cleanup — User-Entscheidung).
+> §6.3 (`rollout-to-nas.ps1` `-e`) und §6.4 (`APP_ENV_LABEL` Runtime-Label) sind **erledigt**.
 
 ---
 
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 ProTrackr läuft in **zwei isolierten Umgebungen auf dem Unraid-NAS (DCS01)**: **PROD**
-(echte Daten, `:9443`) + **DEV** (Prod-Klon, `:9444`), beide auf **v2.1.22**. Der alte
+(echte Daten, `:9443`) + **DEV** (Prod-Klon, `:9444`), beide auf **v2.1.28**. Der alte
 Laptop-`localhost` ist seit A5 abgeschaltet (NAS = einzige Instanz). Neue main-Releases
 kommen über den **Dev-Loop** (`main → nas-setup` mergen → `deploy-dev.sh` → Dev-Abnahme →
 `deploy-prod.sh` bit-identische Promotion). Governance: **Prod nur via Dev→Freigabe→Promotion**,
 aktiv per Guard + Mail überwacht.
 
-**Alles läuft, alles committet + auf GitHub, Prod ist geschützt + überwacht.** Offen: Prod-Tab
-zeigt „(DEV)" (§6.4) — **Lösung (a) Runtime-Label ist in Umsetzung** (main baut, NAS zieht nach).
+**Alles läuft, alles committet + auf GitHub, Prod ist geschützt + überwacht.** §6.4 (Prod-Tab
+zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein Image, zwei Titel.
 
 ---
 
@@ -48,8 +47,8 @@ zeigt „(DEV)" (§6.4) — **Lösung (a) Runtime-Label ist in Umsetzung** (main
    docker compose ps                         # PROD: protrackr-app + -mysql (healthy)
    docker compose -f compose.dev.yml ps      # DEV:  protrackr-app-dev + -mysql-dev
    pgrep -af guard-prod-watch.sh             # Guard laeuft? (2 PIDs = 1 Baum, ok)
-   curl -s http://localhost:3010/version.json # PROD 2.1.22
-   curl -s http://localhost:3011/version.json # DEV  2.1.22
+   curl -s http://localhost:3010/version.json # PROD 2.1.28
+   curl -s http://localhost:3011/version.json # DEV  2.1.28
    ```
 
 ---
@@ -78,7 +77,7 @@ zeigt „(DEV)" (§6.4) — **Lösung (a) Runtime-Label ist in Umsetzung** (main
 | App-/DB-Container | `protrackr-app` / `protrackr-mysql` | `protrackr-app-dev` / `protrackr-mysql-dev` |
 | Image | `protrackr-app:latest` | `protrackr-dev-app:latest` |
 | Env (gitignored) | `.env` | `.env.dev` |
-| **Version** | **v2.1.22** | **v2.1.22** |
+| **Version** | **v2.1.28** | **v2.1.28** |
 | Deploy-Weg | `deploy-prod.sh` (Promotion) | `deploy-dev.sh` |
 
 - **Tailscale Serve:** `:9443 → localhost:3010` (Prod), `:9444 → localhost:3011` (Dev).
@@ -172,7 +171,7 @@ Parameter-Ambiguität von `-e` gegen `-ErrorAction`/`-ErrorVariable`. Empirisch 
 `128`). `/nas-rollout` kann den formalen Skript-Weg wieder nutzen — manueller Merge nicht
 mehr nötig. Details: `NAS_SETUP_HISTORY.md` (2026-07-05 §6.3).
 
-### 6.4 — ⚠ Prod-Tab zeigt „ProTrackr (DEV)" (Bug: T3b build-time × bit-identische Promotion)
+### 6.4 — ✅ ERLEDIGT (2026-07-06, v2.1.28): Prod-Tab-„(DEV)" behoben (APP_ENV_LABEL Runtime-Label)
 **Symptom:** Die **Prod**-App (`:9443`) zeigt im Browser-Tab/Titel **„ProTrackr (DEV)"**
 statt des Prod-Titels („Döring Consulting - Projekt & Abrechnungsmanagement"). Kosmetisch,
 kein Funktions-/Datenfehler — aber auf Prod sichtbar/unprofessionell.
@@ -207,6 +206,16 @@ Prod = leer**):
   Rollout (Dev-Build → Abnahme „(DEV)" → Prod-Promotion → Prod-Titel; **ein Image, zwei Titel**).
 - **Trigger:** Sobald der Main-Chat den Runtime-Mechanismus gepusht hat + ein Rollout-Manifest
   vorliegt → hier weitermachen (T3b raus, Env-Werte, Rollout).
+
+**✅ ERLEDIGT 2026-07-06 (v2.1.28).** main `abe2383`: Runtime-Injektion (`server/_core/envLabel.ts`
+setzt `window.__APP_ENV_LABEL__` vor `</head>` aus `process.env.APP_ENV_LABEL`; `VITE_APP_TITLE`
+raus). NAS `feee5ae`: T3b build-arg aus `Dockerfile`+`compose.dev.yml` entfernt; `APP_ENV_LABEL=DEV`
+fest in `compose.dev.yml` `environment:` (kein Secret, versioniert → **kein** manueller `.env.dev`-
+Schritt); Prod-`docker-compose.yml` unset (nur Doku-Kommentar). Rollout via `/nas-rollout`: Merge
+`0a70b66` → `deploy-dev.sh` → Dev-Abnahme „ProTrackr (DEV)" → `deploy-prod.sh` **bit-identische**
+Promotion (Image `8151af1e87c4`) → Prod-Titel. Objektiv verifiziert (Container-Env `[DEV]`/`[]` +
+injiziertes Label `"DEV"`/`""` je Umgebung) **und** visuell (beide Tabs). Tag `nas-rollout/2.1.28`,
+`.DONE`. **Ein Image, zwei Titel.** Referenz: `NAS_SETUP_HISTORY.md` (2026-07-06 §6.4).
 
 ---
 

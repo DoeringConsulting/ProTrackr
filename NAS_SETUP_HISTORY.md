@@ -1939,3 +1939,38 @@ Production-Deploy geblockt und NICHT umgangen):**
 **Ergebnis:** §6.3 erledigt. `/nas-rollout` kann den formalen Skript-Weg wieder nutzen
 (manueller Merge als Umgehung nicht mehr nötig). Reiner nas-setup-Fix, main-unabhängig,
 keine Berührung mit §6.4 (wartet weiter auf `APP_ENV_LABEL` aus main).
+
+## 2026-07-06 — §6.4: Prod-Tab-„(DEV)"-Bug behoben (APP_ENV_LABEL Runtime-Label, v2.1.28)
+
+**Was:** NAS-Anteil zum §6.4-Fix + kompletter Dev→Prod-Rollout v2.1.28.
+- **Infra `feee5ae`:** T3b `VITE_APP_TITLE` build-arg aus `Dockerfile` + `compose.dev.yml`
+  entfernt (Image wieder umgebungs-neutral → bit-identische Promotion intakt). `APP_ENV_LABEL=DEV`
+  fest in `compose.dev.yml` `environment:` — **bewusste Abweichung vom Deliverable-Wortlaut**
+  („.env.dev=DEV"): kein Secret, versioniert, spart den manuellen NAS-Terminal-Schritt. Prod-
+  `docker-compose.yml` unset (nur Doku-Kommentar, damit niemand es versehentlich setzt). Tote
+  `VITE_APP_TITLE` aus `.env.dev.example`/`.env.production.example` + `nas-rollout`-SKILL bereinigt.
+- **Manifest `cf0df9b`:** `2.1.28.json` bit-identisch aus origin/main geholt (pinnt `abe2383`),
+  damit `/nas-rollout` es lokal liest + Preflight sauberen Tree sieht.
+- **Rollout via `/nas-rollout` (Ziel dev, dann prod):**
+  - Merge `abe2383 → nas-setup` via `rollout-to-nas.ps1 -Execute` — **erstmals sauber über den
+    Skript-Weg** (§6.3-Fix bewährt), **keine Konflikte** (nas-setup ohne eigene Versions-Bumps,
+    da post-commit auf main gegated). Merge-Commit `0a70b66`, gepusht.
+  - `deploy-dev.sh`: `2ea26c6 → 0a70b66`, app-dev neu gebaut (neues Dockerfile ohne T3b),
+    Health-Gate v2.1.28 auf :3011 healthy.
+  - **Dev-Abnahme:** Container-Env `APP_ENV_LABEL=[DEV]`, injiziert `window.__APP_ENV_LABEL__="DEV"`,
+    Browser-Tab :9444 zeigt „ProTrackr (DEV)". ✓
+  - `deploy-prod.sh` (Success-Gate „PROMOTE"): Prod-Backup `prod-pre-promote-2026-07-06_11-38-32.sql`
+    (119 KB), Rollback-Image `protrackr-app:rollback-2026-07-06_11-38-32`, **Promotion bit-identisch**
+    (Prod-Image `8151af1e87c4` == Dev), `up --no-build`, Health-Gate :3010 healthy. Prod v2.1.22 → v2.1.28.
+  - **Prod-Abnahme:** Container-Env `APP_ENV_LABEL=[]`, injiziert `window.__APP_ENV_LABEL__=""`,
+    Browser-Tab :9443 zeigt „Döring Consulting - Projekt & Abrechnungsmanagement". ✓
+
+**Warum (der Bug):** T3b backte `VITE_APP_TITLE="ProTrackr (DEV)"` build-time in den Client; die
+bit-identische Promotion trug das eingebackene „(DEV)" mit nach Prod. Lösung (a): Titel zur Laufzeit
+aus `process.env.APP_ENV_LABEL` (Server injiziert `window.__APP_ENV_LABEL__` vor `</head>`) — dasselbe
+Image trägt je Container-Env verschiedene Titel, Promotion-Idee wieder intakt.
+
+**Ergebnis:** §6.4 erledigt, live auf Prod (v2.1.28). **Ein Image (`8151af1e87c4`), zwei Titel:**
+Dev `(DEV)`, Prod Prod-Titel. Tag `nas-rollout/2.1.28` + `.DONE`. Prod-Backup behalten (Rollback-Netz,
+§6.1). **Offen nur noch:** §6.1 (Rollback-Backups-Cleanup — User-Entscheidung); §6.2 (main-seitige
+TZ-/Session-Store-TODOs). Alle Phase-A- + §6.3/§6.4-Punkte des NAS-Chats sind abgeschlossen.
