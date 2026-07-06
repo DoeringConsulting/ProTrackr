@@ -2028,3 +2028,32 @@ objektiv verifiziert). Tag `nas-rollout/2.3.0`.
 sauber. Kein Schema-Change über die ganze Serie. NAS-Anteil je Rollout: nur Manifest bereitstellen
 + Merge; App-Code kam von main. **Rollback-Netze:** frisch = v2.3.0 (`…20-26-58`); ältere (v2.1.28
 `…11-38-32`, v2.1.22-Puffer `…07-05_17-47-17`) nach ein paar Tagen v2.3.0-Stabilität aufräumbar (§6.1).
+
+## 2026-07-06 — Rollout v2.4.0: Session-Store + Migration 0025 (ERSTER Schema-Change auf NAS, Prod-live)
+
+Kumulative main-Release: Zeitumsatz-Tooltip (v2.3.3) + TZ-Kohärenz-Fix (v2.3.5, `warsawDateKey` für
+Default-/Scheduler-Monatsgrenzen) + persistenter MySQL-Session-Store (v2.4.0, `express-mysql-session`).
+Manifest 2.4.0 pinnt `328aa38`. **Erster NAS-Rollout mit Schema-Migration** (`0025_sessions.sql`) +
+neuer Runtime-Dependency.
+
+**Neue Migrations-Prozedur (jetzt Handover §9 Lesson 9):** `deploy-dev/prod.sh` machen KEINE
+Migration/kein Schema-Backup; `express-mysql-session` mit `createDatabaseTable:false` braucht die
+`sessions`-Tabelle VOR App-Start (sonst Store-Fehler beim ersten Session-Zugriff). Ablauf je Umgebung:
+Merge+Push → NAS `git reset` → DB-Backup (manuell) → Migration direkt via mysql (`docker exec -i …
+< 0025_sessions.sql`) → `SHOW COLUMNS` verifizieren → `deploy-*.sh` (Image-Rebuild zieht die Dep über
+`pnpm-lock`).
+
+**Dev:** Merge `cc1fe43`, Backup `dev-pre-2.4.0.sql` (122 KB), Migration 0025 (Spalten
+`session_id`/`expires`/`data`), `deploy-dev.sh` → v2.4.0 :9444 healthy. **Abnahme:** (a) Zeitumsatz-
+Tooltip ✓, (b) Reports-Default-Monat korrekt ✓, (c) **Session-Überlebt-Test bestanden** — Login →
+`docker restart protrackr-app-dev` → Hard-Reload → **eingeloggt geblieben** (20 Sessions in der Tabelle).
+
+**Prod-Promotion** (`deploy-prod.sh`, PROMOTE): manuelles Backup `prod-pre-migrate-0025_…23-13-21.sql`
++ Migration 0025 auf Prod-DB (VOR Promotion; die laufende v2.3.0-App nutzt `sessions` nicht → harmlos)
+→ `deploy-prod.sh` (eigenes Backup `…23-15-25.sql`, Rollback-Image, **bit-identisch** Image
+`91e956650dd9`, Health-Gate :3010 healthy). Prod v2.3.0 → **v2.4.0**. Titel-Garantie (§6.4) intakt
+(`APP_ENV_LABEL` unset → Prod-Titel, objektiv verifiziert). Tag `nas-rollout/2.4.0`.
+
+**Damit §6.2 erledigt** (TZ-Kohärenz + Session-Store). Alle NAS-Chat- und zugehörigen main-Folgepunkte
+durch; NAS-Chat bleibt reines Rollout-Ziel. **Rollback-Netze:** frisch = v2.4.0 (`…23-15-25` Image +
+2 DB-Backups); ältere (v2.3.0/v2.1.28/v2.1.22) nach ein paar Tagen v2.4.0-Stabilität aufräumbar (§6.1).

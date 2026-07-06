@@ -2,18 +2,19 @@
 
 > **Zweck:** Vollständiger, self-contained Wiedereinstiegspunkt für den **NAS-Setup-Chat**.
 > Wer dieses Dokument + die Memory-Dateien liest, hat den kompletten Stand ohne Verluste.
-> **Stand:** 2026-07-06 · **Branch:** `nas-setup` @ `09446fb` (v2.3.0) · in Sync mit origin.
-> **Status:** Phase A **komplett** · Dev-Loop etabliert & erprobt (8× genutzt) · `task_bba37780`,
-> §6.3, §6.4 **erledigt** · **Umsatzchart (v2.2.0→v2.3.0) live auf Prod**, Prod jetzt **v2.3.0**.
-> **Nächster Schritt:** NAS-Chat läuft rein als Rollout-Ziel für main-Releases (Dev-Loop).
-> §6.1 Cleanup durchgeführt (ältere Rollback-Netze nach Stabilität aufräumbar). §6.2 → Main-Chat.
+> **Stand:** 2026-07-06 · **Branch:** `nas-setup` @ `cc1fe43` (v2.4.0) · in Sync mit origin.
+> **Status:** Phase A **komplett** · Dev-Loop erprobt (9× genutzt) · `task_bba37780`, §6.1/§6.3/§6.4
+> **erledigt** · **Umsatzchart + Session-Store live auf Prod**, Prod jetzt **v2.4.0** (erster Rollout
+> mit Schema-Migration 0025). §6.2 (TZ-Kohärenz + Session-Store) damit ebenfalls **erledigt**.
+> **Nächster Schritt:** NAS-Chat läuft rein als Rollout-Ziel für main-Releases. **Bei Schema-Change:
+> Migrations-Prozedur in §9 beachten** (Backup + Migration manuell VOR deploy). §6.1 Cleanup fortlaufend.
 
 ---
 
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 ProTrackr läuft in **zwei isolierten Umgebungen auf dem Unraid-NAS (DCS01)**: **PROD**
-(echte Daten, `:9443`) + **DEV** (Prod-Klon, `:9444`), beide auf **v2.3.0**. Der alte
+(echte Daten, `:9443`) + **DEV** (Prod-Klon, `:9444`), beide auf **v2.4.0**. Der alte
 Laptop-`localhost` ist seit A5 abgeschaltet (NAS = einzige Instanz). Neue main-Releases
 kommen über den **Dev-Loop** (`main → nas-setup` mergen → `deploy-dev.sh` → Dev-Abnahme →
 `deploy-prod.sh` bit-identische Promotion). Governance: **Prod nur via Dev→Freigabe→Promotion**,
@@ -47,8 +48,8 @@ zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein 
    docker compose ps                         # PROD: protrackr-app + -mysql (healthy)
    docker compose -f compose.dev.yml ps      # DEV:  protrackr-app-dev + -mysql-dev
    pgrep -af guard-prod-watch.sh             # Guard laeuft? (2 PIDs = 1 Baum, ok)
-   curl -s http://localhost:3010/version.json # PROD 2.3.0
-   curl -s http://localhost:3011/version.json # DEV  2.3.0
+   curl -s http://localhost:3010/version.json # PROD 2.4.0
+   curl -s http://localhost:3011/version.json # DEV  2.4.0
    ```
 
 ---
@@ -77,7 +78,7 @@ zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein 
 | App-/DB-Container | `protrackr-app` / `protrackr-mysql` | `protrackr-app-dev` / `protrackr-mysql-dev` |
 | Image | `protrackr-app:latest` | `protrackr-dev-app:latest` |
 | Env (gitignored) | `.env` | `.env.dev` |
-| **Version** | **v2.3.0** | **v2.3.0** |
+| **Version** | **v2.4.0** | **v2.4.0** |
 | Deploy-Weg | `deploy-prod.sh` (Promotion) | `deploy-dev.sh` |
 
 - **Tailscale Serve:** `:9443 → localhost:3010` (Prod), `:9444 → localhost:3011` (Dev).
@@ -274,6 +275,16 @@ Health-Gate+keine DB-Fehler · manuelle Dev-Abnahme · kein kritischer Bug · Pr
 7. **`VITE_*` build-time:** `.dockerignore` schließt `.env*` aus → als build-arg übergeben
    (T3b: Dockerfile schreibt `.env.production.local` im build-Stage aus dem arg).
 8. **Alpine kein tzdata** → `apk add tzdata`; Windows→Linux MySQL braucht `lower_case_table_names=1`.
+9. **Rollout mit Schema-Change / neuer Migration** (erstmals v2.4.0, Migration `0025_sessions.sql`):
+   `deploy-dev.sh`/`deploy-prod.sh` machen **keine** Migration und **kein** Schema-Backup — und
+   `express-mysql-session` läuft mit `createDatabaseTable:false`, braucht die Tabelle also VOR
+   App-Start. Prozedur je Umgebung: (1) Merge+Push (lokal), (2) auf NAS `git fetch && git reset
+   --hard origin/nas-setup` (bringt die neue `drizzle/*.sql`), (3) manuelles DB-Backup (`docker exec
+   … mysqldump …`, >1000 B prüfen), (4) Migration direkt via mysql: `docker exec -i protrackr-mysql[-dev]
+   sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < drizzle/NNNN.sql`, (5) `SHOW
+   COLUMNS` verifizieren, (6) `deploy-dev.sh`/`deploy-prod.sh` (Image-Rebuild zieht neue Deps über
+   `pnpm-lock`). Bei Prod: Migration+Backup **vor** `deploy-prod.sh` (dessen `[3]`-Backup ist zusätzlich).
+   `CREATE TABLE IF NOT EXISTS` ist idempotent → gegen die noch laufende alte App-Version harmlos.
 
 ---
 
