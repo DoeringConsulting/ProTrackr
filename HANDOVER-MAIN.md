@@ -156,13 +156,23 @@ Abnahme auf `:9444`: Tooltip sichtbar (Hover/Tab), Reports-Default-Monat korrekt
 `DATABASE_URL` fällt der Store auf In-Memory zurück. **Danach Prod-Promotion** (Prod v2.3.0 → v2.4.0).
 Auf der **main-Seite ist hierfür nichts zu tun** außer ggf. Nachbesserungen aus der Abnahme.
 
+**Zusätzliches NAS-To-do (vom User 2026-07-06 freigegeben) — Zeitzonen-Anker:** Verifizieren/setzen,
+dass der App-Container **`TZ=Europe/Warsaw`** als Env hat (z.B. in `compose.*.yml`). Der gesamte
+server-lokale Zeit-Code setzt das voraus: `server/db.ts` Range-Filter (`localDayStartUtc` u.a.,
+**produktiv im Reisekostenbericht**) UND `server/scheduler.ts` Monats-Trigger (`isLastDayOfMonth`,
+`now`). Der v2.3.5-Fix hat nur die *immer*-UTC-Stellen (`toISOString`) TZ-fest gemacht; die server-
+lokalen `now`-Stellen bleiben korrekt, **solange der Container Warschau läuft**. Das ist die kleinste
+kohärente Absicherung (macht Scheduler **und** db.ts korrekt) — **kein main-Code-Change nötig**.
+
 ### 6.2 Niedrig-prio (main/App-Code) — ✅ ERLEDIGT (v2.3.5 + v2.4.0)
 - **(a) TZ-Kohärenz — ✅ v2.3.5 (Commit `cd69da1`, Tag `v2.3.5`).** `server/scheduler.ts`
   `checkMonthEnd`: `expenses`-Monatsgrenzen via `warsawDateKey(firstDay/lastDay)` statt
   `toISOString().slice(0,10)` (UTC-Kippung behoben). `Reports.tsx`: Default `startDate`/`endDate`
   über `warsawDateKey()` statt browser-lokalem `getTodayLocalDate` (entfernt). Senior-APPROVE (beide
-  Server-TZ durchgerechnet), 26 Tests grün. **Restpunkt (offen, niedrig):** der Scheduler-*Monats-
-  trigger* (`now`, `isLastDayOfMonth`) bleibt server-lokal — war nicht Teil des a-Scopes (nur Query-Grenzen).
+  Server-TZ durchgerechnet), 26 Tests grün. **Restpunkt → Beschluss (2026-07-06):** der Scheduler-
+  *Monatstrigger* (`now`, `isLastDayOfMonth`) + die `db.ts`-Range-Filter bleiben server-lokal →
+  abgesichert über **Container-`TZ=Europe/Warsaw`** (NAS-To-do oben in §6.1), NICHT via Code-Umbau
+  (User-Entscheid, weil db.ts bericht-kritisch ist und die Container-TZ Scheduler + db.ts gemeinsam deckt).
 - **(b) P3/M1 MySQL-Session-Store — ✅ v2.4.0 (Commit `328aa38`, Tag `v2.4.0`), main-Teil.**
   `express-mysql-session` (+ `@types`) als Dependency; `server/_core/index.ts` nutzt `MySQLStore`
   mit dediziertem `mysql2/promise`-Pool aus `DATABASE_URL` (`createDatabaseTable:false`); Tabelle via
