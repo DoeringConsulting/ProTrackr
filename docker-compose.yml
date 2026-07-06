@@ -73,6 +73,12 @@ services:
       SESSION_COOKIE_SECURE: "true"
       SESSION_COOKIE_SAMESITE: lax
 
+      # APP_ENV_LABEL wird auf PROD BEWUSST NICHT gesetzt (§6.4). Der Server liest
+      # process.env.APP_ENV_LABEL zur Laufzeit; unset ⇒ leeres Label ⇒ Client zeigt den
+      # Prod-Titel "Döring Consulting - Projekt & Abrechnungsmanagement". Nur Dev
+      # (compose.dev.yml) setzt APP_ENV_LABEL=DEV. Hier NICHT setzen — sonst käme "(…)"
+      # auf den Prod-Tab (genau der mit §6.4 behobene Bug).
+
       # SMTP — hoste.pl mail server for password reset emails
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}

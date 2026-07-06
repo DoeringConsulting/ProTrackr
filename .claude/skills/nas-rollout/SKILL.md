@@ -53,8 +53,9 @@ Diese Werte existieren NUR auf dem NAS. Der Merge fasst sie ohnehin nicht an
   - *Build-Zeit* `VITE_*`: werden beim `vite build` in den Client gebacken.
     **ACHTUNG:** `.dockerignore` schließt `.env*` aus dem Build-Context aus → im
     Container-Build sind `VITE_*` standardmäßig LEER, außer sie werden als
-    Build-`args` übergeben. Wird ein `VITE_*`-Wert auf dem NAS gebraucht
-    (z.B. `VITE_APP_TITLE`), das VOR dem Build sicherstellen.
+    Build-`args` übergeben. Wird künftig ein `VITE_*`-Wert auf dem NAS gebraucht,
+    das VOR dem Build sicherstellen. (Der App-Titel läuft seit §6.4 NICHT mehr über
+    ein `VITE_*`-build-arg, sondern zur Laufzeit über `APP_ENV_LABEL` — siehe compose.)
 - **NAS-only-Dateien (nur auf nas-setup — Merge lässt sie unberührt):**
   `docker-compose.yml` (Ports **3010→3000**, Volume `mysql_data`, Healthcheck,
   Tailscale-Reverse-Proxy `:9443`), `Dockerfile`, `.dockerignore`,

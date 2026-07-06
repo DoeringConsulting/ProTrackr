@@ -43,15 +43,11 @@ FROM deps AS build
 # Copy full source. .dockerignore filters out node_modules, dist, logs, .env*
 COPY . .
 
-# DEV-Titel (T3b): Vite backt VITE_* zur Build-Zeit aus einer Env-Datei in das
-# Client-Bundle. .dockerignore schliesst .env* aus dem Build-Context aus — daher
-# schreiben wir den per build-arg uebergebenen Titel INNERHALB des Images in
-# .env.production.local, das `vite build` (mode=production) sicher laedt. Prod
-# uebergibt kein build-arg -> keine Datei -> der Client faellt auf den Default-
-# Titel zurueck (client/src/main.tsx). Die Datei bleibt im build-Stage; das
-# runtime-Image kopiert sie nicht.
-ARG VITE_APP_TITLE=""
-RUN if [ -n "$VITE_APP_TITLE" ]; then printf 'VITE_APP_TITLE=%s\n' "$VITE_APP_TITLE" > .env.production.local; fi
+# App-Titel kommt zur LAUFZEIT (APP_ENV_LABEL, server-injiziert vor </head>), NICHT
+# mehr build-time via VITE_APP_TITLE (T3b entfernt 2026-07-06, §6.4). Dadurch bleibt das
+# Image umgebungs-neutral → die bit-identische Prod-Promotion des in Dev getesteten
+# Images traegt kein Label mit. Der Wert kommt pro Umgebung ueber compose zur Container-
+# Runtime (Dev: APP_ENV_LABEL=DEV; Prod: unset → Prod-Titel).
 
 # package.json scripts:
 #   prebuild: node scripts/generate-version.js && node scripts/update-version.js

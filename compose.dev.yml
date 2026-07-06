@@ -41,11 +41,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # DEV-Label (T3b): VITE_APP_TITLE als build-arg -> Dockerfile schreibt es in
-      # .env.production.local, Vite backt es ein -> Tab/Titel zeigen "ProTrackr (DEV)".
-      # Prod (docker-compose.yml) uebergibt keinen arg -> Code-Fallback "Doering...".
-      args:
-        VITE_APP_TITLE: "ProTrackr (DEV)"
     restart: unless-stopped
 
     depends_on:
@@ -67,6 +62,11 @@ services:
       TZ: Europe/Warsaw
       SESSION_COOKIE_SECURE: "true"
       SESSION_COOKIE_SAMESITE: lax
+      # Runtime-Umgebungslabel (§6.4): der Server liest process.env.APP_ENV_LABEL pro
+      # Request und injiziert window.__APP_ENV_LABEL__ vor </head> → Dev-Tab zeigt
+      # "ProTrackr (DEV)". Bewusst hier fest versioniert (kein Secret) statt in .env.dev.
+      # Prod (docker-compose.yml) setzt APP_ENV_LABEL NICHT → dort Prod-Titel.
+      APP_ENV_LABEL: "DEV"
 
     ports:
       # Host 3011 (Prod = 3010). Tailscale Serve später: :9444 → localhost:3011.
