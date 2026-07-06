@@ -14,10 +14,11 @@
   bit-identisch). Alles davor erledigt (Fehler #1/#2/#3, Backlog P1/P2/P4/P5,
   K1/2a/2c/TZ, PDF-Original-Beträge). NAS-Rollout-Tooling + Blueprint +
   Manifest-Prozess stehen, A5 komplett. Details §4.
-- **Nächste Aufgabe (main/App-Code): Umsatzentwicklung-Chart (§6.1, v2.2.0)** — Konzept
-  abgestimmt, Turnkey-Plan in `HANDOVER-UMSATZCHART.md`.
-- ✅ **`APP_ENV_LABEL` Runtime-Titel (§6.5) ERLEDIGT** (2026-07-06, v2.1.28, `abe2383`,
-  Tag v2.1.28, Manifest `2.1.28.json`) — der NAS-Chat kann NAS §6.4 jetzt nachziehen.
+- ✅ **Beide Primäraufgaben ERLEDIGT (2026-07-06):** `APP_ENV_LABEL` Runtime-Titel (§6.5,
+  v2.1.28, **main+NAS live auf Prod**) und **Umsatzentwicklung-Chart (§6.1, v2.2.0,
+  `f110801`, Tag v2.2.0, Manifest `2.2.0.json`)** — visuelle NAS-Dev-Abnahme des Charts offen.
+- **Nächste (niedrig-prio, main/App-Code):** §6.2 Punkt 2 — TZ-Kohärenz + persistenter
+  Session-Store (P3/M1). Sonst nichts Großes offen.
 - **Folge-Punkte aus der Prod-Promotion** (§6.2): Punkt 1 Rollback-Cleanup (NAS-Chat),
   Punkt 2 TZ-Kohärenz + Session-Store (main, niedrig-prio), Punkt 3 rollout-Skript-Bug
   (NAS-Chat). **Welt-Trennung: nur Punkt 2 ist main.**
@@ -35,9 +36,9 @@
    [[feedback_deploy_workflow]] (nach A5 geändert!), [[feedback_worktree_separation]],
    [[feedback_3agent_workflow]], [[feedback_prod_only_via_dev_promotion]].
 3. **Dieses Handover lesen.**
-4. **Nächste Aufgabe:** Umsatzentwicklung-Chart (§6.1, v2.2.0) über den 3-Agenten-Workflow
-   + Post-A5-Commit-Ablauf (§3, §6.4). (`APP_ENV_LABEL` §6.5 ist ✅ erledigt, v2.1.28.)
-   Danach übrige Folge-Punkte §6.2.
+4. **Nächste Aufgabe (niedrig-prio):** §6.2 Punkt 2 (TZ-Kohärenz + Session-Store) über den
+   3-Agenten-Workflow + Post-A5-Commit-Ablauf (§3, §6.4). (Beide Primäraufgaben §6.1
+   Umsatzchart v2.2.0 + §6.5 APP_ENV_LABEL v2.1.28 sind ✅ erledigt.)
 
 ## 2. PROJEKT-KONTEXT (Stack)
 
@@ -184,13 +185,19 @@ werden (A5-Zustand blieb erhalten).
 
 ## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE
 
-task_bba37780 ist abgeschlossen + LIVE auf Prod (§4). **`APP_ENV_LABEL` Runtime-Titel (§6.5)
-ist ✅ ERLEDIGT (2026-07-06, v2.1.28) → primär offen: der Umsatzentwicklung-Chart (§6.1,
-v2.2.0).** Dazu Folge-Punkte aus der Prod-Promotion (§6.2). Rahmen-Regeln §6.4.
+task_bba37780 ist abgeschlossen + LIVE auf Prod (§4). **Beide Primäraufgaben ✅ ERLEDIGT
+(2026-07-06): `APP_ENV_LABEL` (§6.5, v2.1.28, main+NAS live) und Umsatzentwicklung-Chart
+(§6.1, v2.2.0, NAS-Dev-Abnahme offen).** Nur noch niedrig-prio: §6.2 Punkt 2 (TZ-Kohärenz +
+Session-Store). Rahmen-Regeln §6.4.
 
 ### 6.1 — Umsatzentwicklung-Chart erweitern (PRIMÄR, main/App-Code)
-> **STATUS (jetzt PRIMÄR — §6.5 APP_ENV_LABEL ist ✅ erledigt, v2.1.28):** Code-Analyse
-> abgeschlossen (2026-07-05), **noch kein Code geschrieben**. Entscheidungen **gelockt**: (1) **Option 1** — geteiltes Modul
+> **STATUS ✅ ERLEDIGT (2026-07-06, v2.2.0, Commit `f110801`, Tag v2.2.0, Manifest
+> `2.2.0.json`):** 3-Agenten-Workflow (Junior→Senior-APPROVE→QA). Geteilter Layer
+> `client/src/lib/monthlyFinancials.ts` (eine Wahrheitsquelle Reports+Dashboard); taxEnginePl
+> `computeMonthlyTaxSeries`. **Reports-Zahlen byte-identisch** (Senior-verifiziert); YAxis
+> `min(0,dataMin)` für negativen Netto. tsc+vitest+Prod-Build+E2E-Datenproof grün. **Offen:
+> visuelle NAS-Dev-Abnahme** (auth/DB-gated, lokal nicht möglich). Rest = Referenz/Historie.
+> Ursprüngliche gelockte Entscheidungen waren: (1) **Option 1** — geteiltes Modul
 > `client/src/lib/monthlyFinancials.ts` in Dashboard UND Reports; (2) Version **v2.2.0
 > (MINOR)**, Commit `feat(dashboard): …`. **Turnkey-Umsetzungsplan (startklar ab
 > 2026-07-06): `HANDOVER-UMSATZCHART.md`** (committet). Fortsetzung: dort §4 abarbeiten.
@@ -291,8 +298,10 @@ NAS-Chat nach User-Entscheidung.
 > baut `document.title` daraus (`client/src/lib/appTitle.ts`, `main.tsx`). `VITE_APP_TITLE`
 > (T3a) vollständig entfernt. tsc+vitest grün (inkl. neuer Unit-Tests), Prod-Build + echter
 > HTTP-Round-Trip (DEV/unset) lokal verifiziert. **NAS §6.4 ist entblockt** — Rückmeldung an
-> den NAS-Chat gesendet; dort T3b build-arg raus + `.env.dev` `APP_ENV_LABEL=DEV`, Prod unset.
-> Der Rest dieses §6.5 ist Referenz/Vertrag (dokumentiert, was umgesetzt wurde).
+> den NAS-Chat gesendet. **NAS §6.4 ist EBENFALLS live** (NAS-Chat `feee5ae`, Tag
+> `nas-rollout/2.1.28`, dev→prod bit-identisch Image `8151af1e87c4`; `APP_ENV_LABEL=DEV` fest
+> in `compose.dev.yml environment:`, Prod unset). **§6.4 damit KOMPLETT (main+NAS): ein Image,
+> zwei Titel.** Der Rest dieses §6.5 ist Referenz/Vertrag (dokumentiert, was umgesetzt wurde).
 
 **Herkunft:** NAS-Setup-Sitzung (2026-07-05), main/App-Code-Anteil. **Erledigt 2026-07-06.**
 3-Agenten-Workflow; **vor Code-Commits `Start-Service MySQL84`** (Admin-PowerShell) — dieser
