@@ -157,12 +157,16 @@ Abnahme auf `:9444`: Tooltip sichtbar (Hover/Tab), Reports-Default-Monat korrekt
 Auf der **main-Seite ist hierfür nichts zu tun** außer ggf. Nachbesserungen aus der Abnahme.
 
 **Zusätzliches NAS-To-do (vom User 2026-07-06 freigegeben) — Zeitzonen-Anker:** Verifizieren/setzen,
-dass der App-Container **`TZ=Europe/Warsaw`** als Env hat (z.B. in `compose.*.yml`). Der gesamte
-server-lokale Zeit-Code setzt das voraus: `server/db.ts` Range-Filter (`localDayStartUtc` u.a.,
-**produktiv im Reisekostenbericht**) UND `server/scheduler.ts` Monats-Trigger (`isLastDayOfMonth`,
-`now`). Der v2.3.5-Fix hat nur die *immer*-UTC-Stellen (`toISOString`) TZ-fest gemacht; die server-
-lokalen `now`-Stellen bleiben korrekt, **solange der Container Warschau läuft**. Das ist die kleinste
-kohärente Absicherung (macht Scheduler **und** db.ts korrekt) — **kein main-Code-Change nötig**.
+dass der App-**Container** auf **`Europe/Warsaw`** läuft. Der gesamte server-lokale Zeit-Code setzt das
+voraus: `server/db.ts` Range-Filter (`localDayStartUtc` u.a., **produktiv im Reisekostenbericht**) UND
+`server/scheduler.ts` Monats-Trigger (`isLastDayOfMonth`, `now`). Der v2.3.5-Fix hat nur die *immer*-
+UTC-Stellen (`toISOString`) TZ-fest gemacht; die server-lokalen `now`-Stellen bleiben korrekt, **solange
+der Container Warschau läuft**. **⚠ ACHTUNG Host ≠ Container:** Das **Host-DSM steht bereits auf Warschau**
+(User-Screenshot 2026-07-06, 22:27 korrekt) — aber ein Docker-Container **erbt die Host-TZ NICHT
+automatisch** (Default UTC), außer `TZ` ist gesetzt ODER `/etc/localtime` gemountet. Also NICHT vom Host
+schließen — **direkt im Container prüfen:** `docker exec <app-container> date` (zeigt `22:27` = Warschau ok;
+`20:27` = UTC → `TZ=Europe/Warsaw` in `compose.*.yml` setzen + Container neu starten). Kleinste kohärente
+Absicherung (deckt Scheduler **und** db.ts) — **kein main-Code-Change nötig**.
 
 ### 6.2 Niedrig-prio (main/App-Code) — ✅ ERLEDIGT (v2.3.5 + v2.4.0)
 - **(a) TZ-Kohärenz — ✅ v2.3.5 (Commit `cd69da1`, Tag `v2.3.5`).** `server/scheduler.ts`
