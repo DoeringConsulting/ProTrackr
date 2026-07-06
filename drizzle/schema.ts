@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, uniqueIndex, index } from "drizzle-orm/mysql-core";
+import { int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar, uniqueIndex, index } from "drizzle-orm/mysql-core";
 
 /**
  * Mandanten table - multi-tenancy support
@@ -51,6 +51,18 @@ export const passwordResetTokens = mysqlTable("passwordResetTokens", {
 
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+/**
+ * Sessions table — persistenter Session-Store (express-mysql-session v3, Migration 0025).
+ * Wird von der Session-Middleware verwaltet, NICHT ueber Drizzle-Queries. Hier nur deklariert,
+ * damit drizzle-kit die per Migration angelegte Tabelle nicht als "extra" erkennt und keine
+ * Drop-Migration vorschlaegt. Bewusst NICHT im Backup (server/backup.ts, fluechtige Sessions).
+ */
+export const sessions = mysqlTable("sessions", {
+  sessionId: varchar("session_id", { length: 128 }).primaryKey(),
+  expires: int("expires", { unsigned: true }).notNull(),
+  data: mediumtext("data"),
+});
 
 /**
  * Customers table - stores client master data

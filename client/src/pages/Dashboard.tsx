@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Alias, weil recharts unten ebenfalls ein `Tooltip` exportiert (Namenskonflikt).
+import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { trpc } from "@/lib/trpc";
 import {
   AlertTriangle,
   BarChart3,
   CalendarDays,
   FileBarChart,
+  Info,
   PieChart as PieChartIcon,
   Receipt,
   TrendingUp,
@@ -980,6 +983,26 @@ export default function Dashboard() {
                     >
                       Zeitumsatz
                     </Button>
+                    {/* Erklärt die Zeitumsatz-Linie (user-internal, kein Datenleck). Als
+                        <button> für Tastatur-/Screenreader-Zugriff; UiTooltip = Radix-Alias. */}
+                    <UiTooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-label="Was bedeutet der Zeitumsatz?"
+                        >
+                          <Info className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>
+                          <strong>Zeitumsatz</strong> = reiner Umsatz aus abgerechneter
+                          Arbeitszeit, ohne durchgereichte Reisekosten. Der Abstand zur
+                          Bruttoumsatz-Linie entspricht den exklusiven Reisekosten.
+                        </p>
+                      </TooltipContent>
+                    </UiTooltip>
                   </div>
                 </div>
               )}

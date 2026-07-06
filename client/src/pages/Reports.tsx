@@ -65,29 +65,17 @@ export default function Reports() {
     return `${y}-${m}-${d}`;
   };
 
-  const getTodayLocalDate = () => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  };
-
   const [startDate, setStartDate] = useState(() => {
-    const now = new Date(getTodayLocalDate());
-    const first = new Date(now.getFullYear(), now.getMonth(), 1);
-    const y = first.getFullYear();
-    const m = String(first.getMonth() + 1).padStart(2, "0");
-    const d = String(first.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    // Default-Monatsgrenzen in Europe/Warsaw (verbindliche Projekt-TZ), nicht browser-lokal —
+    // konsistent mit dem Kurs-Stichtag (warsawDateKey) weiter unten. Monatsgrenzen als String
+    // bauen (nie toISOString, das kippt im Fenster 00:00-02:00 Warschau auf den Vortag).
+    const [y, m] = warsawDateKey().split("-");
+    return `${y}-${m}-01`;
   });
   const [endDate, setEndDate] = useState(() => {
-    const now = new Date(getTodayLocalDate());
-    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const y = last.getFullYear();
-    const m = String(last.getMonth() + 1).padStart(2, "0");
-    const d = String(last.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    const [y, m] = warsawDateKey().split("-");
+    const lastDay = new Date(Number(y), Number(m), 0).getDate();
+    return `${y}-${m}-${String(lastDay).padStart(2, "0")}`;
   });
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);

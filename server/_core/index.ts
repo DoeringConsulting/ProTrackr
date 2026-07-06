@@ -4,6 +4,8 @@ import { createServer } from "http";
 import net from "net";
 import crypto from "crypto";
 import session from "express-session";
+import expressMysqlSession from "express-mysql-session";
+import mysql from "mysql2/promise";
 import cookieParser from "cookie-parser";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import helmet from "helmet";
@@ -62,9 +64,30 @@ async function startServer() {
   if (!process.env.SESSION_SECRET) {
     throw new Error("[Auth] SESSION_SECRET Umgebungsvariable ist nicht gesetzt!");
   }
+  // Persistenter Session-Store (P3/M1): MySQL statt fluechtigem In-Memory-Store, damit Sessions
+  // Container-Restarts/Deploys ueberleben. Dedizierter mysql2-Pool aus DATABASE_URL (getrennt vom
+  // Drizzle-Pool). Tabelle via Migration 0025 → createDatabaseTable:false (kein Runtime-DDL).
+  // Ohne DATABASE_URL (lokales Tooling ohne DB) faellt express-session auf seinen In-Memory-Store
+  // zurueck, damit `npm run dev` weiterhin ohne DB startet.
+  let sessionStore: session.Store | undefined;
+  if (process.env.DATABASE_URL) {
+    const sessionPool = mysql.createPool(process.env.DATABASE_URL);
+    const MySQLStore = expressMysqlSession(session);
+    // @types/express-mysql-session deklarieren den callback-mysql2-Pool; die Lib selbst nutzt
+    // intern jedoch mysql2/promise (ihr index.js: require('mysql2/promise')). Der promise-Pool
+    // ist damit zur Laufzeit korrekt (README-konform) — der Cast ueberbrueckt nur die
+    // Typ-Divergenz der DefinitelyTyped-Definition (kein Runtime-Effekt).
+    sessionStore = new MySQLStore(
+      { createDatabaseTable: false },
+      sessionPool as unknown as ConstructorParameters<typeof MySQLStore>[1]
+    );
+  } else {
+    console.warn("[Session] DATABASE_URL nicht gesetzt — Fallback auf In-Memory-Store (nur lokales Tooling).");
+  }
   app.use(
     session({
       secret: process.env.SESSION_SECRET,
+      store: sessionStore,
       resave: false,
       saveUninitialized: false,
       proxy: isProduction && sessionCookieConfig.secure,

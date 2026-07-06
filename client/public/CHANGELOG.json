@@ -1,6 +1,72 @@
 {
   "versions": [
     {
+      "version": "2.4.0",
+      "date": "2026-07-06",
+      "changes": [
+        {
+          "type": "feature",
+          "title": "Minor release",
+          "description": "Neue Version mit Änderungen und Fehlerbehebungen."
+        }
+      ]
+    },
+    {
+      "version": "2.3.5",
+      "date": "2026-07-06",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Patch release",
+          "description": "Neue Version mit Änderungen und Fehlerbehebungen."
+        }
+      ]
+    },
+    {
+      "version": "2.3.4",
+      "date": "2026-07-06",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Patch release",
+          "description": "Neue Version mit Änderungen und Fehlerbehebungen."
+        }
+      ]
+    },
+    {
+      "version": "2.3.3",
+      "date": "2026-07-06",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Patch release",
+          "description": "Neue Version mit Änderungen und Fehlerbehebungen."
+        }
+      ]
+    },
+    {
+      "version": "2.3.2",
+      "date": "2026-07-06",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Patch release",
+          "description": "Neue Version mit Änderungen und Fehlerbehebungen."
+        }
+      ]
+    },
+    {
+      "version": "2.3.1",
+      "date": "2026-07-06",
+      "changes": [
+        {
+          "type": "improvement",
+          "title": "Patch release",
+          "description": "Neue Version mit Änderungen und Fehlerbehebungen."
+        }
+      ]
+    },
+    {
       "version": "2.3.0",
       "date": "2026-07-06",
       "changes": [
