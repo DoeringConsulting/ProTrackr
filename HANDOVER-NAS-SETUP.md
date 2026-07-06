@@ -2,26 +2,28 @@
 
 > **Zweck:** Vollständiger, self-contained Wiedereinstiegspunkt für den **NAS-Setup-Chat**.
 > Wer dieses Dokument + die Memory-Dateien liest, hat den kompletten Stand ohne Verluste.
-> **Stand:** 2026-07-06 · **Branch:** `nas-setup` @ `cc1fe43` (v2.4.0) · in Sync mit origin.
-> **Status:** Phase A **komplett** · Dev-Loop erprobt (9× genutzt) · `task_bba37780`, §6.1/§6.3/§6.4
-> **erledigt** · **Umsatzchart + Session-Store live auf Prod**, Prod jetzt **v2.4.0** (erster Rollout
-> mit Schema-Migration 0025). §6.2 (TZ-Kohärenz + Session-Store) damit ebenfalls **erledigt**.
-> **Nächster Schritt:** NAS-Chat läuft rein als Rollout-Ziel für main-Releases. **Bei Schema-Change:
-> Migrations-Prozedur in §9 beachten** (Backup + Migration manuell VOR deploy). §6.1 Cleanup fortlaufend.
+> **Stand:** 2026-07-06 · **Branch:** `nas-setup` (v2.4.0) · in Sync mit origin.
+> **Status:** NAS-Umzug **komplett abgeschlossen.** Prod + Dev live auf **v2.4.0**. Der Chat
+> läuft ab jetzt **rein als Rollout-Ziel** für main-Releases (Dev-Loop). Alle Setup-Themen und
+> Folge-Punkte (§6.1–§6.4) sind **erledigt**; keine offenen Pflicht-TODOs.
+> **Bei neuem Release:** §8 Rollout-Zyklus. **Bei Schema-Change / neuer Migration:** zwingend
+> §9 Lesson 9 (Backup + Migration MANUELL vor `deploy-*.sh`).
 
 ---
 
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 ProTrackr läuft in **zwei isolierten Umgebungen auf dem Unraid-NAS (DCS01)**: **PROD**
-(echte Daten, `:9443`) + **DEV** (Prod-Klon, `:9444`), beide auf **v2.4.0**. Der alte
+(echte Daten, `:9443`) + **DEV** (Prod-Klon, `:9444`), **beide auf v2.4.0**. Der alte
 Laptop-`localhost` ist seit A5 abgeschaltet (NAS = einzige Instanz). Neue main-Releases
-kommen über den **Dev-Loop** (`main → nas-setup` mergen → `deploy-dev.sh` → Dev-Abnahme →
-`deploy-prod.sh` bit-identische Promotion). Governance: **Prod nur via Dev→Freigabe→Promotion**,
-aktiv per Guard + Mail überwacht.
+kommen über den **Dev-Loop**: `main → nas-setup` mergen (`rollout-to-nas.ps1`) → `deploy-dev.sh`
+→ Dev-Abnahme → `deploy-prod.sh` bit-identische Promotion. Governance: **Prod nur via
+Dev→Freigabe→Promotion**, per Guard + Mail überwacht.
 
-**Alles läuft, alles committet + auf GitHub, Prod ist geschützt + überwacht.** §6.4 (Prod-Tab
-zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein Image, zwei Titel.
+**Alles läuft, alles committet + auf GitHub, Prod ist geschützt + überwacht.** Der Dev-Loop ist
+9× erprobt — inkl. eines in Dev gefangenen Feature-Bugs (recharts-Fragment, v2.2.0) und eines
+Schema-Change-Rollouts (Session-Store, v2.4.0). §6.4 (Prod-Tab „(DEV)") und §6.2 (TZ + Session-
+Store) sind **behoben und live**.
 
 ---
 
@@ -30,8 +32,8 @@ zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein 
 1. **Memory ist automatisch geladen** — beachte besonders:
    `feedback_worktree_separation` (Session-Start-Verankerung!),
    `feedback_prod_only_via_dev_promotion`, `feedback_deploy_workflow`,
-   `feedback_rollout_manifest`, `project_open_fix_expense_attribution_main`,
-   `project_a5_localhost_shutdown`, `feedback_nas_umzug_branch`.
+   `feedback_rollout_manifest`, `feedback_nas_umzug_branch`,
+   `project_app_env_label_runtime_title`, `project_umsatzchart_task` (beide LIVE auf Prod).
 2. **Dieses Handover + `NAS_SETUP_HISTORY.md` lesen** (HISTORY = volle Chronik).
 3. **Worktree/Branch verifizieren (Laptop):** Dieser Chat gehört in
    `C:\Projects\ProTrackr_developing_path` (Branch `nas-setup`). Falls die neue Sitzung
@@ -45,9 +47,9 @@ zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein 
 4. **NAS-Live-Stand verifizieren (Unraid Web-Terminal):**
    ```
    cd /mnt/user/appdata/protrackr
-   docker compose ps                         # PROD: protrackr-app + -mysql (healthy)
-   docker compose -f compose.dev.yml ps      # DEV:  protrackr-app-dev + -mysql-dev
-   pgrep -af guard-prod-watch.sh             # Guard laeuft? (2 PIDs = 1 Baum, ok)
+   docker compose ps                          # PROD: protrackr-app + -mysql (healthy)
+   docker compose -f compose.dev.yml ps       # DEV:  protrackr-app-dev + -mysql-dev
+   pgrep -af guard-prod-watch.sh              # Guard laeuft? (2 PIDs = 1 Baum, ok)
    curl -s http://localhost:3010/version.json # PROD 2.4.0
    curl -s http://localhost:3011/version.json # DEV  2.4.0
    ```
@@ -76,150 +78,104 @@ zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein 
 | Host-Port → Container | 3010 → 3000 | 3011 → 3000 |
 | Compose-Datei | `docker-compose.yml` | `compose.dev.yml` |
 | App-/DB-Container | `protrackr-app` / `protrackr-mysql` | `protrackr-app-dev` / `protrackr-mysql-dev` |
-| Image | `protrackr-app:latest` | `protrackr-dev-app:latest` |
+| Image | `protrackr-app:latest` (`91e95665`) | `protrackr-dev-app:latest` |
 | Env (gitignored) | `.env` | `.env.dev` |
 | **Version** | **v2.4.0** | **v2.4.0** |
 | Deploy-Weg | `deploy-prod.sh` (Promotion) | `deploy-dev.sh` |
 
 - **Tailscale Serve:** `:9443 → localhost:3010` (Prod), `:9444 → localhost:3011` (Dev).
   Reboot-Persistenz: `tailscale serve --bg` — bei Reboot ggf. prüfen (potenziell offener Punkt).
-- **Beide Container TZ=Europe/Warsaw** (app via tzdata im Image, mysql via SYSTEM-TZ).
+- **Beide Container TZ=Europe/Warsaw** (app via tzdata im Image, mysql via SYSTEM-TZ) —
+  am 2026-07-06 per `docker exec … date` verifiziert (beide CEST).
 - **MySQL `lower_case_table_names=1`** (Windows-Dump-Kompatibilität, nur bei Init).
+- **DB-Tabellen:** Schema bis Migration **`0025_sessions.sql`** (Session-Store). Die `sessions`-
+  Tabelle ist bewusst NICHT im App-Backup (`server/backup.ts`) — flüchtige Auth-Sessions.
+- **Session-Store:** persistent via `express-mysql-session` (überlebt Container-Restarts). Aktiv,
+  wenn `DATABASE_URL` gesetzt ist (NAS: ja) — sonst In-Memory-Fallback. `createDatabaseTable:false`.
+- **Titel-Mechanismus (§6.4):** ein umgebungs-neutrales Image; Titel zur Laufzeit aus
+  `process.env.APP_ENV_LABEL`. Dev-Container `APP_ENV_LABEL=DEV` (fest in `compose.dev.yml`
+  `environment:`), Prod unset → Prod-Titel. „Ein Image, zwei Titel."
 - **Guard läuft** (`guard-prod-watch.sh`), reboot-fest via User-Script (Schedule „At Startup of Array").
 - **Notification-Mail** hoste.pl → a.doering@doering-consulting.eu.
-- **Laptop-`localhost:3001` ist AUS** (A5); **MySQL84 auf Laptop = Manual/gestoppt**
-  (Re-Import-Quelle; vor lokalen main-Tests ggf. manuell starten).
+- **Laptop-`localhost:3001` ist AUS** (A5); **MySQL84 auf Laptop = Manual/gestoppt**.
 
 ---
 
-## 4. WAS ERREICHT WURDE
+## 4. WAS ERREICHT WURDE (Chronik-Kurzfassung — Details in `NAS_SETUP_HISTORY.md`)
 
-**Phase 0 → A5 (NAS-Umzug):** Container-Setup, DB-Migration Laptop→NAS, Zwei-Umgebungen-
-Stack (Prod+Dev isoliert), Dev-Loop (`deploy-dev.sh`) + Promotion (`deploy-prod.sh`) +
-Governance-Guards, **A5 = localhost abgeschaltet** (NAS einzige Instanz). Details:
-`NAS_SETUP_HISTORY.md` + Memory `project_a5_localhost_shutdown`.
+**Phase 0 → A5 (NAS-Umzug):** Container-Setup, DB-Migration Laptop→NAS, Zwei-Umgebungen-Stack
+(Prod+Dev isoliert), Dev-Loop + Promotion + Governance-Guards, **A5 = localhost abgeschaltet**.
 
-**Dev-Loop im Produktiv-Einsatz (3×):**
-- **v2.1.15** (task_bba37780 Erst-Nachbesserung): Dev-Abnahme **gescheitert** → 2 Bug-Komplexe
-  im NAS-Dev geortet (Wechselkurs-Stichtag + Attribution-Darstellung), Bug-Paket an main.
-  Governance-Gate hat den unvollständigen Fix vor Prod gefangen.
-- **v2.1.20** (Komplex 1 Kurs-Stichtag-Cap + TZ, Komplex 2a/2c): Dev-Abnahme bestanden.
-- **v2.1.22** (PDF-Original-Belegbeträge): Dev-Abnahme bestanden → **Prod-Promotion**.
+**Dev-Loop im Produktiv-Einsatz — 9 Rollouts, alle über `rollout-to-nas.ps1` + Dev-Abnahme:**
+- **v2.1.15/2.1.20/2.1.22** — `task_bba37780` (Reisekosten-Attribution, Kurs-Stichtag, TZ,
+  PDF-Beträge). v2.1.15 in Dev **gescheitert** (Governance-Gate fing unvollständigen Fix), dann
+  live v2.1.22. Prod v2.1.8 → v2.1.22.
+- **v2.1.28** — §6.4 `APP_ENV_LABEL` Runtime-Titel (Prod-Tab „(DEV)"-Bug behoben). Prod → v2.1.28.
+- **v2.2.0 → v2.3.0** — Umsatzentwicklung-Chart. **v2.2.0 in Dev gescheitert** (Chart leer —
+  recharts findet `<Line>` NICHT in React-Fragment; Governance-Gate fing es vor Prod) → v2.2.2
+  Fix → v2.2.3 Labels/Break-even → v2.3.0 Default 12M/PLN + Y-Achse-Kompaktformat. Prod → v2.3.0.
+- **v2.4.0** — **erster Schema-Change-Rollout:** persistenter Session-Store (`express-mysql-session`
+  + Migration `0025_sessions.sql`) + Zeitumsatz-Tooltip (v2.3.3) + TZ-Kohärenz (v2.3.5). Dev-Abnahme
+  inkl. Session-Überlebt-Test bestanden. Prod v2.3.0 → **v2.4.0**.
 
-**`task_bba37780` KOMPLETT ABGESCHLOSSEN, LIVE AUF PROD (v2.1.8 → v2.1.22, 2026-07-05):**
-Reisekosten-Attribution · Doppelzählung (2a) · Kundenbericht-Chronologie (2c) ·
-Wechselkurs-Stichtag-Cap bei Zukunfts-Leistungsdatum (K1) · TZ-Fix Europe/Warsaw ·
-PDF-Original-Belegbeträge. Prod-Promotion bit-identisch (Image `8a3f855c4e41`), Tag
-`nas-rollout/2.1.22`. Memory `project_open_fix_expense_attribution_main` = KOMPLETT.
+Alle live auf Prod, jeweils bit-identische Promotion. Kein Prod-Ausfall über die ganze Serie.
 
 ---
 
 ## 5. ARTEFAKTE (nas-setup-eigene Dateien, nicht auf main)
 
-**Infra:** `Dockerfile` (inkl. T3b VITE_APP_TITLE build-arg) · `.dockerignore` ·
-`docker-compose.yml` (PROD) · `compose.dev.yml` (DEV, `env_file:` + build-arg) ·
-`.env.production.example` · `.env.dev.example`
+**Infra:**
+- `Dockerfile` — Multi-Stage (node:22-alpine, pnpm, tzdata). **Kein** VITE_APP_TITLE-build-arg mehr
+  (T3b entfernt §6.4); App-Titel läuft runtime über `APP_ENV_LABEL`.
+- `docker-compose.yml` (PROD) — Ports 3010→3000, explizite `environment:` (kein `env_file`),
+  `APP_ENV_LABEL` bewusst UNSET (Doku-Kommentar).
+- `compose.dev.yml` (DEV) — Ports 3011→3000, `env_file: .env.dev` + feste `environment:` inkl.
+  `APP_ENV_LABEL: "DEV"`.
+- `.dockerignore` · `.env.production.example` · `.env.dev.example`.
 
 **Skripte (`scripts/`):**
-- `migrate-db.ps1` / `migrate-db.sh` — Laptop-DB-Dump/Import.
-- `clone-prod-to-dev.sh` — Prod→Dev-Klon (T2-Fix: Row-Count via stdin).
-- `deploy-dev.sh` — Dev-Deploy (fetch+reset, rebuild app-dev, Health-Gate).
-- `deploy-prod.sh` — Promotion Dev→Prod (Success-Gate `PROMOTE`, Backup, Rollback-Tag,
-  `docker tag` bit-identisch, `--no-build`, Health-Gate, Auto-Rollback).
-- `guard-prod-watch.sh` — Docker-Event-Watcher → `notify` bei direktem Eingriff.
-- `rollout-to-nas.ps1` — Git-Merge-Helfer für `/nas-rollout`. (Z.50 `-e`-Bug behoben 2026-07-05, §6.3.)
+- `deploy-dev.sh` — Dev-Deploy: `git fetch`+`reset --hard origin/nas-setup`, `up -d --build --no-deps app`,
+  Health-Gate :3011. **Macht KEINE Migration/kein Schema-Backup** (siehe §9 Lesson 9).
+- `deploy-prod.sh` — Promotion Dev→Prod: Success-Gate `PROMOTE`, Prod-DB-Backup, Rollback-Image-Tag,
+  `docker tag` bit-identisch, `up --no-build`, Health-Gate, Auto-Rollback. **Ebenfalls keine Migration.**
+- `rollout-to-nas.ps1` — Git-Merge-Helfer für `/nas-rollout` (Manifest-Commit → nas-setup; löst nur
+  Versionsdatei-Konflikte via `--theirs`, App-Konflikte STOPP). `-e`-Bug behoben (§6.3).
+- `clone-prod-to-dev.sh` — Prod→Dev-DB-Klon (Dev neu befüllen). `guard-prod-watch.sh` — Prod-Eingriff-Watcher.
+- `migrate-db.ps1`/`migrate-db.sh` — Laptop-DB-Dump/Import (Erst-Migration, historisch).
 
 **Rollout-Tooling:** `/nas-rollout`-Skill (`.claude/skills/nas-rollout/`) liest
 `.claude/rollouts/<version>.json` (Manifest, von main via `generate-rollout-manifest.mjs`).
-Vorhandene Manifeste: `2.1.1.json`, `2.1.20.json` (im NAS-Chat erzeugt), `2.1.22.json` (von main).
+Manifeste vorhanden für alle Releases **2.1.1 … 2.4.0**. Erledigte Rollouts tragen einen lokalen
+`.DONE`-Marker (`.claude/rollouts/*.DONE`, per `.gitignore` NICHT getrackt).
 
 **Doku:** `NAS_SETUP_HISTORY.md` (volle Chronik) · `NAS_SETUP_README.md` ·
 `docs/DEV-LOOP.md` · `docs/DEPLOYMENT-BLUEPRINT.md` · dieses Handover.
 
-**Tags:** `freeze/nas-A1-start` · `nas-rollout/2.1.22` · `v2.1.21` · `v2.1.22`.
+**Tags:** `freeze/nas-A1-start` · `nas-rollout/{2.1.22, 2.1.28, 2.3.0, 2.4.0}` · diverse `vX.Y.Z`.
 
-**Nicht im Git (NAS-lokal):** `.env`, `.env.dev` (Secrets) · `db-migration/*.sql*`
-(Prod-Backups, u.a. `prod-pre-promote-2026-07-05_17-47-17.sql`) · Rollback-Image
-`protrackr-app:rollback-2026-07-05_17-47-17` · `/var/log/protrackr-guard.log` ·
-Guard-Autostart-Script.
+**Nicht im Git (NAS-lokal):** `.env`, `.env.dev` (Secrets) · `db-migration/*.sql` (Prod-Backups) ·
+Rollback-Image `protrackr-app:rollback-2026-07-06_23-15-25` (= v2.3.0) · `/var/log/protrackr-guard.log`
+· Guard-Autostart-Script · `.DONE`-Marker.
 
 ---
 
-## 6. OFFENE PUNKTE (§6.4 = sichtbarer Prod-Kosmetik-Bug; Rest niedrig-prio)
+## 6. THEMEN-STATUS (alle Setup-Punkte erledigt)
 
-### 6.1 — ✅ Rollback-Netz / Cleanup (durchgeführt 2026-07-06)
-**Behalten (v2.1.28-Rollback-Netz):** laufendes `protrackr-app:latest` (`8151af1e`) + Rückfall-
-Image `protrackr-app:rollback-2026-07-06_11-38-32` (`8a3f855c`, = v2.1.22-Stand) + DB
-`prod-pre-promote-2026-07-06_11-38-32.sql`. Zusätzlich als 1-Generation-Puffer noch
-`prod-pre-promote-2026-07-05_17-47-17.sql` (v2.1.22-DB).
-**Gelöscht 2026-07-06:** Images `rollback-2026-07-05_17-47-17` (v2.1.8) + `pre-A1-v2.0.4`
-(je 693 MB → ~1,4 GB frei); Uralt-Dumps (`protrackr-dump-2026-05-28`, `prod-pre-A1-2026-07-02`,
-`protrackr-dump-2026-07-02`, `prod-pre-import-2026-07-02`) via `shred -u`. `db-migration/`
-532 KB → 244 KB. **Winziges Rest-TODO:** v2.1.22-Puffer-Dump löschen, sobald v2.1.28 ein paar
-Tage stabil lief.
+**✅ §6.1 — Rollback-Netz / Cleanup (fortlaufend, zuletzt 2026-07-06 nach v2.4.0):**
+Konservativ 2 Generationen behalten (v2.4.0 laufend + v2.3.0-Rückfall-Image `af97e678`; DB-Backups
+v2.4.0 `…23-13-21`/`…23-15-25` + v2.3.0 `…20-26-58`). Alles Ältere gelöscht. **Rollback-Fähigkeit
+ungeschmälert** (Git-Tags: jede Version `git checkout <tag>` + `docker compose build` neu baubar).
+*Kleines Rest-TODO:* v2.3.0-Puffer (Image + DB-Backup) kann nach ein paar Tagen v2.4.0-Stabilität weg.
 
-### 6.2 — main-seitige Folge-TODOs (App-Code → main, nicht hier)
-- **TZ-Folgepunkte:** `Reports.tsx` Default-Monatsgrenzen (`getTodayLocalDate`, ~Z.67-90)
-  browser-lokal; `server/scheduler.ts` (~Z.32-33) Monatsend-Notification via `toISOString`
-  (UTC). Beide unkritisch für Warschau-Nutzer, Kandidaten für `warsawDateKey`.
-- **P3/M1:** MySQL-Session-Store (`express-mysql-session`) statt MemoryStore in
-  `server/_core/index.ts`. Unkritisch (Single-User). Laufzeit-Test nur in NAS-Dev.
-→ Ein Main-Chat-Prompt dafür wurde bereits erstellt (siehe letzte NAS-Chat-Nachricht).
+**✅ §6.2 — TZ-Kohärenz + persistenter Session-Store (P3/M1):** live mit v2.3.5 (`warsawDateKey`) +
+v2.4.0 (`express-mysql-session`). War der letzte main-relevante NAS-Folgepunkt — **erledigt**.
 
-### 6.3 — ✅ ERLEDIGT (2026-07-05): `rollout-to-nas.ps1` `-e`-Bug behoben
-`scripts/rollout-to-nas.ps1` Z.50 auf Array-Literal `Invoke-Git @('cat-file','-e',
-"$commit^{commit}")` umgestellt (+ WARUM-Kommentar). Ursache war die Advanced-Function-
-Parameter-Ambiguität von `-e` gegen `-ErrorAction`/`-ErrorVariable`. Empirisch abgesichert:
-**nur** Z.50 war betroffen (alle anderen `Invoke-Git`-Aufrufe binden sauber über
-`ValueFromRemainingArguments`); Fix gegen echtes git verifiziert (`Code=0`, Gegenprobe
-`128`). `/nas-rollout` kann den formalen Skript-Weg wieder nutzen — manueller Merge nicht
-mehr nötig. Details: `NAS_SETUP_HISTORY.md` (2026-07-05 §6.3).
+**✅ §6.3 — `rollout-to-nas.ps1` `-e`-Bug:** behoben (Array-Literal). Skript-Weg erprobt (9 Rollouts).
 
-### 6.4 — ✅ ERLEDIGT (2026-07-06, v2.1.28): Prod-Tab-„(DEV)" behoben (APP_ENV_LABEL Runtime-Label)
-**Symptom:** Die **Prod**-App (`:9443`) zeigt im Browser-Tab/Titel **„ProTrackr (DEV)"**
-statt des Prod-Titels („Döring Consulting - Projekt & Abrechnungsmanagement"). Kosmetisch,
-kein Funktions-/Datenfehler — aber auf Prod sichtbar/unprofessionell.
-**Ursache:** T3b setzt `VITE_APP_TITLE=ProTrackr (DEV)` als **build-arg** → der Titel wird
-**build-time** in den Client gebacken (`client/src/main.tsx` `document.title`).
-`deploy-prod.sh` promotet das Dev-Image **bit-identisch** (`docker tag protrackr-dev-app
-→ protrackr-app`, kein Rebuild) → das Dev-Image **inkl. eingebackenem „(DEV)"** landet auf
-Prod. Grundkonflikt: **build-time DEV-Label ⚔ bit-identische Image-Promotion** (T3b war zu
-kurz gedacht — es macht das Image umgebungs-SPEZIFISCH, was die Promotion-Idee bricht).
-**Fix-Richtungen (betrifft beide Welten):**
-- **(a) empfohlen — Label RUNTIME statt build-time:** Titel aus einer server-injizierten
-  Runtime-Variable / Port / Hostname bestimmen (App-Code → **main**), NICHT via `VITE_*`;
-  danach das T3b build-arg entfernen (**nas-setup**: `compose.dev.yml` + `Dockerfile`). Dann
-  ist das Image wieder umgebungs-neutral → bit-identische Promotion intakt, Dev zeigt
-  „(DEV)", Prod den Prod-Titel.
-- **(b) T3 zurückrollen:** DEV-Label ganz entfernen (Dev/Prod nur via URL `:9444`/`:9443`
-  unterscheidbar) — T3a (main, `main.tsx`) + T3b (nas-setup) rückgängig.
-**Sofort-Notbehelf (unsauber, nur wenn Prod-Titel dringend):** Prod separat bauen ohne
-build-arg (`docker compose up -d --build app` gegen `docker-compose.yml`) → bricht aber die
-„Prod == getestetes Dev-Image"-Garantie; besser (a) oder (b) sauber umsetzen.
+**✅ §6.4 — Prod-Tab „(DEV)":** behoben (v2.1.28, `APP_ENV_LABEL` Runtime-Label). Ein Image, zwei Titel.
 
-**ENTSCHEIDUNG (2026-07-05): Lösung (a) — Runtime-Label.** User-Vorgabe: „DEV bleibt DEV,
-PROD bleibt PROD, Promotion hin oder her." Umsetzung koordiniert über beide Welten via
-Runtime-Env-Var **`APP_ENV_LABEL`** (Server-lesbar, KEIN `VITE_`-Prefix; **Dev = `DEV`,
-Prod = leer**):
-- **main (in Arbeit):** Prompt ist im Main-Chat platziert — Server reicht `APP_ENV_LABEL`
-  **runtime** an den Client (index.html-Injektion **oder** dynamischer Config-Endpoint),
-  `client/src/main.tsx` baut `document.title` = `label ? "ProTrackr ("+label+")" :
-  "Döring Consulting - …"`, **`VITE_APP_TITLE` (T3a) raus**. tsc/vitest grün, dann Manifest.
-- **NAS-Chat (nach main-Push, HIER):** T3b build-arg entfernen (`Dockerfile` +
-  `compose.dev.yml`), `APP_ENV_LABEL` setzen (`.env.dev` = `DEV`, Prod-`.env` = leer), dann
-  Rollout (Dev-Build → Abnahme „(DEV)" → Prod-Promotion → Prod-Titel; **ein Image, zwei Titel**).
-- **Trigger:** Sobald der Main-Chat den Runtime-Mechanismus gepusht hat + ein Rollout-Manifest
-  vorliegt → hier weitermachen (T3b raus, Env-Werte, Rollout).
-
-**✅ ERLEDIGT 2026-07-06 (v2.1.28).** main `abe2383`: Runtime-Injektion (`server/_core/envLabel.ts`
-setzt `window.__APP_ENV_LABEL__` vor `</head>` aus `process.env.APP_ENV_LABEL`; `VITE_APP_TITLE`
-raus). NAS `feee5ae`: T3b build-arg aus `Dockerfile`+`compose.dev.yml` entfernt; `APP_ENV_LABEL=DEV`
-fest in `compose.dev.yml` `environment:` (kein Secret, versioniert → **kein** manueller `.env.dev`-
-Schritt); Prod-`docker-compose.yml` unset (nur Doku-Kommentar). Rollout via `/nas-rollout`: Merge
-`0a70b66` → `deploy-dev.sh` → Dev-Abnahme „ProTrackr (DEV)" → `deploy-prod.sh` **bit-identische**
-Promotion (Image `8151af1e87c4`) → Prod-Titel. Objektiv verifiziert (Container-Env `[DEV]`/`[]` +
-injiziertes Label `"DEV"`/`""` je Umgebung) **und** visuell (beide Tabs). Tag `nas-rollout/2.1.28`,
-`.DONE`. **Ein Image, zwei Titel.** Referenz: `NAS_SETUP_HISTORY.md` (2026-07-06 §6.4).
+**Potenziell offen (niedrig, beobachten):** Tailscale-Serve-Reboot-Persistenz (`tailscale serve --bg`)
+— bei einem NAS-Reboot prüfen, ob `:9443`/`:9444` noch stehen.
 
 ---
 
@@ -232,70 +188,90 @@ injiziertes Label `"DEV"`/`""` je Umgebung) **und** visuell (beide Tabs). Tag `n
    Auto-Rollback); passiver Guard (Compose-Warnung) + aktiver Guard (Watcher+Mail).
 3. **Ehrliche Grenze:** root nicht 100 % sperrbar — Guards machen Eingriffe sichtbar.
 
-**Success Criteria für Promotion (alle Pflicht):** tsc+vitest grün · Dev deployt+healthy ·
-Health-Gate+keine DB-Fehler · manuelle Dev-Abnahme · kein kritischer Bug · Prod-Backup
-(macht Skript) · explizite Freigabe (`PROMOTE`).
+**Success Criteria für Promotion (alle Pflicht):** tsc+vitest grün (main) · Dev deployt+healthy ·
+Health-Gate+keine DB-Fehler · **manuelle Dev-Abnahme** · kein kritischer Bug · Prod-Backup ·
+explizite `PROMOTE`-Freigabe. Bei Schema-Change zusätzlich: Migration+Backup vor `deploy-prod.sh` (§9).
 
 ---
 
-## 8. BEZUG ZUR MAIN-SITZUNG
+## 8. BEZUG ZUR MAIN-SITZUNG + ROLLOUT-ZYKLUS
 
 - **Zwei getrennte Welten:** `main` = App-Code (eigener Chat, `ProTrackr_main`).
   `nas-setup` = Deploy/Infra (dieser Chat, `developing_path`). **NIEMALS `nas-setup → main`
   mergen** ohne explizite Freigabe. `main → nas-setup` ist der Rollout-Weg (kontrolliert).
-- **Rollout-Zyklus:** Main-Chat committet+pusht auf `main` + erzeugt Manifest
-  (`generate-rollout-manifest.mjs`). NAS-Chat: `/nas-rollout` (bzw. manueller Merge wegen
-  §6.3) → `deploy-dev.sh` → Dev-Abnahme → nach Freigabe `deploy-prod.sh`.
-- **Main-Handover:** `HANDOVER-MAIN.md` (auf `main`) ist der Wiedereinstiegspunkt der
-  Main-Welt. App-seitige offene Punkte (§6.2) gehören dorthin.
+- **Rollout-Zyklus (Standard, ohne Schema-Change):**
+  1. Main-Chat pusht auf `main` + erzeugt Manifest (`.claude/rollouts/<version>.json`) + meldet sich.
+  2. NAS-Chat: Manifest bit-identisch bereitstellen (aus `origin/main`) + committen; `rollout-to-nas.ps1
+     -Execute` merged den gepinnten Commit; push.
+  3. `deploy-dev.sh` (User im Web-Terminal) → **Dev-Abnahme** (visuell/fachlich).
+  4. Nach Freigabe: `deploy-prod.sh` → `PROMOTE` (bit-identische Promotion).
+  5. Abschluss: Tag `nas-rollout/<version>`, `.DONE`, Handover/History aktualisieren.
+- **Rollout mit Schema-Change:** wie oben, aber Backup + Migration MANUELL vor `deploy-*.sh` einschieben
+  → **§9 Lesson 9**.
+- **Main-Handover:** `HANDOVER-MAIN.md` (auf `main`). App-seitige offene Punkte gehören dorthin.
 
 ---
 
 ## 9. LESSONS LEARNED (technische Fallstricke)
 
-1. **Post-A5-Commits:** MySQL84 (Laptop) ist Manual/aus → der `pre-commit`-Hook scheitert
-   am DB-Fixture-Cleanup (`vitest.setup.ts`, ECONNREFUSED 3306), NICHT an den Tests.
-   Lösung: `Start-Service MySQL84` (Admin) **oder** `SKIP_TEST_CLEANUP=1 git commit …` für
-   Nicht-DB-Commits (Skip-Check `vitest.setup.ts:22`, vor dem DB-Connect).
-2. **`rollout-to-nas.ps1` `-e`-Bug** (§6.3, **behoben 2026-07-05**) → Skript-Weg wieder nutzbar.
-   Manueller Merge bleibt als Fallback-Wissen: `git merge --no-commit --no-ff origin/main`
-   (Konfliktcheck) → `--abort` → echter Merge. Konflikt-Leitplanke: nur Versionsdateien auto
-   zu main, App-Konflikte STOPP. Root-Cause: `-e` band mehrdeutig gegen Common-Parameter einer
-   PowerShell-Advanced-Function → als Array-Element übergeben.
-3. **Kurs-Stichtag-Bug-Ortung:** Eine EUR/PLN-Berichts-Divergenz über der Sub-Cent-je-Beleg-
-   Rundung ist ein **Kurs-/Stichtag**-Symptom, nicht Rundung. Die „0,66 €" waren zwei
-   gleichzeitige Fallback-Kurse (Zukunfts-Stichtag → stale letzter DB-Kurs).
-4. **Windows-MSYS git show:** `git show origin/main:.claude/…` konvertiert `:`/`/` falsch
-   („ambiguous argument"). Umgehung: über den **Blob-Hash** lesen (`git cat-file blob <hash>`).
-5. **Session-Start-Verankerung:** Neue Sitzungen starten evtl. mit Root `developing_path` —
-   Symptom: Statusleiste zeigt „nas-setup", PR-Button/Diff gehören zu diesem Worktree.
-   Für Main-Arbeit die Sitzung DIREKT in `ProTrackr_main` starten, nie Branch umschalten.
-6. **Compose Zwei-Umgebungen:** `env_file: [.env.dev]` je Service (nicht `${VAR}`, das
-   nimmt Default-`.env` = Prod). Healthcheck-Passwort `CMD-SHELL` + `$$VAR`.
-7. **`VITE_*` build-time:** `.dockerignore` schließt `.env*` aus → als build-arg übergeben
-   (T3b: Dockerfile schreibt `.env.production.local` im build-Stage aus dem arg).
+1. **Post-A5-Commits:** MySQL84 (Laptop) ist Manual/aus → `pre-commit`-Hook scheitert am
+   DB-Fixture-Cleanup (`vitest.setup.ts`, ECONNREFUSED 3306), NICHT an den Tests. Lösung:
+   `SKIP_TEST_CLEANUP=1 git commit …` für Nicht-DB-Commits (Skip-Check `vitest.setup.ts:22`).
+   *(Alle nas-setup-Doku-/Infra-Commits laufen so.)*
+2. **`rollout-to-nas.ps1` `-e`-Bug** (§6.3, behoben): `-e` band mehrdeutig gegen Common-Parameter
+   einer PowerShell-Advanced-Function → als **Array-Element** übergeben. Fallback bei Skript-Problemen:
+   manueller Merge `git merge --no-commit --no-ff <commit>` (Konfliktcheck) → `--abort` → echter Merge;
+   nur Versionsdateien auto zu main, App-Konflikte STOPP.
+3. **Manifest bit-identisch holen** (Windows-MSYS `git show origin/main:pfad` ist kaputt):
+   Blob-Hash-Weg — `BLOB=$(git ls-tree origin/main .claude/rollouts/X.json | awk '{print $3}');
+   git cat-file blob "$BLOB" > datei`; mit `git hash-object` gegen `$BLOB` verifizieren.
+4. **Merge ist meist konfliktfrei:** nas-setup macht keine eigenen Versions-Bumps (post-commit-Hook
+   auf main gegated) → die Versionsdateien kollidieren nicht. `sharedConfigChanged` im Manifest prüfen
+   (z.B. `pnpm-lock.yaml` = neue Dep → Image-Rebuild zieht sie).
+5. **Session-Start-Verankerung:** Für Main-Arbeit die Sitzung DIREKT in `ProTrackr_main` starten,
+   nie Branch im `developing_path` umschalten (Worktree-Kollision).
+6. **Compose Zwei-Umgebungen:** Dev nutzt `env_file: [.env.dev]` je Service; Nicht-Secret-Konstanten
+   (`APP_ENV_LABEL`, TZ) fest in `environment:` (versioniert, kein manueller NAS-Schritt). Healthcheck-
+   Passwort `CMD-SHELL` + `$$VAR`.
+7. **recharts-Fragment-Fallstrick** (v2.2.0): bedingte `<Line>`/`<Bar>`/`<Area>` NIE in ein React-
+   Fragment `<>…</>` wickeln — recharts findet Serien-Kinder nur als direkte Kinder / Array. Symptom:
+   Chart leer, keine Y-Achse, KEIN JS-Error. *(App-Code = main; hier nur zur Diagnose-Erinnerung.)*
 8. **Alpine kein tzdata** → `apk add tzdata`; Windows→Linux MySQL braucht `lower_case_table_names=1`.
-9. **Rollout mit Schema-Change / neuer Migration** (erstmals v2.4.0, Migration `0025_sessions.sql`):
+9. **★ Rollout mit Schema-Change / neuer Migration** (erstmals v2.4.0, `0025_sessions.sql`):
    `deploy-dev.sh`/`deploy-prod.sh` machen **keine** Migration und **kein** Schema-Backup — und
    `express-mysql-session` läuft mit `createDatabaseTable:false`, braucht die Tabelle also VOR
-   App-Start. Prozedur je Umgebung: (1) Merge+Push (lokal), (2) auf NAS `git fetch && git reset
-   --hard origin/nas-setup` (bringt die neue `drizzle/*.sql`), (3) manuelles DB-Backup (`docker exec
-   … mysqldump …`, >1000 B prüfen), (4) Migration direkt via mysql: `docker exec -i protrackr-mysql[-dev]
-   sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < drizzle/NNNN.sql`, (5) `SHOW
-   COLUMNS` verifizieren, (6) `deploy-dev.sh`/`deploy-prod.sh` (Image-Rebuild zieht neue Deps über
-   `pnpm-lock`). Bei Prod: Migration+Backup **vor** `deploy-prod.sh` (dessen `[3]`-Backup ist zusätzlich).
-   `CREATE TABLE IF NOT EXISTS` ist idempotent → gegen die noch laufende alte App-Version harmlos.
+   App-Start. Prozedur je Umgebung (Dev zuerst, dann Prod):
+   1. Merge+Push (lokal, `rollout-to-nas.ps1`).
+   2. NAS: `git fetch origin && git reset --hard origin/nas-setup` (bringt die neue `drizzle/*.sql`).
+   3. **DB-Backup manuell** (`docker exec <db> sh -c 'exec mysqldump -u root -p"$MYSQL_ROOT_PASSWORD"
+      --no-tablespaces --single-transaction --routines "$MYSQL_DATABASE"' > db-migration/<name>.sql`,
+      `> 1000 B` prüfen).
+   4. **Migration direkt via mysql:** `docker exec -i <db> sh -c 'exec mysql -u root
+      -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < drizzle/NNNN.sql`.
+   5. **Verifizieren** (`SHOW COLUMNS FROM <tabelle>`).
+   6. `deploy-dev.sh` bzw. `deploy-prod.sh` (Image-Rebuild zieht neue Deps über `pnpm-lock`).
+   Container-Namen: Dev `protrackr-mysql-dev`, Prod `protrackr-mysql`. Bei Prod: Backup+Migration
+   **vor** `deploy-prod.sh` (dessen `[3]`-Backup ist zusätzlich; alte laufende App-Version wird von
+   `CREATE TABLE IF NOT EXISTS` nicht gestört). Die manuellen `docker exec` auf Prod können eine
+   Guard-Mail auslösen — legitim (freigegebene Promotion-Vorarbeit).
 
 ---
 
 ## 10. ROLLBACK-/SICHERHEITSPUNKTE
 
-- **Prod-Rollback (frische Promotion v2.1.22):** DB `prod-pre-promote-2026-07-05_17-47-17.sql`
-  + Image `protrackr-app:rollback-2026-07-05_17-47-17`. `deploy-prod.sh` rollt bei
-  Health-Gate-Fehler automatisch.
-- **Code-Rollback vor A1:** Tag `freeze/nas-A1-start`.
-- **Dev ist Wegwerf:** `docker compose -f compose.dev.yml down -v` +
-  `clone-prod-to-dev.sh --yes` stellt Dev jederzeit neu her (Prod unberührt).
+- **Vier Rollback-Ebenen** (die wichtigste — Git — ist immer da):
+  1. **Git-Tags auf GitHub** (`vX.Y.Z`, `nas-rollout/X.Y.Z`) — jede Version 1:1 neu baubar
+     (`git checkout <tag>` + `docker compose build`). Unabhängig von jedem Image/Backup-Cleanup.
+  2. **Rollback-Image** (aktuell `protrackr-app:rollback-2026-07-06_23-15-25` = v2.3.0): Sekunden-
+     Rückfall bei Code-Fehler — `docker tag <rollback> protrackr-app:latest` + `up -d --no-build app`,
+     **Daten bleiben** (Code-Rollback ≠ DB-Rollback).
+  3. **Prod-DB-Backups** (`db-migration/prod-pre-*.sql`, aktuell v2.4.0 + v2.3.0): für DB-Restore bei
+     echter Daten-Korruption. `deploy-prod.sh` macht bei Health-Gate-Fehler **automatischen** Rollback.
+  4. **App-Backup** (Settings → Datensicherung, `server/backup.ts`): DB-Backup on demand.
+- **Dev ist Wegwerf:** `docker compose -f compose.dev.yml down -v` + `clone-prod-to-dev.sh --yes`
+  stellt Dev jederzeit neu her (Prod unberührt).
+- **Schema-Rollback:** additive Migrationen (`CREATE TABLE`) sind harmlos — ein Image-Rollback auf die
+  Vorversion lässt die neue Tabelle einfach ungenutzt (kein DB-Rückbau nötig).
 
 ---
 
