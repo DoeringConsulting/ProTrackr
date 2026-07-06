@@ -5,8 +5,8 @@
 > **Stand:** 2026-07-06 · **Branch:** `nas-setup` @ `0a70b66` (v2.1.28) · in Sync mit origin.
 > **Status:** Phase A (Zwei-Umgebungen-Rollout) **komplett** · Dev-Loop etabliert & 4× genutzt ·
 > `task_bba37780` **abgeschlossen und LIVE auf Prod** · **§6.4 (Prod-Tab-„(DEV)") behoben — v2.1.28 live**.
-> **Nächster Schritt:** nur noch niedrig-prio §6.1 (Rollback-Backups-Cleanup — User-Entscheidung).
-> §6.3 (`rollout-to-nas.ps1` `-e`) und §6.4 (`APP_ENV_LABEL` Runtime-Label) sind **erledigt**.
+> **Nächster Schritt:** NAS-Chat weitgehend leer — §6.1 Cleanup **durchgeführt** (nur v2.1.22-
+> Puffer-Dump nach Prod-Stabilität weg). §6.3/§6.4 **erledigt**. Offene App-TODOs (§6.2) → Main-Chat.
 
 ---
 
@@ -146,13 +146,16 @@ Guard-Autostart-Script.
 
 ## 6. OFFENE PUNKTE (§6.4 = sichtbarer Prod-Kosmetik-Bug; Rest niedrig-prio)
 
-### 6.1 — Rollback-Netz / Cleanup (NAS-Chat; Entscheidung: User)
-Rollback bereit (**behalten**): `prod-pre-promote-2026-07-05_17-47-17.sql` + Image
-`protrackr-app:rollback-2026-07-05`. Dazu ältere Backups (`prod-pre-A1-*`,
-`prod-pre-import-*`, Migrations-Dumps). **Cleanup-Regel** (User): keine Löschung bis
-GESAMTER Umzug fertig UND alle Bugs gelöst — Bedingung ist jetzt weitgehend erfüllt
-(Phase A komplett, task_bba37780 + T2/T3 gelöst). Nach ein paar Tagen Prod-Stabilität
-kann aufgeräumt werden (User entscheidet, Ausführung hier).
+### 6.1 — ✅ Rollback-Netz / Cleanup (durchgeführt 2026-07-06)
+**Behalten (v2.1.28-Rollback-Netz):** laufendes `protrackr-app:latest` (`8151af1e`) + Rückfall-
+Image `protrackr-app:rollback-2026-07-06_11-38-32` (`8a3f855c`, = v2.1.22-Stand) + DB
+`prod-pre-promote-2026-07-06_11-38-32.sql`. Zusätzlich als 1-Generation-Puffer noch
+`prod-pre-promote-2026-07-05_17-47-17.sql` (v2.1.22-DB).
+**Gelöscht 2026-07-06:** Images `rollback-2026-07-05_17-47-17` (v2.1.8) + `pre-A1-v2.0.4`
+(je 693 MB → ~1,4 GB frei); Uralt-Dumps (`protrackr-dump-2026-05-28`, `prod-pre-A1-2026-07-02`,
+`protrackr-dump-2026-07-02`, `prod-pre-import-2026-07-02`) via `shred -u`. `db-migration/`
+532 KB → 244 KB. **Winziges Rest-TODO:** v2.1.22-Puffer-Dump löschen, sobald v2.1.28 ein paar
+Tage stabil lief.
 
 ### 6.2 — main-seitige Folge-TODOs (App-Code → main, nicht hier)
 - **TZ-Folgepunkte:** `Reports.tsx` Default-Monatsgrenzen (`getTodayLocalDate`, ~Z.67-90)

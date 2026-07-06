@@ -1974,3 +1974,25 @@ Image trägt je Container-Env verschiedene Titel, Promotion-Idee wieder intakt.
 Dev `(DEV)`, Prod Prod-Titel. Tag `nas-rollout/2.1.28` + `.DONE`. Prod-Backup behalten (Rollback-Netz,
 §6.1). **Offen nur noch:** §6.1 (Rollback-Backups-Cleanup — User-Entscheidung); §6.2 (main-seitige
 TZ-/Session-Store-TODOs). Alle Phase-A- + §6.3/§6.4-Punkte des NAS-Chats sind abgeschlossen.
+
+## 2026-07-06 — §6.1: Rollback-Backup-Cleanup durchgeführt
+
+**Was:** Nach §6.4-Abschluss (Prod v2.1.28 live, Bedingung „Umzug fertig + Bugs gelöst" erfüllt)
+die alten Rollback-Artefakte aufgeräumt. Read-only Bestandsaufnahme zuerst, dann gestaffelte
+Freigabe — nur gezielte alte Objekte getroffen, frisches Netz nie berührt.
+- **Gelöscht:** Images `protrackr-app:rollback-2026-07-05_17-47-17` (v2.1.8, `6dc7f928`) +
+  `pre-A1-v2.0.4` (`35d90e0b`) — je 693 MB, ~1,4 GB frei. Uralt-Dumps `protrackr-dump-2026-05-28`,
+  `prod-pre-A1-2026-07-02`, `protrackr-dump-2026-07-02`, `prod-pre-import-2026-07-02` via
+  `shred -u` (echte Daten). `db-migration/` 532 KB → 244 KB.
+- **Behalten (v2.1.28-Rollback-Netz):** laufendes `protrackr-app:latest` (`8151af1e`) +
+  Rückfall-Image `rollback-2026-07-06_11-38-32` (`8a3f855c`) + DB `prod-pre-promote-2026-07-06_11-38-32.sql`.
+- **Puffer:** `prod-pre-promote-2026-07-05_17-47-17.sql` (v2.1.22-DB) bewusst behalten, bis
+  v2.1.28 ein paar Tage stabil lief (dann löschbar).
+
+**Lernpunkt:** `cd db-migration` in Befehl (2) verschob das CWD → der nachgestellte relative
+`ls db-migration/` lief ins Leere (`db-migration/db-migration/`). Kein Löschfehler; Kontrolle
+mit absolutem Pfad bestätigte den Soll-Zustand.
+
+**Ergebnis:** §6.1 praktisch erledigt (nur v2.1.22-Puffer-Dump als winziges Rest-TODO). Damit
+sind ALLE NAS-Chat-Punkte abgeschlossen — Phase A (A1–A5), §6.1, §6.3, §6.4. Offen nur noch
+main-seitiges §6.2 (TZ-Folgepunkte, P3/M1 Session-Store) im Main-Chat.
