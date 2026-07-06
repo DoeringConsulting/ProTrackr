@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { calculatePolishTaxResult } from "../client/src/lib/taxEnginePl";
+import {
+  aggregateMonthlyTaxResults,
+  calculatePolishTaxResult,
+  computeMonthlyTaxSeries,
+} from "../client/src/lib/taxEnginePl";
 
 describe("taxEnginePl", () => {
   const baseProfile = {
@@ -187,6 +191,58 @@ describe("taxEnginePl", () => {
 
     // 120_000 yearly -> 10_000 fuer 1 Monat (Clamp)
     expect(result.deductibleHealth).toBe(10000);
+  });
+
+  it("computeMonthlyTaxSeries: Pro-Monat-Punkte; Summe == aggregateMonthlyTaxResults", () => {
+    const getMonthlyAmounts = (monthStart: string) => ({
+      revenueCents: monthStart.startsWith("2026-01") ? 2_000_000 : 1_000_000,
+      fixedCostsCents: 300_000,
+      variableCostsCents: 100_000,
+    });
+    const input = {
+      startDate: "2026-01-01",
+      endDate: "2026-02-28",
+      getMonthlyAmounts,
+      profile: baseProfile,
+      config: baseConfig,
+    };
+
+    const series = computeMonthlyTaxSeries(input);
+    expect(series.length).toBe(2);
+    expect(series[0].monthStart).toBe("2026-01-01");
+    expect(series[0].monthEnd).toBe("2026-01-31");
+    expect(series[1].monthStart).toBe("2026-02-01");
+    expect(series[1].monthEnd).toBe("2026-02-28");
+    expect(series[0].amounts.revenueCents).toBe(2_000_000);
+    expect(series[1].amounts.revenueCents).toBe(1_000_000);
+
+    // Das Aggregat ist exakt die Summe der Pro-Monat-Ergebnisse.
+    const agg = aggregateMonthlyTaxResults(input);
+    expect(agg.netProfit).toBe(series[0].result.netProfit + series[1].result.netProfit);
+    expect(agg.zus).toBe(series[0].result.zus + series[1].result.zus);
+    expect(agg.tax).toBe(series[0].result.tax + series[1].result.tax);
+  });
+
+  it("aggregateMonthlyTaxResults: NaN-Datum → Fallback calculatePolishTaxResult(0), nicht all-zero", () => {
+    const getMonthlyAmounts = () => ({ revenueCents: 0, fixedCostsCents: 0, variableCostsCents: 0 });
+    const nanInput = { startDate: "not-a-date", endDate: "also-not", getMonthlyAmounts, profile: baseProfile, config: baseConfig };
+    const agg = aggregateMonthlyTaxResults(nanInput);
+    const expected = calculatePolishTaxResult({
+      revenueCents: 0, fixedCostsCents: 0, variableCostsCents: 0,
+      startDate: "not-a-date", endDate: "also-not", profile: baseProfile, config: baseConfig,
+    });
+    expect(agg).toEqual(expected);
+    expect(agg.zus).toBeGreaterThan(0); // ZUS-Minimum greift → NICHT all-zero
+    expect(computeMonthlyTaxSeries(nanInput)).toEqual([]);
+  });
+
+  it("aggregateMonthlyTaxResults: invertierter Zeitraum (start>end) → all-zero, source legacy", () => {
+    const getMonthlyAmounts = () => ({ revenueCents: 1_000_000, fixedCostsCents: 0, variableCostsCents: 0 });
+    const invInput = { startDate: "2026-06-01", endDate: "2026-03-31", getMonthlyAmounts, profile: baseProfile, config: baseConfig };
+    expect(aggregateMonthlyTaxResults(invInput)).toEqual({
+      zus: 0, healthInsurance: 0, taxBase: 0, tax: 0, netProfit: 0, deductibleHealth: 0, source: "legacy",
+    });
+    expect(computeMonthlyTaxSeries(invInput)).toEqual([]);
   });
 });
 

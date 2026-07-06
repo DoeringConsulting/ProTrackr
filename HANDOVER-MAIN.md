@@ -14,12 +14,10 @@
   bit-identisch). Alles davor erledigt (Fehler #1/#2/#3, Backlog P1/P2/P4/P5,
   K1/2a/2c/TZ, PDF-Original-Beträge). NAS-Rollout-Tooling + Blueprint +
   Manifest-Prozess stehen, A5 komplett. Details §4.
-- **Nächste Aufgaben (main/App-Code) — Reihenfolge festgelegt 2026-07-05:**
-  1. **`APP_ENV_LABEL` Runtime-Titel (§6.5) ZUERST** — entblockt den wartenden NAS-Chat
-     (NAS §6.4 ist **bestätigt auf main blockiert**; Prod-Tab zeigt fälschlich „(DEV)").
-     Klein: Runtime-Env server→client + `VITE_APP_TITLE` raus.
-  2. **Umsatzentwicklung-Chart (§6.1, v2.2.0)** danach — Konzept abgestimmt, Turnkey-Plan
-     in `HANDOVER-UMSATZCHART.md`.
+- **Nächste Aufgabe (main/App-Code): Umsatzentwicklung-Chart (§6.1, v2.2.0)** — Konzept
+  abgestimmt, Turnkey-Plan in `HANDOVER-UMSATZCHART.md`.
+- ✅ **`APP_ENV_LABEL` Runtime-Titel (§6.5) ERLEDIGT** (2026-07-06, v2.1.28, `abe2383`,
+  Tag v2.1.28, Manifest `2.1.28.json`) — der NAS-Chat kann NAS §6.4 jetzt nachziehen.
 - **Folge-Punkte aus der Prod-Promotion** (§6.2): Punkt 1 Rollback-Cleanup (NAS-Chat),
   Punkt 2 TZ-Kohärenz + Session-Store (main, niedrig-prio), Punkt 3 rollout-Skript-Bug
   (NAS-Chat). **Welt-Trennung: nur Punkt 2 ist main.**
@@ -37,10 +35,9 @@
    [[feedback_deploy_workflow]] (nach A5 geändert!), [[feedback_worktree_separation]],
    [[feedback_3agent_workflow]], [[feedback_prod_only_via_dev_promotion]].
 3. **Dieses Handover lesen.**
-4. **Nächste Aufgaben (Reihenfolge 2026-07-05):** ZUERST `APP_ENV_LABEL` Runtime-Titel
-   (§6.5 — entblockt NAS §6.4), DANN Umsatzentwicklung-Chart (§6.1, v2.2.0). Beide über
-   den 3-Agenten-Workflow + Post-A5-Commit-Ablauf (§3, §6.4). Danach übrige Folge-Punkte
-   §6.2.
+4. **Nächste Aufgabe:** Umsatzentwicklung-Chart (§6.1, v2.2.0) über den 3-Agenten-Workflow
+   + Post-A5-Commit-Ablauf (§3, §6.4). (`APP_ENV_LABEL` §6.5 ist ✅ erledigt, v2.1.28.)
+   Danach übrige Folge-Punkte §6.2.
 
 ## 2. PROJEKT-KONTEXT (Stack)
 
@@ -187,14 +184,13 @@ werden (A5-Zustand blieb erhalten).
 
 ## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE
 
-task_bba37780 ist abgeschlossen + LIVE auf Prod (§4). **Nächste main/App-Code-Aufgaben,
-Reihenfolge festgelegt 2026-07-05: ZUERST `APP_ENV_LABEL` Runtime-Titel (§6.5) — entblockt
-den wartenden NAS-Chat (NAS §6.4 bestätigt blockiert) —, DANN der Umsatzentwicklung-Chart
-(§6.1, v2.2.0).** Dazu Folge-Punkte aus der Prod-Promotion (§6.2). Rahmen-Regeln §6.4.
+task_bba37780 ist abgeschlossen + LIVE auf Prod (§4). **`APP_ENV_LABEL` Runtime-Titel (§6.5)
+ist ✅ ERLEDIGT (2026-07-06, v2.1.28) → primär offen: der Umsatzentwicklung-Chart (§6.1,
+v2.2.0).** Dazu Folge-Punkte aus der Prod-Promotion (§6.2). Rahmen-Regeln §6.4.
 
 ### 6.1 — Umsatzentwicklung-Chart erweitern (PRIMÄR, main/App-Code)
-> **STATUS 2026-07-05 (gesichert, pausiert; jetzt 2. Aufgabe — NACH §6.5 APP_ENV_LABEL):**
-> Code-Analyse abgeschlossen, **noch kein Code geschrieben**. Entscheidungen **gelockt**: (1) **Option 1** — geteiltes Modul
+> **STATUS (jetzt PRIMÄR — §6.5 APP_ENV_LABEL ist ✅ erledigt, v2.1.28):** Code-Analyse
+> abgeschlossen (2026-07-05), **noch kein Code geschrieben**. Entscheidungen **gelockt**: (1) **Option 1** — geteiltes Modul
 > `client/src/lib/monthlyFinancials.ts` in Dashboard UND Reports; (2) Version **v2.2.0
 > (MINOR)**, Commit `feat(dashboard): …`. **Turnkey-Umsetzungsplan (startklar ab
 > 2026-07-06): `HANDOVER-UMSATZCHART.md`** (committet). Fortsetzung: dort §4 abarbeiten.
@@ -288,13 +284,17 @@ NAS-Chat nach User-Entscheidung.
   via `/nas-rollout`; **niemals `nas-setup → main`** ohne Freigabe.
 
 ### 6.5 — Runtime-Umgebungslabel `APP_ENV_LABEL` (Prod-Tab zeigt fälschlich „(DEV)")
-> **★ ZUERST in der nächsten Main-Sitzung** (Reihenfolge festgelegt 2026-07-05, vor §6.1):
-> Der NAS-Chat hat bestätigt, dass **NAS §6.4 auf genau diese main-Aufgabe blockiert** ist
-> (`APP_ENV_LABEL` fehlt in origin/main; `VITE_APP_TITLE` noch aktiv `main.tsx:16-17` —
-> direkt verifiziert). „Erst main, dann NAS" ist zwingend — NAS darf T3b NICHT vorher
-> entfernen (sonst verliert Dev sein „(DEV)"). **Nach main-Push an den NAS-Chat zurückmelden.**
+> **✅ ERLEDIGT auf main (2026-07-06, v2.1.28, Commit `abe2383`, Tag `v2.1.28`, Manifest
+> `.claude/rollouts/2.1.28.json`).** Gewählter Transport: **index.html-Injektion** — der
+> Server injiziert `window.__APP_ENV_LABEL__` (aus `process.env.APP_ENV_LABEL`) vor `</head>`
+> (`server/_core/envLabel.ts`, verdrahtet in `vite.ts` `setupVite`+`serveStatic`); der Client
+> baut `document.title` daraus (`client/src/lib/appTitle.ts`, `main.tsx`). `VITE_APP_TITLE`
+> (T3a) vollständig entfernt. tsc+vitest grün (inkl. neuer Unit-Tests), Prod-Build + echter
+> HTTP-Round-Trip (DEV/unset) lokal verifiziert. **NAS §6.4 ist entblockt** — Rückmeldung an
+> den NAS-Chat gesendet; dort T3b build-arg raus + `.env.dev` `APP_ENV_LABEL=DEV`, Prod unset.
+> Der Rest dieses §6.5 ist Referenz/Vertrag (dokumentiert, was umgesetzt wurde).
 
-**Herkunft:** NAS-Setup-Sitzung (2026-07-05), main/App-Code-Anteil. **Noch nicht begonnen.**
+**Herkunft:** NAS-Setup-Sitzung (2026-07-05), main/App-Code-Anteil. **Erledigt 2026-07-06.**
 3-Agenten-Workflow; **vor Code-Commits `Start-Service MySQL84`** (Admin-PowerShell) — dieser
 Change hat einen Server-Anteil, ist NICHT rein client-only. Nach main-Push **an die
 NAS-Setup-Sitzung zurückmelden**. Verwandt: [[project_app_env_label_runtime_title]].

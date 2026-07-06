@@ -33,6 +33,7 @@ import {
   provisionConfigFromCustomer,
 } from "@/lib/provision";
 import { getExpenseBillingCustomerId as attributeExpenseToCustomer } from "@/lib/expenseAttribution";
+import { computeMonthlyAmounts } from "@/lib/monthlyFinancials";
 import { buildCustomerReportRows } from "@/lib/customerReportRows";
 import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
 
@@ -445,65 +446,22 @@ export default function Reports() {
       return sum + convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
     }, 0);
 
-    const isInMonth = (value: string | Date | null | undefined, ms: string, me: string): boolean => {
-      if (!value) return false;
-      const key = toDateKey(value);
-      if (!key) return false;
-      return key >= ms && key <= me;
-    };
-
     const taxResultPln = aggregateMonthlyTaxResults({
       startDate,
       endDate,
-      getMonthlyAmounts: (monthStart, monthEnd) => {
-        let monthRevenuePln = 0;
-        for (const entry of timeEntriesDetailed) {
-          if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
-          monthRevenuePln += convertAmountToPlnForTax(entry.calculatedAmount, entry.sourceCurrency);
-        }
-        // Add travel revenue from exclusive customers
-        for (const expense of expensesDetailed) {
-          if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
-          const billingCustomerId = getExpenseBillingCustomerId(expense);
-          if (billingCustomerId == null) continue;
-          const relatedCustomer = customersById.get(billingCustomerId);
-          if (relatedCustomer?.costModel !== "exclusive") continue;
-          monthRevenuePln += convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
-        }
-        let monthVariablePln = 0;
-        for (const expense of expensesDetailed) {
-          if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
-          monthVariablePln += convertAmountToPlnForTax(expense.amount, expense.sourceCurrency);
-        }
-        // Provision an Vermittler ist ebenfalls eine Betriebsausgabe und
-        // mindert die Steuerbasis. Wir berechnen sie pro Monat aus den
-        // Time-Entries, deren Datum im Monat liegt.
-        let monthProvisionPln = 0;
-        for (const entry of timeEntriesDetailed) {
-          if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
-          const customer = customersById.get(entry.customerId);
-          if (!customer) continue;
-          const cfg = provisionConfigFromCustomer(customer as any);
-          if (!cfg.enabled) continue;
-          const provisionCents = calculateProvisionCents(cfg, {
-            entryType: (entry.entryType ?? "onsite") as "onsite" | "remote",
-            hoursMinutes: Number(entry.hours ?? 0),
-            manDays: Number(entry.manDays ?? 0) / 1000,
-            rate: Number(entry.rate ?? 0),
-          });
-          if (provisionCents > 0) {
-            const provCurrency = String(customer.onsiteRateCurrency || "EUR").toUpperCase();
-            monthProvisionPln += convertAmountToPlnForTax(provisionCents, provCurrency);
-          }
-        }
-        return {
-          revenueCents: monthRevenuePln,
-          fixedCostsCents: monthlyFixedCostsPln,
-          // Provision wird wie eine variable Kostenposition behandelt — sie
-          // mindert die Steuerbasis genauso wie Reisekosten.
-          variableCostsCents: monthVariablePln + monthProvisionPln,
-        };
-      },
+      // Monats-Beträge kommen jetzt aus der geteilten Wahrheitsquelle
+      // (lib/monthlyFinancials), die das Dashboard identisch nutzt — verhindert die
+      // Divergenz-Bug-Klasse. Einschluss-Regeln unverändert: Zeit + exkl. RK als
+      // Umsatz; ALLE RK + Provision als variable Kosten; Fixkosten je Monat.
+      getMonthlyAmounts: (monthStart, monthEnd) =>
+        computeMonthlyAmounts(monthStart, monthEnd, {
+          timeEntries: timeEntriesDetailed,
+          expenses: expensesDetailed,
+          customersById,
+          attributionMaps: { entriesById, customerIdsByDate },
+          monthlyFixedCostsCents: monthlyFixedCostsPln,
+          toPln: convertAmountToPlnForTax,
+        }),
       profile: mappedTaxProfile,
       config: mappedTaxConfig,
       legacySettings: taxSettings,
