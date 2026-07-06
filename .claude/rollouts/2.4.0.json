@@ -1,0 +1,112 @@
+{
+  "schema": "nas-rollout/v1",
+  "version": "2.4.0",
+  "generatedAt": "2026-07-06T19:47:10.214Z",
+  "source": {
+    "branch": "main",
+    "commit": "328aa381e91c2daa1f99b89ed48c0d74cf843fd6",
+    "shortCommit": "328aa38",
+    "freezeTag": "v2.4.0"
+  },
+  "target": {
+    "branch": "nas-setup",
+    "deploy": "docker compose (Unraid)"
+  },
+  "environments": {
+    "prod": {
+      "role": "produktiv (echte Daten)",
+      "gitRef": "production",
+      "composeFile": "compose.prod.yml",
+      "envFile": ".env.prod",
+      "appContainer": "protrackr-app-prod",
+      "dbContainer": "mysql-prod",
+      "hostPort": 3010,
+      "healthUrl": "http://<NAS_HOST>:3010/version.json",
+      "tailscale": ":9443 (unveraendert)",
+      "requireExtraConfirm": true
+    },
+    "dev": {
+      "role": "dev/staging (Prod-Klon)",
+      "gitRef": "main",
+      "composeFile": "compose.dev.yml",
+      "envFile": ".env.dev",
+      "appContainer": "protrackr-app-dev",
+      "dbContainer": "mysql-dev",
+      "hostPort": 3011,
+      "healthUrl": "http://<NAS_HOST>:3011/version.json",
+      "tailscale": ":9444 (neu, Vorschlag)",
+      "requireExtraConfirm": false
+    },
+    "_note": "Ziel-Umgebung beim Rollout waehlen. Dev-Port/-Tailscale im NAS-Chat finalisieren."
+  },
+  "app": {
+    "composeService": "app",
+    "container": "protrackr-app",
+    "hostPort": 3010,
+    "healthUrl": "http://<NAS_HOST>:3010/version.json",
+    "expectVersion": "2.4.0"
+  },
+  "database": {
+    "container": "protrackr-mysql",
+    "backupBeforeMigrate": true,
+    "migrations": [
+      "0000_zippy_gwen_stacy.sql",
+      "0001_lonely_frog_thor.sql",
+      "0002_whole_songbird.sql",
+      "0003_previous_hellfire_club.sql",
+      "0004_swift_silverclaw.sql",
+      "0005_tax_profile_and_year_config.sql",
+      "0006_password_reset_tokens.sql",
+      "0007_scope_hardening_expenses_exchange_rates.sql",
+      "0008_scope_hardening_customers_owner.sql",
+      "0009_users_role_varchar.sql",
+      "0010_customers_unique_per_owner.sql",
+      "0011_tax_calculation_mode.sql",
+      "0012_tax_calculation_mode_compat.sql",
+      "0013_users_account_status_and_recovery.sql",
+      "0014_expenses_flight_route_type.sql",
+      "0015_customers_standard_day_hours.sql",
+      "0016_expense_ai_analyses.sql",
+      "0017_fk_index_prep.sql",
+      "0018_fk_orphan_analysis.sql",
+      "0019_fk_orphan_cleanup_and_quarantine.sql",
+      "0020_fk_constraints.sql",
+      "0021_expenses_add_mileage_allowance.sql",
+      "0022_exchange_rates_queried_at_and_manual_override.sql",
+      "0023_customers_provision.sql",
+      "0024_expenses_customer_id.sql",
+      "0025_sessions.sql"
+    ],
+    "applyNote": "Schema-Migrationen via `npx drizzle-kit migrate` gegen die NAS-DB — genaue Mechanik im NAS-Chat gegen nas-setup bestätigen (App-Startup vs. manuell)."
+  },
+  "nas": {
+    "note": "Rollout fasst NAS-Config NICHT an (alles gitignored oder NAS-only) — trotzdem vor Deploy verifizieren.",
+    "runtimeEnvFile": ".env / .env.production (gitignored) — DATABASE_URL→mysql-Container (nicht localhost), PORT=3000, SESSION/JWT/SCHEDULER/CRON-Secrets, SESSION_COOKIE_SECURE=true, SMTP_*, MYSQL_*",
+    "buildTimeVite": "VITE_* werden bei `vite build` in den Client gebacken; .dockerignore schließt .env* aus dem Build-Context aus → benötigte VITE_* als Docker build-args übergeben.",
+    "nasOnlyFiles": [
+      "docker-compose.yml",
+      "Dockerfile",
+      ".dockerignore",
+      "scripts/migrate-db.ps1",
+      "scripts/migrate-db.sh"
+    ],
+    "db": {
+      "container": "protrackr-mysql",
+      "note": "Backup & Migrate gegen die Container-DB, nie gegen die lokale Notebook-DB."
+    },
+    "ports": "Host 3010 → Container 3000 (+ Tailscale-Reverse-Proxy :9443)",
+    "sharedConfigChanged": [
+      "pnpm-lock.yaml"
+    ]
+  },
+  "breaking": {
+    "value": false,
+    "note": "Commits seit nas-rollout/2.3.0"
+  },
+  "verified": {
+    "freezeTagPresent": true,
+    "note": "tsc + vitest waren auf main zum Freeze-Zeitpunkt grün."
+  },
+  "notes": "Persistenter MySQL-Session-Store (Sec 6.2b, P3/M1). ACHTUNG NAS: (1) neue Migration 0025_sessions.sql MUSS angewendet werden (sessions-Tabelle), (2) neue Runtime-Dependency express-mysql-session -> Container-Image neu bauen (pnpm install zieht sie). Fallback auf In-Memory ohne DATABASE_URL. Kumulativ inkl. Zeitumsatz-Tooltip (v2.3.3) + TZ-Kohaerenz (v2.3.5). Laufzeit-Abnahme: Login -> Container-Restart -> Session ueberlebt.",
+  "rollback": "Vor Merge-Commit: `git merge --abort`. Nach Deploy-Fehler: nas-setup auf vorherigen Commit zurücksetzen + vorheriges Image, DB aus dem Pre-Migrate-Backup wiederherstellen."
+}
