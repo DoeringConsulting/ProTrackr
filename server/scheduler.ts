@@ -7,6 +7,7 @@ import {
 import { getDb, listAllActiveUsers } from "./db";
 import { customers, expenses, timeEntries } from "../drizzle/schema";
 import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { warsawDateKey } from "@shared/dateStichtag";
 
 /**
  * Scheduler service for automatic notifications
@@ -29,8 +30,11 @@ export async function checkMonthEnd(userId: number) {
   // Calculate month revenue and expenses
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const firstDayStr = `${firstDay.toISOString().slice(0, 10)} 00:00:00`;
-  const lastDayStr = `${lastDay.toISOString().slice(0, 10)} 23:59:59`;
+  // Monatsgrenzen als Europe/Warsaw-Datumskey (verbindliche Projekt-TZ, CLAUDE.md §4), NICHT
+  // via toISOString: letzteres liefert das UTC-Datum und kippt bei Server-TZ oestlich von UTC
+  // (z.B. Warschau) auf den Vortag → expenses am Monatsersten/-letzten faelschlich ausgeschlossen.
+  const firstDayStr = `${warsawDateKey(firstDay)} 00:00:00`;
+  const lastDayStr = `${warsawDateKey(lastDay)} 23:59:59`;
 
   const entries = await db
     .select()
