@@ -20,8 +20,8 @@
      auf Prod (Prod = v2.1.28).
 - **Nichts blockiert auf main.** Die nächste Aktion liegt im **NAS-Chat** (v2.3.0 auf Dev
   nachziehen → nach Abnahme Prod-Promotion). Details §6.1.
-- **Offen auf main (nur niedrig-prio):** §6.2 — TZ-Kohärenz-Folgepunkte + persistenter
-  MySQL-Session-Store (P3/M1). Nichts Dringendes.
+- **Offen auf main:** §6.3 **Zeitumsatz-Tooltip** (kleine Aufgabe, vom User gewünscht) → danach
+  niedrig-prio §6.2 (TZ-Kohärenz-Folgepunkte + persistenter MySQL-Session-Store P3/M1). Nichts blockiert.
 - **Deploy (nach A5):** committen + `git push origin main` (Hook bumpt Version + baut `dist/`,
   **kein** Restart) → **Rollout-Manifest** erzeugen + committen + **Tag** `v<version>`; NAS-Deploy
   getrennt im **NAS-Chat** via `/nas-rollout`. Siehe §3, [[feedback_deploy_workflow]],
@@ -156,10 +156,16 @@ etwas findet.
   Build muss sie ziehen; Laufzeit-Test nur in NAS-Dev. **Vor Beginn Vorgehen/Test-Strategie mit
   User klären** (unkritisch, Single-User; Login-Verlust pro Deploy zumutbar).
 
-### 6.3 Optionale Umsatzchart-Nachpolituren (falls User wünscht)
-- Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie vom User spezifiziert).
-- Label-Überlappung: `interval={0}` zeigt alle 12 Labels; falls auf schmalen Viewports zu eng,
-  leicht schräg stellen (`angle={-45} textAnchor="end"`).
+### 6.3 Umsatzchart-Nachpolituren
+- **Zeitumsatz-Tooltip (vom User GEWÜNSCHT — nächste kleine main-Aufgabe):** erklärenden
+  Tooltip/Hinweis für die „Zeitumsatz"-Linie ergänzen (`client/src/pages/Dashboard.tsx`).
+  **Inhalt:** Zeitumsatz = reiner Umsatz aus abgerechneter Arbeitszeit (Σ `entry.calculatedAmount`
+  pro Monat, in Zielwährung), **OHNE** Reisekosten; der Abstand zur Bruttoumsatz-Linie = die
+  durchgereichten **exklusiven** Reisekosten. Umsetzung z.B. Info-Icon (lucide/`Info`) an der
+  CardDescription oder am Zeitumsatz-Toggle, oder ein erklärender recharts-Tooltip-Zusatz.
+  User-internal (kein Datenleck); **recharts-Fragment-Lesson beachten** (Serien nie in `<>…</>`).
+- (optional) Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie vom User spezifiziert);
+  Label-Überlappung auf schmalen Viewports ggf. `angle={-45} textAnchor="end"`.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
