@@ -78,6 +78,15 @@ const CURRENCY_COLOR_MAP: Record<string, string> = {
   CHF: "#dbbe76",
 };
 
+// Y-Achsen-Beschriftung: Währungssymbol statt -Code (250k€ statt 250kEUR).
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  EUR: "€",
+  PLN: "zł",
+  USD: "$",
+  GBP: "£",
+  CHF: "CHF",
+};
+
 function getSeriesColor(key: string, index: number): string {
   return CURRENCY_COLOR_MAP[key] ?? SERIES_COLORS[index % SERIES_COLORS.length];
 }
@@ -97,9 +106,9 @@ function isWithinDateRange(value: string | Date | null | undefined, startDate: s
 }
 
 export default function Dashboard() {
-  const [selectedMonths, setSelectedMonths] = useState<3 | 6 | 12>(6);
-  const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
-  const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
+  const [selectedMonths, setSelectedMonths] = useState<3 | 6 | 12>(12);
+  const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(true);
+  const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("PLN");
   // Umsatzchart-Steuerung (nur im vereinheitlichte-Währung-Modus relevant).
   const [chartMode, setChartMode] = useState<"monthly" | "cumulative">("monthly");
   const [showGross, setShowGross] = useState(true);
@@ -983,12 +992,27 @@ export default function Dashboard() {
                   {/* Untergrenze min(0, dataMin): 0-Basislinie bei reinen Umsätzen, aber
                       negative Nettomonate (Verlust, z.B. Anlaufmonate mit Fixkosten) werden
                       NICHT auf 0 abgeschnitten (recharts-Default wäre [0, 'auto']). */}
-                  <YAxis domain={[(dataMin: number) => Math.min(0, dataMin), "auto"]} />
+                  <YAxis
+                    domain={[(dataMin: number) => Math.min(0, dataMin), "auto"]}
+                    tickFormatter={(value) => {
+                      const n = Number(value);
+                      if (n === 0) return "0";
+                      const suffix = showUnifiedCurrency
+                        ? CURRENCY_SYMBOLS[targetCurrency] ?? targetCurrency
+                        : "";
+                      if (Math.abs(n) >= 1000) {
+                        const k = n / 1000;
+                        return `${Number.isInteger(k) ? k : k.toFixed(1)}k${suffix}`;
+                      }
+                      return `${n}${suffix}`;
+                    }}
+                  />
                   {showUnifiedCurrency && showNet && revenueChart.nettoHasNegative && (
-                    // Null-/Break-even-Linie golden statt grau-gestrichelt — hebt sich von den
-                    // Gitternetzlinien ab. Nur wenn Verlustwerte sichtbar sind (sonst ist 0 der
-                    // Achsenboden). Direktes LineChart-Kind (nicht im Fragment!).
-                    <ReferenceLine y={0} stroke="#eda100" strokeWidth={1.5} />
+                    // Null-/Break-even-Linie im dunklen Gold des Kosten-Pies (#b98847,
+                    // Steuer-Segment), gestrichelt — hebt sich von den grauen Gitternetzlinien
+                    // UND der gelben Netto-Linie ab. Nur wenn Verlustwerte sichtbar sind (sonst
+                    // ist 0 der Achsenboden). Direktes LineChart-Kind (nicht im Fragment!).
+                    <ReferenceLine y={0} stroke="#b98847" strokeWidth={1.5} strokeDasharray="6 4" />
                   )}
                   <Tooltip
                     formatter={(value, name) => {
