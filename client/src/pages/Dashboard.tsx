@@ -987,9 +987,13 @@ export default function Dashboard() {
                   />
                   <Legend />
                   {showUnifiedCurrency ? (
-                    <>
-                      {showGross && (
+                    // WICHTIG: recharts findet <Line>-Kinder NICHT in einem React-Fragment
+                    // (<>…</>) → Linien + Y-Domain blieben leer. Serien daher als Array
+                    // übergeben (ausgeblendete Serien = false, werden übersprungen).
+                    [
+                      showGross && (
                         <Line
+                          key="brutto"
                           type="monotone"
                           dataKey="brutto"
                           stroke="#048998"
@@ -997,9 +1001,10 @@ export default function Dashboard() {
                           name="Bruttoumsatz"
                           dot={false}
                         />
-                      )}
-                      {showNet && (
+                      ),
+                      showNet && (
                         <Line
+                          key="netto"
                           type="monotone"
                           dataKey="netto"
                           stroke="#eda100"
@@ -1007,9 +1012,10 @@ export default function Dashboard() {
                           name="Nettogewinn"
                           dot={false}
                         />
-                      )}
-                      {showTime && (
+                      ),
+                      showTime && (
                         <Line
+                          key="zeit"
                           type="monotone"
                           dataKey="zeit"
                           stroke="#898781"
@@ -1018,8 +1024,8 @@ export default function Dashboard() {
                           name="Zeitumsatz"
                           dot={false}
                         />
-                      )}
-                    </>
+                      ),
+                    ]
                   ) : (
                     revenueChart.seriesKeys.map((currency, index) => (
                       <Line
