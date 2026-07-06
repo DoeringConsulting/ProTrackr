@@ -2,27 +2,30 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue
 > Main-Sitzung kann allein auf Basis dieses Dokuments + der Memory-Dateien
-> lückenlos weiterarbeiten. Stand: **2026-07-04, v2.1.19, HEAD `13f64f1`**
-> (Backlog P1/P2/P4/P5 + task_bba37780-Nachbesserung inkl. TZ-Fix erledigt; dieses
-> Doku-Update bumpt auf v2.1.20).
+> lückenlos weiterarbeiten. Stand: **2026-07-05, v2.1.22, HEAD `9e82aa3`**
+> (task_bba37780 komplett + LIVE auf Prod v2.1.22; dieses Doku-Update bumpt auf v2.1.23).
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt).
 
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich).
-- **Stand:** v2.1.19 auf main + origin, Baum sauber. Fehler #1/#2/#3 + Backlog
-  P1/P2/P4/P5 erledigt; **task_bba37780-Nachbesserung** (Kurs-Stichtag-Cap K1 +
-  Doppelzählung 2a + Kundenbericht-Chronologie 2c, v2.1.17 `5196a72`) + **TZ-Fix**
-  (heute/gestern in Europe/Warsaw statt UTC, v2.1.19 `13f64f1`) erledigt (siehe §4).
-  NAS-Rollout-Tooling + Blueprint stehen, A5 komplett.
-- **Offen (Backlog):** nur noch **P3 — persistenter Session-Store** (Infra +
-  neue Dependency, bewusst vertagt). Details §6.1.
-- **NAS-seitige Nachzügler** (eigener Chat, nicht hier): **erneute Dev-Abnahme der
-  Nachbesserung** in NAS-Dev (`:9444`, Kunde exclusive, laufender Monat 07/2026 —
-  „Angewendete Wechselkurse"-Box: Stichtag ≠ Zukunft; Doppelzählung weg; RK
-  chronologisch) + P4-`build-arg` T3b.
-- **Deploy:** committen + `git push origin main` — **kein localhost mehr**.
-  Ausrollen auf den NAS läuft im **NAS-Setup-Chat** via `/nas-rollout`.
+- **Stand:** v2.1.22 auf main + origin, Baum sauber. **task_bba37780 (Reisekosten-
+  Berichte) komplett + LIVE auf Prod** (v2.1.22, Prod-Promotion 2026-07-05,
+  bit-identisch). Alles davor erledigt (Fehler #1/#2/#3, Backlog P1/P2/P4/P5,
+  K1/2a/2c/TZ, PDF-Original-Beträge). NAS-Rollout-Tooling + Blueprint +
+  Manifest-Prozess stehen, A5 komplett. Details §4.
+- **Nächste Aufgaben (main/App-Code) — Reihenfolge festgelegt 2026-07-05:**
+  1. **`APP_ENV_LABEL` Runtime-Titel (§6.5) ZUERST** — entblockt den wartenden NAS-Chat
+     (NAS §6.4 ist **bestätigt auf main blockiert**; Prod-Tab zeigt fälschlich „(DEV)").
+     Klein: Runtime-Env server→client + `VITE_APP_TITLE` raus.
+  2. **Umsatzentwicklung-Chart (§6.1, v2.2.0)** danach — Konzept abgestimmt, Turnkey-Plan
+     in `HANDOVER-UMSATZCHART.md`.
+- **Folge-Punkte aus der Prod-Promotion** (§6.2): Punkt 1 Rollback-Cleanup (NAS-Chat),
+  Punkt 2 TZ-Kohärenz + Session-Store (main, niedrig-prio), Punkt 3 rollout-Skript-Bug
+  (NAS-Chat). **Welt-Trennung: nur Punkt 2 ist main.**
+- **Deploy:** committen + `git push origin main`; NAS-Deploy im **NAS-Chat** via
+  `/nas-rollout`. **Nach jeder Release: Rollout-Manifest** generieren+committen
+  ([[feedback_rollout_manifest]]).
 
 ## 1. WIEDEREINSTIEGS-PROZEDUR (zuerst in der neuen Sitzung)
 
@@ -34,9 +37,10 @@
    [[feedback_deploy_workflow]] (nach A5 geändert!), [[feedback_worktree_separation]],
    [[feedback_3agent_workflow]], [[feedback_prod_only_via_dev_promotion]].
 3. **Dieses Handover lesen.**
-4. **Nächste Aufgabe:** P3 (Session-Store, §6.1) — vor Beginn Vorgehen/Test-
-   Strategie mit dem User klären (Dependency + DB + Laufzeit-Test). Alle Code-
-   Änderungen über den 3-Agenten-Workflow + Post-A5-Commit-Ablauf (§3, §6.3).
+4. **Nächste Aufgaben (Reihenfolge 2026-07-05):** ZUERST `APP_ENV_LABEL` Runtime-Titel
+   (§6.5 — entblockt NAS §6.4), DANN Umsatzentwicklung-Chart (§6.1, v2.2.0). Beide über
+   den 3-Agenten-Workflow + Post-A5-Commit-Ablauf (§3, §6.4). Danach übrige Folge-Punkte
+   §6.2.
 
 ## 2. PROJEKT-KONTEXT (Stack)
 
@@ -99,7 +103,8 @@ werden (A5-Zustand blieb erhalten).
 
 ## 4. AKTUELLER STAND
 
-- **Version:** v2.1.19 · **HEAD:** `13f64f1` (= origin/main, synchron).
+- **Version:** v2.1.22 · **HEAD:** `9e82aa3` (= origin/main, synchron). **task_bba37780
+  LIVE auf Prod** (Prod-Promotion 2026-07-05, bit-identisch).
 - **Letzte Arbeit (diese Sitzung, 2026-07-03):** Backlog P1/P2/P4/P5 abgearbeitet,
   jeweils Junior→Senior(APPROVE)→QA(tsc + 11 pre-commit-Tests grün), eigener
   Commit + Push:
@@ -138,6 +143,14 @@ werden (A5-Zustand blieb erhalten).
   Warschau. 4 Tests, Senior-APPROVE. **Offen (niedrig-prio, separat):** `Reports.tsx`
   Default-Monatsgrenzen (`startDate`/`endDate`) + `scheduler.ts` Monatsend-
   Notification bleiben browser-lokal/UTC — TZ-Kohärenz-Folge-Ticket-Kandidaten.
+- **PDF-Original-Beträge + Manifest-Prozess + Version-Konsistenz (2026-07-04/05):**
+  Kostenaufstellung-PDF zeigt je Reisekostenbeleg den Original-Betrag in Original-
+  Währung (`4053c24`/Tag v2.1.21). Rollout-Manifest-Prozess etabliert
+  (`.claude/rollouts/<version>.json` via `scripts/generate-rollout-manifest.mjs`;
+  post-commit nimmt Manifest-Commits vom Bump aus → kein Phantom-Bump,
+  [[feedback_rollout_manifest]]) — aktuelle Release **v2.1.22** (`9e82aa3`, Tag
+  v2.1.22), Manifest `2.1.22.json`. Danach NAS-Chat: Dev-Abnahme bestanden +
+  **Prod-Promotion v2.1.22 (2026-07-05)** → task_bba37780 abgeschlossen.
 - **Davor (Kontext):** Fehler #2 komplett live auf **v2.1.0** (`v2.1.0-phase3c-done`);
   Tech-Debt aggregateByCustomer entfernt (v2.1.1); NAS-Rollout-Tooling +
   Deployment-Blueprint (v2.1.2–v2.1.8); A5-Hook-Schritt (v2.1.9).
@@ -167,40 +180,103 @@ werden (A5-Zustand blieb erhalten).
      RK-Belege in Tages-/eigener Zeile (nicht mehr hinten/0,00). Belege 580 (flight
      20000 EUR) + 581 (taxi 25600 PLN), Kunde 278, `date=2026-07-02`. Danach
      `task_bba37780` schließen.
-  2. **P4-T3b:** build-arg für `VITE_APP_TITLE` im Container-Build setzen, damit
-     die Var im Prod-Bundle ankommt (sonst greift der Fallback).
+  2. **P4-T3b (ABGELÖST):** der frühere build-arg-Ansatz für `VITE_APP_TITLE` wird
+     **verworfen** — er ist die Ursache des „(DEV)"-auf-Prod-Bugs (build-time-Label bei
+     bit-identischer Image-Promotion). Ersetzt durch das **Runtime-Label `APP_ENV_LABEL`**
+     (main-Anteil in §6.5; NAS-Chat entfernt T3b + setzt die Env-Werte pro Umgebung).
 
 ## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE
 
-**Erledigt in dieser Sitzung:** P1, P2, P4, P5 (siehe §4). **Verbleibend: nur P3.**
+task_bba37780 ist abgeschlossen + LIVE auf Prod (§4). **Nächste main/App-Code-Aufgaben,
+Reihenfolge festgelegt 2026-07-05: ZUERST `APP_ENV_LABEL` Runtime-Titel (§6.5) — entblockt
+den wartenden NAS-Chat (NAS §6.4 bestätigt blockiert) —, DANN der Umsatzentwicklung-Chart
+(§6.1, v2.2.0).** Dazu Folge-Punkte aus der Prod-Promotion (§6.2). Rahmen-Regeln §6.4.
 
-### 6.1 — P3 / M1: persistenter Session-Store (Infra, ~40 Min + Test) — VERTAGT
-**Vom User am 2026-07-03 bewusst vertagt** (Infra + Dependency + Laufzeit-Test
-brauchen eine fokussierte Runde). Vor Beginn Vorgehen/Test-Strategie klären.
-- **Ist-Zustand:** `server/_core/index.ts` (~Z.66) ruft `session({...})` **ohne
-  `store`** → Default `MemoryStore` (in-memory). Folge: jeder Server-Restart/Deploy
-  loggt alle Nutzer aus; MemoryStore ist nicht production-tauglich.
-- **Fix:** `express-mysql-session` als Store einsetzen (`sessions`-Tabelle, Sessions
-  überleben Restart). `pnpm add express-mysql-session` + `-D
-  @types/express-mysql-session`. Store braucht einen **dedizierten mysql2-Pool aus
-  `DATABASE_URL`** — `server/db.ts` nutzt `drizzle(process.env.DATABASE_URL)` und
-  exportiert KEINEN wiederverwendbaren Pool (Stand v2.1.17 im Code verifiziert); die
-  frühere „Pool wiederverwenden"-Idee ist damit überholt. `sessions`-Tabelle per
-  echter drizzle-Migration `0025_sessions.sql` + `schema.ts`-Sync (Repo-Konvention),
-  nicht `createDatabaseTable:true`. Sessions NICHT ins Backup (flüchtiger Auth-State).
-- **Umfang/Achtung:** neue Dependency (package.json + Lockfile — der NAS-Container-
-  Build muss sie ziehen); `sessions`-Tabelle = DB-Effekt; Session-Funktion wird
-  DB-abhängig (bei DB-Ausfall keine Sessions — App braucht DB aber ohnehin).
-- **Verifikation:** „Login → Restart → noch eingeloggt?" braucht laufende Instanz +
-  DB. Lokal nur mit `Start-Service MySQL84` + `npm run dev` (durchbricht A5) — oder
-  natürlicher in **NAS-Dev** (Governance-Funktionsabnahme durch User).
+### 6.1 — Umsatzentwicklung-Chart erweitern (PRIMÄR, main/App-Code)
+> **STATUS 2026-07-05 (gesichert, pausiert; jetzt 2. Aufgabe — NACH §6.5 APP_ENV_LABEL):**
+> Code-Analyse abgeschlossen, **noch kein Code geschrieben**. Entscheidungen **gelockt**: (1) **Option 1** — geteiltes Modul
+> `client/src/lib/monthlyFinancials.ts` in Dashboard UND Reports; (2) Version **v2.2.0
+> (MINOR)**, Commit `feat(dashboard): …`. **Turnkey-Umsetzungsplan (startklar ab
+> 2026-07-06): `HANDOVER-UMSATZCHART.md`** (committet). Fortsetzung: dort §4 abarbeiten.
 
-### 6.2 A5 (localhost-Shutdown) — Status
+**Konzept mit User abgestimmt (2026-07-05, Mockup gezeigt).** Datei
+`client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart` (~Z.168, nutzt heute
+NUR `entry.calculatedAmount` = reiner Zeitumsatz, keine Reisekosten).
+
+Finaler Konzept-Stand:
+| Aspekt | Festlegung |
+|---|---|
+| Anf. 1 — Reisekosten im Umsatz | Bruttoumsatz = Zeitumsatz + exklusive RK (`costModel="exclusive"`); Attribution via `getExpenseBillingCustomerId` (wie Buchhaltungsbericht). Nicht-exclusive RK bleiben Kosten. |
+| Anf. 2a — Monatlich/Kumuliert | Umschalter; kumuliert = laufende Summe im Zeitfenster, Start 0. |
+| Anf. 2b — Nettogewinn-Linie | Voller Netto: Umsatz (inkl. exkl. RK) − variable Kosten (Reisekosten/Spesen) − **fixe Monatskosten** (`fixedCosts`: Internet/Leasing/ChatGPT) − Provision − ZUS/Kranken/Steuer. Logik = Buchhaltungsbericht. |
+| Währungsmodus | Netto-Linie NUR im vereinheitlichte-Währung-Modus (Netto = eine abgeleitete Größe). |
+| Negativer Netto | zeigen (Anlaufmonate mit Fixkosten, ohne Umsatz). |
+| Zeitumsatz-Referenz | optionaler Toggle (gestrichelt), default AUS. |
+| Default-Ansicht | Brutto + Netto an, Zeit aus, Monatlich. |
+
+**Umsetzungs-Hinweise (wichtig):**
+- Die Netto-Infrastruktur existiert schon: `buildCostChart` (~Z.400) nutzt
+  `aggregateMonthlyTaxResults` mit monatlichen Beträgen. ABER dessen `getMonthlyAmounts`
+  hat 2 Lücken ggü. dem Buchhaltungsbericht: (a) **exklusive RK fehlen im Umsatz**,
+  (b) **Provision fehlt in den Kosten**. Fixkosten sind drin.
+- Netto-Linie EXAKT auf die Buchhaltungsbericht-Logik ausrichten
+  (`calculateAccountingReport` in `Reports.tsx`, dortige `getMonthlyAmounts`) — **eine
+  Wahrheitsquelle**. Empfehlung: die monatliche „amounts pro Monat"-Logik in ein
+  shared lib extrahieren, das Dashboard UND Reports nutzen (damit sie nicht
+  divergieren — genau die Bug-Klasse, die wir mehrfach gefixt haben).
+- Attribution-Maps (`entriesById`, `customerIdsByDate`) im Dashboard bauen (wie in
+  Reports.tsx), für `getExpenseBillingCustomerId`.
+- Kein Datenleck-Thema (Dashboard = user-internal; Provision/Netto dürfen dort).
+- Aufwand moderat (mehrere Stellen in Dashboard.tsx). 3-Agenten-Workflow. Mockup +
+  Abstimmung liegen im Chat-Verlauf dieser Sitzung.
+
+### 6.2 — Folge-Punkte aus der Prod-Promotion v2.1.22 (2026-07-05)
+**Welt-Trennung:** nur **Punkt 2** ist App-Code (main). Punkt 1 + 3 laufen im
+**NAS-Chat** — hier nur erfasst/priorisiert, NICHT hier umsetzen.
+**Priorität:** Chart (§6.1) = P1. Dann Punkt 2 (main, niedrig-prio). Punkt 1 + 3 im
+NAS-Chat nach User-Entscheidung.
+
+- **Punkt 1 — Rollback-Netz / Cleanup (NAS-Chat; User entscheidet):** Nach der
+  Prod-Promotion v2.1.22 stehen als Rollback-Netz `prod-pre-promote-2026-07-05_17-47-17.sql`
+  + Image `protrackr-app:rollback-2026-07-05` (+ ältere NAS-Backups `prod-pre-A1-*`,
+  `prod-pre-import-*`, Migrations-Dumps). User-Regel: **keine Löschung bis GESAMTER
+  Umzug fertig UND alle Bugs gelöst.** Status: weitgehend erfüllt (Phase A komplett,
+  task_bba37780 gelöst, T2/T3 gelöst). Zu klären (User): Backups nach ein paar Tagen
+  Prod-Stabilität aufräumen? **Ausführung NAS-Chat.**
+- **Punkt 2 — TZ-Folgepunkte + Session-Store (main, niedrig-prio):**
+  - (a) **TZ-Kohärenz:** `Reports.tsx` Default-Monatsgrenzen (`getTodayLocalDate`/
+    `startDate`/`endDate`, ~Z.67-90) sind browser-lokal; `server/scheduler.ts`
+    (~Z.32-33) baut die `expenses`-Monatsgrenzen der Monatsend-Notification via
+    `toISOString().slice(0,10)` (UTC → für Warschau-Server evtl. Vormonats-Letzter).
+    Beide unkritisch für Warschau-Nutzer, aber Kandidaten für
+    `shared/dateStichtag.ts` `warsawDateKey` (existiert bereits!).
+  - (b) **P3/M1 — MySQL-Session-Store:** `server/_core/index.ts` (~Z.66) nutzt
+    `MemoryStore` (Sessions gehen bei Container-Restart/Deploy verloren). Umstellen auf
+    `express-mysql-session`; **dedizierter mysql2-Pool aus `DATABASE_URL`** (`db.ts`
+    exportiert keinen wiederverwendbaren Pool); `sessions`-Tabelle per echter Migration
+    `0025_sessions.sql` + `schema.ts` (nicht `createDatabaseTable:true`); Sessions NICHT
+    ins Backup. ~40 Min, unkritisch (Single-User; Login-Verlust pro Deploy zumutbar).
+    Laufzeit-Test „Login → Restart → eingeloggt?" nur in NAS-Dev (A5). Neue Dependency
+    → NAS-Container-Build muss sie ziehen.
+  - **Umsetzungsvorschlag (Punkt 2):** NACH dem Chart. (a) TZ-Kohärenz ist klein +
+    risikoarm (nutzt das schon vorhandene `warsawDateKey`) → als eigener kleiner
+    3-Agenten-Commit mitnehmen. (b) Session-Store ist Infra + Dependency + DB-Migration
+    + Laufzeit-Test (nur NAS-Dev) → eigene fokussierte Runde, **vor Beginn Vorgehen/
+    Test-Strategie mit User klären** (bewusst vertagt, unkritisch da Single-User).
+    Beides danach über `/nas-rollout` nach Dev/Prod (NAS-Chat).
+- **Punkt 3 — `rollout-to-nas.ps1` `-e`-Bug (NAS-Chat):** `scripts/rollout-to-nas.ps1`
+  Z.50 `Invoke-Git cat-file -e "$commit^{commit}"` bricht mit „parameter name 'e' is
+  ambiguous" ab (PowerShell bindet `-e` an `-ErrorAction`/`-ErrorVariable`); deshalb
+  liefen v2.1.20/v2.1.22 über manuellen Merge statt des Skript-Wegs. Fix (klein):
+  Array-Splatting `Invoke-Git @('cat-file','-e',"$commit^{commit}")`. **Fix im
+  NAS-Chat** (nas-setup-Datei) — hier nur erfasst.
+
+### 6.3 A5 (localhost-Shutdown) — Status
 - **Komplett abgeschlossen** (main + NAS): Hook-Restart-Block entfernt (v2.1.9),
   MySQL84 gestoppt/Manual, localhost:3001 aus. NAS = einzige Instanz. Siehe
   [[project_a5_localhost_shutdown]].
 
-### 6.3 Rahmen-Regeln für die Umsetzung (verbindlich)
+### 6.4 Rahmen-Regeln für die Umsetzung (verbindlich)
 - **3-Agenten-Workflow** (Junior/Senior/QA) für ALLE Code-Änderungen
   ([[feedback_3agent_workflow]]). Bewährt in dieser Sitzung: präzise Junior-Spec →
   unabhängiger Senior-Review (APPROVE) → QA (tsc + vitest) → Commit → Push.
@@ -210,6 +286,60 @@ brauchen eine fokussierte Runde). Vor Beginn Vorgehen/Test-Strategie klären.
   `git checkout -- client/public/sw.js`.
 - **Nach main-Änderungen NUR committen + pushen**; NAS-Deploy separat im NAS-Chat
   via `/nas-rollout`; **niemals `nas-setup → main`** ohne Freigabe.
+
+### 6.5 — Runtime-Umgebungslabel `APP_ENV_LABEL` (Prod-Tab zeigt fälschlich „(DEV)")
+> **★ ZUERST in der nächsten Main-Sitzung** (Reihenfolge festgelegt 2026-07-05, vor §6.1):
+> Der NAS-Chat hat bestätigt, dass **NAS §6.4 auf genau diese main-Aufgabe blockiert** ist
+> (`APP_ENV_LABEL` fehlt in origin/main; `VITE_APP_TITLE` noch aktiv `main.tsx:16-17` —
+> direkt verifiziert). „Erst main, dann NAS" ist zwingend — NAS darf T3b NICHT vorher
+> entfernen (sonst verliert Dev sein „(DEV)"). **Nach main-Push an den NAS-Chat zurückmelden.**
+
+**Herkunft:** NAS-Setup-Sitzung (2026-07-05), main/App-Code-Anteil. **Noch nicht begonnen.**
+3-Agenten-Workflow; **vor Code-Commits `Start-Service MySQL84`** (Admin-PowerShell) — dieser
+Change hat einen Server-Anteil, ist NICHT rein client-only. Nach main-Push **an die
+NAS-Setup-Sitzung zurückmelden**. Verwandt: [[project_app_env_label_runtime_title]].
+
+**Bug:** Der Prod-Tab zeigt „ProTrackr (DEV)". Ursache: `VITE_APP_TITLE` wird **build-time**
+in den Client gebacken (NAS-T3b build-arg), und `deploy-prod.sh` promotet das Dev-Image
+**bit-identisch** nach Prod → das eingebackene „(DEV)" landet auf Prod. Grundkonflikt:
+build-time-Label ↔ bit-identische Image-Promotion. **Ziel:** EIN umgebungsneutrales Image,
+Titel zur **Laufzeit** aus der Umgebung (DEV → „ProTrackr (DEV)", PROD → Prod-Titel).
+**Löst §5-Nachzügler #2 (P4-T3b build-arg) ab** — der Ansatz wird verworfen.
+
+**VERBINDLICHER VERTRAG (finalisiert 2026-07-05 vom NAS-Chat — Name/Semantik NICHT ändern,
+der NAS-Chat richtet sich EXAKT danach):**
+- **Env-Var: `APP_ENV_LABEL`** — server-seitig via `process.env`, **KEIN `VITE_`-Prefix**
+  (`VITE_*` wäre wieder build-time und bräche die Promotion erneut — das ist der ganze Punkt).
+- **Semantik:** gesetzt → `document.title = "ProTrackr (" + APP_ENV_LABEL + ")"`;
+  leer/unset → `document.title = "Döring Consulting - Projekt & Abrechnungsmanagement"`.
+- **NAS setzt später** (nicht hier): `.env.dev` → `APP_ENV_LABEL=DEV`; Prod-`.env` → leer/unset.
+
+**Aufgaben main (nur App-Code auf main):**
+1. Server reicht `APP_ENV_LABEL` **RUNTIME** an den Client. **Empfohlen: `index.html`-Injektion
+   beim Ausliefern** (Platzhalter/Meta bzw. `window.__APP_ENV_LABEL__`) — synchron VOR dem
+   React-Render → **kein Flash** des Default-Titels. Alternative (zulässig): kleiner
+   Config-Endpoint (z.B. `GET /api/config` → `{ envLabel }`), den der Client beim Boot liest.
+2. `client/src/main.tsx:16-17` umbauen: Titel NICHT mehr aus `import.meta.env.VITE_APP_TITLE`,
+   sondern aus dem Runtime-Label (Fallback-String **EXAKT** wie im Vertrag).
+3. `VITE_APP_TITLE`-Konsum (T3a) **vollständig entfernen**; verwaiste `.env`/Doku-Referenzen prüfen.
+4. `tsc --noEmit` + `vitest` grün, Senior-APPROVE. **Kein BREAKING CHANGE (kein „!")** — Bump nach
+   Ermessen: `fix(client)` = PATCH (behebt den sichtbaren Prod-Bug) bzw. `feat` falls
+   Config-Endpoint als Feature. (Repo-Mechanik: vor Commit `Start-Service MySQL84` ODER
+   `SKIP_TEST_CLEANUP=1` — Server-Anteil, aber voraussichtlich keine DB-Fixtures.)
+5. commit + push auf main. Danach **`node scripts/generate-rollout-manifest.mjs`** →
+   `.claude/rollouts/<version>.json` committen + pushen ([[feedback_rollout_manifest]]) —
+   **das Manifest ist der NAS-Trigger.**
+
+**Verifikation VOR Push (lokal, beide Fälle):** mit `APP_ENV_LABEL=DEV` → Titel „ProTrackr (DEV)";
+ohne (unset) → „Döring Consulting - Projekt & Abrechnungsmanagement".
+
+**Deliverable / Rückmeldung an den NAS-Chat (erst dann startet dort §6.4):** Version +
+Commit-Hash, „Manifest liegt vor", **welcher Transport** gewählt wurde (index.html-Injektion vs.
+Config-Endpoint), Bestätigung **exakter Var-Name `APP_ENV_LABEL`, unset ⇒ Prod-Titel**.
+
+**NICHT TUN:** nichts an `Dockerfile`/`compose*`/Env-Files (macht der NAS-Chat); **nicht nach
+`nas-setup` mergen**; nur App-Code auf main. Verwandt: §4 P4 (v2.1.14 führte `VITE_APP_TITLE`
+ein — wird hier rückgebaut), §8 (VITE_*-Lesson), [[project_app_env_label_runtime_title]].
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
@@ -240,8 +370,9 @@ brauchen eine fokussierte Runde). Vor Beginn Vorgehen/Test-Strategie klären.
 
 ## 9. ROLLBACK-/SICHERHEITSPUNKTE
 
-- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main` = `ee6cd2b`
-  (v2.1.15). Freeze-Tags für Meilensteine (`v2.1.0-phase3c-done` etc.).
+- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main` = `9e82aa3`
+  (v2.1.22). Milestones/Tags: `v2.1.21`, `v2.1.22`, `v2.1.0-phase3c-done` etc.
+  task_bba37780 live auf Prod; NAS-Rollback-Netz siehe §6.2 Punkt 1.
 - Kein Datenverlustrisiko durch die bisherige main-Arbeit — P1/P2/P4/P5 waren
   reine Code-/Config-Fixes ohne Schema-/DB-Eingriff; Tests grün. **P3 wird das
   ändern** (DB-`sessions`-Tabelle + Dependency) → dort vor Umsetzung Backup/Test-

@@ -1046,7 +1046,8 @@ VITE_ANALYTICS_ENDPOINT=<endpoint>
 VITE_ANALYTICS_WEBSITE_ID=<website-id>
 
 # App-Konfiguration
-VITE_APP_TITLE=Döring Consulting - Projekt & Abrechnungsmanagement
+# APP_ENV_LABEL: optionales Runtime-Tab-Label (KEIN VITE_-Prefix). Leer/unset ⇒ Prod-Titel; DEV ⇒ "ProTrackr (DEV)"
+APP_ENV_LABEL=
 VITE_APP_LOGO=<logo-url>
 ```
 

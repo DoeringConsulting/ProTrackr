@@ -56,7 +56,8 @@ BUILT_IN_FORGE_API_URL=https://forge.manus.im
 BUILT_IN_FORGE_API_KEY=<api-key>
 VITE_FRONTEND_FORGE_API_KEY=<frontend-api-key>
 VITE_FRONTEND_FORGE_API_URL=https://forge.manus.im
-VITE_APP_TITLE=Döring Consulting - Projekt & Abrechnungsmanagement
+# APP_ENV_LABEL: optionales Runtime-Tab-Label (KEIN VITE_-Prefix). Leer/unset ⇒ Prod-Titel; DEV ⇒ "ProTrackr (DEV)"
+APP_ENV_LABEL=
 VITE_APP_LOGO=<logo-url>
 ```
 

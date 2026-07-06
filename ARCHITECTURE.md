@@ -428,7 +428,8 @@ Folgende Umgebungsvariablen müssen gesetzt sein:
 **Owner:** `OWNER_OPEN_ID`, `OWNER_NAME`  
 **SMTP:** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`  
 **Manus APIs:** `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`  
-**App:** `VITE_APP_TITLE`, `VITE_APP_LOGO`
+**App (Runtime, server-seitig):** `APP_ENV_LABEL` (Tab-Label, **kein** `VITE_`-Prefix; leer/unset ⇒ Prod-Titel, z.B. `DEV` ⇒ „ProTrackr (DEV)")
+**App (Build-time):** `VITE_APP_LOGO`
 
 ### Monitoring
 
