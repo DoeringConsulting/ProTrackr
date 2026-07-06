@@ -2,7 +2,7 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-07-06 · Release v2.3.3 · origin/main synchron.**
+> **Stand: 2026-07-06 · App-Release v2.4.0 (komplett live auf Prod) · origin/main synchron.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
 
 ---
@@ -11,8 +11,8 @@
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich). NIE in
   `ProTrackr_developing_path` (= `nas-setup`, NAS-Welt).
-- **Stand:** main-HEAD **v2.4.4** (reine Handover-Doku-Bumps), App-Release **v2.4.0** — **komplett
-  LIVE AUF PROD (2026-07-06)**. Baum sauber, Drift `0 0`. Alle Workstreams dieser Sitzungsreihe sind
+- **Stand:** main-HEAD **v2.4.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
+  App-Release **v2.4.0** — **komplett LIVE AUF PROD (2026-07-06)**. Baum sauber, Drift `0 0`. Alle Workstreams dieser Sitzungsreihe sind
   **live**:
   1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — live auf Prod (Prod-Tab-„(DEV)"-Bug behoben).
   2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — live auf Prod.
@@ -25,8 +25,9 @@
   NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
 - **Offen auf main:** derzeit **nichts** Priorisiertes. Der TZ-Restpunkt (Scheduler-Monatstrigger +
   db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
-  bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Einziger Rest-Kandidat: `sessionStore.close()`
-  beim Shutdown (unkritisch, Prozess terminiert ohnehin).
+  bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
+  NICHT priorisiert): `sessionStore.close()` beim Shutdown (Prozess terminiert ohnehin); optionales
+  CHF-Y-Achsen-Symbol im Umsatzchart (§6.3).
 - **Deploy (nach A5):** committen + `git push origin main` (Hook bumpt Version + baut `dist/`,
   **kein** Restart) → **Rollout-Manifest** erzeugen + committen + **Tag** `v<version>`; NAS-Deploy
   getrennt im **NAS-Chat** via `/nas-rollout`. Siehe §3, [[feedback_deploy_workflow]],
@@ -42,8 +43,8 @@
    [[feedback_prod_only_via_dev_promotion]], [[project_umsatzchart_task]],
    [[project_app_env_label_runtime_title]].
 3. **Dieses Handover lesen.**
-4. **Nächster Schritt:** siehe §6. Kein main-Blocker; die NAS-Dev-Abnahme + Prod-Promotion von
-   **v2.4.0** (inkl. Migration `0025` + neue Dependency) läuft im **NAS-Chat**. §6.2 (a+b) erledigt.
+4. **Nächster Schritt:** derzeit **keiner offen** — v2.4.0 ist komplett live auf Prod (§6.1), §6.2 (a+b)
+   erledigt, Zeitzonen-Anker bestätigt. Neue App-Themen wie gewohnt hier auf `main` starten (§3).
 
 ## 2. PROJEKT-KONTEXT (Stack)
 
@@ -55,11 +56,12 @@ ProTrackr = Projekt-/Abrechnungs-/Reisekosten-Management (DÖRING Consulting, Ma
   Entry `server/_core/index.ts`; Static/SPA-Serving `server/_core/vite.ts` (`serveStatic` prod,
   `setupVite` dev).
 - **DB:** MySQL via Drizzle (`drizzle/schema.ts`, Migrationen `drizzle/*.sql`, aktuell bis
-  `0024_expenses_customer_id.sql`). **Geld = int Cents**; Wechselkurse = Zehntausendstel;
+  `0025_sessions.sql`). **Geld = int Cents**; Wechselkurse = Zehntausendstel;
   `manDays` = Tausendstel; `hours` = Minuten. **Zeitzone Europe/Warsaw** — Monatsgrenzen als
   String bauen (`${y}-${mm}-01`), NIE `toISOString` (kippt auf Vortag).
-- **Tooling:** pnpm; husky. **pre-commit** = `tsc` + `vitest` (2 Dateien: `taxEnginePl.test.ts`
-  + `uiValidationReportsDashboard.test.ts`; braucht DB nur für den Fixture-Cleanup). **post-commit**
+- **Tooling:** pnpm; husky. **pre-commit** = NUR `vitest` (2 Dateien: `taxEnginePl.test.ts`
+  + `uiValidationReportsDashboard.test.ts`; braucht DB nur für den Fixture-Cleanup → `SKIP_TEST_CLEANUP=1`).
+  **`tsc` läuft NICHT im Hook** — separat `npx tsc --noEmit` vor Commits. **post-commit**
   = Auto-Version-Bump (conventional commits: `feat!`/BREAKING→major, `feat`→minor, sonst→patch)
   + Production-Build + `git --amend` (**kein Restart**, A5).
 
@@ -85,7 +87,7 @@ git commit …`** (client-only/Nicht-DB-Fixes; Tests laufen normal) ODER `Start-
 (Admin-PowerShell) vor Commits mit DB-Fixtures. Nach Push ggf. `git checkout -- client/public/sw.js`
 (Build-Artefakt-Drift). Drift danach `0 0` prüfen.
 
-## 4. AKTUELLER STAND (v2.3.0)
+## 4. AKTUELLER STAND (v2.4.0, komplett live auf Prod)
 
 **Frühere Basis:** task_bba37780 (Reisekosten-Berichte) komplett + LIVE auf Prod (v2.1.22).
 Fehler #1/#2/#3, Backlog P1/P2/P4/P5, A5-localhost-Shutdown, NAS-Rollout-Tooling + Blueprint —
@@ -101,7 +103,7 @@ alles erledigt.
   `computeAppTitle` in `main.tsx`. `VITE_APP_TITLE` (T3a) entfernt. Env-Werte: NAS setzt
   `APP_ENV_LABEL=DEV` in `compose.dev.yml`, Prod unset. Referenz [[project_app_env_label_runtime_title]].
 
-### 4.2 Umsatzentwicklung-Chart — ✅ LIVE AUF PROD (v2.3.0) + Zeitumsatz-Tooltip (v2.3.3, main)
+### 4.2 Umsatzentwicklung-Chart — ✅ LIVE AUF PROD (Chart v2.3.0 + Zeitumsatz-Tooltip v2.3.3, via v2.4.0)
 Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Datenleck**
 (Dashboard = user-internal; Netto/Provision dürfen dort).
 - **Geteilte Wahrheitsquelle** `client/src/lib/monthlyFinancials.ts` (`computeMonthlyAmounts`,
@@ -124,11 +126,11 @@ Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Dat
   - `8cbe589` **v2.3.3** — **Zeitumsatz-Tooltip:** lucide-`Info`-Icon am Zeitumsatz-Toggle,
     Radix-Tooltip als `UiTooltip` aliased (recharts exportiert ebenfalls `Tooltip`). Erklärt:
     Zeitumsatz = Umsatz aus Arbeitszeit ohne RK, Abstand zur Brutto-Linie = exklusive RK.
-    Fragment-Lesson beachtet (Serien-Array unangetastet). Nur main, Prod-Promotion offen.
+    Fragment-Lesson beachtet (Serien-Array unangetastet). **LIVE AUF PROD** (im v2.4.0-Rollout).
 - Referenz [[project_umsatzchart_task]] (inkl. recharts-Fragment-Lesson).
 
 ### 4.3 Version/Prod-Stand
-- **origin/main-HEAD = v2.4.4** (Doku-Bumps); letzter **App-Release = v2.4.0**. Manifeste: `2.1.28`,
+- **origin/main-HEAD = v2.4.x** (laufende Doku-Bumps); letzter **App-Release = v2.4.0**. Manifeste: `2.1.28`,
   `2.2.0`, `2.2.2`, `2.2.3`, `2.3.0`, `2.3.3`, `2.3.5`, `2.4.0`.
 - **PROD (NAS :9443) = v2.4.0** (2026-07-06, Image `91e956650dd9`) — Tooltip + TZ-Fix + Session-Store
   live; Migration `0025` angewandt; APP_ENV_LABEL-Titel-Garantie intakt. **Prod + Dev beide v2.4.0, healthy.**
@@ -178,7 +180,8 @@ zeigen, nie `UTC`.
   Migration `0025_sessions.sql` + `schema.ts`. Ohne `DATABASE_URL` Fallback auf In-Memory (lokales
   Tooling). `sessions` bewusst NICHT im Backup. Cast überbrückt @types-Divergenz (Lib nutzt intern
   `mysql2/promise`, laufzeit-verifiziert). tsc + esbuild + 26 Tests grün, Senior-APPROVE.
-  **Laufzeit-Beweis (Session überlebt Restart) + Migration `0025` = NAS-Dev→Prod** (§6.1).
+  **✅ Live auf Prod:** Laufzeit-Beweis (Session überlebt Restart) bestanden, Migration `0025` auf
+  Dev+Prod angewandt (§6.1).
 
 ### 6.3 Umsatzchart-Nachpolituren
 - **Zeitumsatz-Tooltip — ✅ ERLEDIGT (v2.3.3, Commit `8cbe589`).** Info-Icon (lucide `Info`) am
@@ -186,7 +189,7 @@ zeigen, nie `UTC`.
   (recharts-`Tooltip`-Namenskonflikt). Text: Zeitumsatz = Umsatz aus abgerechneter Arbeitszeit
   ohne durchgereichte RK, Abstand zur Bruttoumsatz-Linie = exklusive RK (deckt sich mit
   `computeMonthlyDisplayRevenue`: `grossCents − timeCents = travelCents`). 3-Agenten-Loop grün
-  (tsc/pre-commit-Tests/Build), Fragment-Lesson beachtet. NAS-Dev-Abnahme + Prod-Promotion §6.1.
+  (tsc/pre-commit-Tests/Build), Fragment-Lesson beachtet. ✅ Live auf Prod (v2.4.0-Rollout, §6.1).
 - (optional, offen) Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie spezifiziert);
   Label-Überlappung auf schmalen Viewports ggf. `angle={-45} textAnchor="end"`.
 
@@ -223,7 +226,7 @@ zeigen, nie `UTC`.
 
 ## 9. ROLLBACK-/SICHERHEITSPUNKTE
 
-- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main-HEAD` = v2.4.4 (App-Release v2.4.0).
+- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main-HEAD` = v2.4.x (App-Release v2.4.0).
   Tags: `v2.1.28`, `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `v2.3.5`, `v2.4.0`; NAS-Prod-Rollout-
   Tags `nas-rollout/2.4.0` (2026-07-06), `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
 - **v2.4.0 war der ERSTE NAS-Rollout mit Schema-Change seit 0024** (live auf Prod): `sessions`-Tabelle
