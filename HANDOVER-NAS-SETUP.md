@@ -2,18 +2,18 @@
 
 > **Zweck:** Vollständiger, self-contained Wiedereinstiegspunkt für den **NAS-Setup-Chat**.
 > Wer dieses Dokument + die Memory-Dateien liest, hat den kompletten Stand ohne Verluste.
-> **Stand:** 2026-07-06 · **Branch:** `nas-setup` @ `0a70b66` (v2.1.28) · in Sync mit origin.
-> **Status:** Phase A (Zwei-Umgebungen-Rollout) **komplett** · Dev-Loop etabliert & 4× genutzt ·
-> `task_bba37780` **abgeschlossen und LIVE auf Prod** · **§6.4 (Prod-Tab-„(DEV)") behoben — v2.1.28 live**.
-> **Nächster Schritt:** NAS-Chat weitgehend leer — §6.1 Cleanup **durchgeführt** (nur v2.1.22-
-> Puffer-Dump nach Prod-Stabilität weg). §6.3/§6.4 **erledigt**. Offene App-TODOs (§6.2) → Main-Chat.
+> **Stand:** 2026-07-06 · **Branch:** `nas-setup` @ `09446fb` (v2.3.0) · in Sync mit origin.
+> **Status:** Phase A **komplett** · Dev-Loop etabliert & erprobt (8× genutzt) · `task_bba37780`,
+> §6.3, §6.4 **erledigt** · **Umsatzchart (v2.2.0→v2.3.0) live auf Prod**, Prod jetzt **v2.3.0**.
+> **Nächster Schritt:** NAS-Chat läuft rein als Rollout-Ziel für main-Releases (Dev-Loop).
+> §6.1 Cleanup durchgeführt (ältere Rollback-Netze nach Stabilität aufräumbar). §6.2 → Main-Chat.
 
 ---
 
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 ProTrackr läuft in **zwei isolierten Umgebungen auf dem Unraid-NAS (DCS01)**: **PROD**
-(echte Daten, `:9443`) + **DEV** (Prod-Klon, `:9444`), beide auf **v2.1.28**. Der alte
+(echte Daten, `:9443`) + **DEV** (Prod-Klon, `:9444`), beide auf **v2.3.0**. Der alte
 Laptop-`localhost` ist seit A5 abgeschaltet (NAS = einzige Instanz). Neue main-Releases
 kommen über den **Dev-Loop** (`main → nas-setup` mergen → `deploy-dev.sh` → Dev-Abnahme →
 `deploy-prod.sh` bit-identische Promotion). Governance: **Prod nur via Dev→Freigabe→Promotion**,
@@ -47,8 +47,8 @@ zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein 
    docker compose ps                         # PROD: protrackr-app + -mysql (healthy)
    docker compose -f compose.dev.yml ps      # DEV:  protrackr-app-dev + -mysql-dev
    pgrep -af guard-prod-watch.sh             # Guard laeuft? (2 PIDs = 1 Baum, ok)
-   curl -s http://localhost:3010/version.json # PROD 2.1.28
-   curl -s http://localhost:3011/version.json # DEV  2.1.28
+   curl -s http://localhost:3010/version.json # PROD 2.3.0
+   curl -s http://localhost:3011/version.json # DEV  2.3.0
    ```
 
 ---
@@ -77,7 +77,7 @@ zeigte „(DEV)") ist **behoben** — v2.1.28, APP_ENV_LABEL Runtime-Label: ein 
 | App-/DB-Container | `protrackr-app` / `protrackr-mysql` | `protrackr-app-dev` / `protrackr-mysql-dev` |
 | Image | `protrackr-app:latest` | `protrackr-dev-app:latest` |
 | Env (gitignored) | `.env` | `.env.dev` |
-| **Version** | **v2.1.28** | **v2.1.28** |
+| **Version** | **v2.3.0** | **v2.3.0** |
 | Deploy-Weg | `deploy-prod.sh` (Promotion) | `deploy-dev.sh` |
 
 - **Tailscale Serve:** `:9443 → localhost:3010` (Prod), `:9444 → localhost:3011` (Dev).

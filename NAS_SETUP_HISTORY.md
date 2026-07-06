@@ -1996,3 +1996,35 @@ mit absolutem Pfad bestätigte den Soll-Zustand.
 **Ergebnis:** §6.1 praktisch erledigt (nur v2.1.22-Puffer-Dump als winziges Rest-TODO). Damit
 sind ALLE NAS-Chat-Punkte abgeschlossen — Phase A (A1–A5), §6.1, §6.3, §6.4. Offen nur noch
 main-seitiges §6.2 (TZ-Folgepunkte, P3/M1 Session-Store) im Main-Chat.
+
+## 2026-07-06 — Umsatzentwicklung-Chart: Rollout v2.2.0 → v2.3.0 (Prod-live)
+
+Nach §6.4 lieferte main die Umsatzentwicklung-Chart. Über den Dev-Loop ausgerollt; das
+Governance-Gate hat einen Feature-Bug in Dev gefangen, bevor er Prod erreichte.
+
+- **v2.2.0 (f110801):** Feature (Dashboard „Umsatzentwicklung", nur Unified-Währung-Modus:
+  Brutto/Netto/Zeit, Monatlich/Kumuliert). **Dev-Abnahme gescheitert** — Chart im Unified-Modus
+  KOMPLETT LEER (keine Linien, keine Y-Labels, kein JS-Error). NAS-Dev-Diagnose: KEIN Crash,
+  KEINE Regression (Buchhaltungsbericht mit echten Daten korrekt: Brutto 35.559,73 €, Netto
+  84.326,83 PLN; nicht-unified-Chart + Kostenverteilung korrekt) → Bug unified-spezifisch.
+  Bug-Paket an main. **Wurzel (main):** recharts findet `<Line>`-Serien NICHT in einem React-
+  Fragment `<>…</>` (nur direkte Kinder/Arrays) → 0 Linien, keine Domain. (Meine NaN-/Datum-
+  Hypothesen waren Sackgassen; die Diagnose hat aber Regression + Daten korrekt ausgeschlossen
+  und unified-spezifisch eingegrenzt. Lektion: „Serie unsichtbar, kein Error, keine Domain" →
+  zuerst an Fragment-Wrapping der recharts-Serien denken.)
+- **v2.2.2 (934be80):** Fix Fragment → Array. Chart rendert (Dev-Abnahme ✓).
+- **v2.2.3 (49bcb0c):** Feinschliff — `XAxis interval={0}` (alle 12 Monatslabels; Juni fehlte
+  durch recharts-Default `preserveEnd`), ReferenceLine y=0. (Von mir als XAxis-interval-Ursache
+  analysiert → Bug-Paket an main.)
+- **v2.3.0 (0d361fe):** Default 12M/monatlich/PLN, Y-Achse Tausender-Kompaktformat
+  (kzł/€/$/£/CHF), Break-even-Linie dunkelgold #b98847. Dev-Abnahme „alles passt".
+
+**Prod-Promotion v2.3.0** (`deploy-prod.sh`, PROMOTE): bit-identisch (Image `af97e6786e65`),
+Prod v2.1.28 → v2.3.0, Health-Gate :3010 healthy. Backup `prod-pre-promote-2026-07-06_20-26-58.sql`
++ Rollback-Image behalten. §6.4-Titel-Garantie intakt (Prod APP_ENV_LABEL unset → Prod-Titel,
+objektiv verifiziert). Tag `nas-rollout/2.3.0`.
+
+**Dev-Loop-Bilanz:** `rollout-to-nas.ps1` (§6.3-Fix) lief bei v2.2.0/2.2.2/2.2.3/2.3.0 durchgehend
+sauber. Kein Schema-Change über die ganze Serie. NAS-Anteil je Rollout: nur Manifest bereitstellen
++ Merge; App-Code kam von main. **Rollback-Netze:** frisch = v2.3.0 (`…20-26-58`); ältere (v2.1.28
+`…11-38-32`, v2.1.22-Puffer `…07-05_17-47-17`) nach ein paar Tagen v2.3.0-Stabilität aufräumbar (§6.1).
