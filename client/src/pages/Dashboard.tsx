@@ -15,7 +15,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, ResponsiveContainer } from "recharts";
 import { aggregateMonthlyTaxResults, computeMonthlyTaxSeries } from "@/lib/taxEnginePl";
 import {
   computeMonthlyAmounts,
@@ -44,6 +44,9 @@ type RevenueChartState = {
   data: Array<Record<string, string | number>>;
   seriesKeys: string[];
   missingRates: number;
+  // Nur der Nettogewinn kann negativ werden (Brutto/Zeit sind Umsätze ≥ 0). Steuert die
+  // goldene Null-Referenzlinie: nur zeigen, wenn Verlustwerte sichtbar sind.
+  nettoHasNegative: boolean;
 };
 
 type ProjectChartState = {
@@ -329,7 +332,8 @@ export default function Dashboard() {
         };
       });
 
-      return { data, seriesKeys: ["brutto", "netto", "zeit"], missingRates };
+      const nettoHasNegative = data.some((row) => Number(row.netto) < 0);
+      return { data, seriesKeys: ["brutto", "netto", "zeit"], missingRates, nettoHasNegative };
     }
 
     const totalsByMonthCurrency = new Map<string, CurrencyValueMap>();
@@ -363,7 +367,7 @@ export default function Dashboard() {
       return row;
     });
 
-    return { data, seriesKeys, missingRates: 0 };
+    return { data, seriesKeys, missingRates: 0, nettoHasNegative: false };
   };
 
   const buildProjectChart = (): ProjectChartState => {
@@ -973,11 +977,19 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={revenueChart.data}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
+                  {/* interval={0} erzwingt ALLE 12 Monatslabels (recharts-Default dünnt sonst
+                      aus und lässt z.B. „Juni" weg); kleinere Schrift gegen Überlappung. */}
+                  <XAxis dataKey="month" interval={0} tick={{ fontSize: 11 }} />
                   {/* Untergrenze min(0, dataMin): 0-Basislinie bei reinen Umsätzen, aber
                       negative Nettomonate (Verlust, z.B. Anlaufmonate mit Fixkosten) werden
                       NICHT auf 0 abgeschnitten (recharts-Default wäre [0, 'auto']). */}
                   <YAxis domain={[(dataMin: number) => Math.min(0, dataMin), "auto"]} />
+                  {showUnifiedCurrency && showNet && revenueChart.nettoHasNegative && (
+                    // Null-/Break-even-Linie golden statt grau-gestrichelt — hebt sich von den
+                    // Gitternetzlinien ab. Nur wenn Verlustwerte sichtbar sind (sonst ist 0 der
+                    // Achsenboden). Direktes LineChart-Kind (nicht im Fragment!).
+                    <ReferenceLine y={0} stroke="#eda100" strokeWidth={1.5} />
+                  )}
                   <Tooltip
                     formatter={(value, name) => {
                       const numeric = Number(value ?? 0);
