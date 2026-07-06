@@ -2,7 +2,7 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-07-06 · Release v2.3.0 · origin/main synchron.**
+> **Stand: 2026-07-06 · Release v2.3.3 · origin/main synchron.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
 
 ---
@@ -11,17 +11,19 @@
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich). NIE in
   `ProTrackr_developing_path` (= `nas-setup`, NAS-Welt).
-- **Stand:** **v2.3.0** auf main + origin, Baum sauber, Drift `0 0`. Zwei große Workstreams
-  dieser Sitzungsreihe sind **auf main abgeschlossen**:
+- **Stand:** **v2.3.3** auf main + origin, Baum sauber, Drift `0 0`. Die großen Workstreams
+  dieser Sitzungsreihe sind **abgeschlossen**:
   1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — **main + NAS live auf Prod**. Behebt den
      Prod-Tab-„(DEV)"-Bug (Titel zur Laufzeit statt build-time).
-  2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — **main fertig**; **NAS-Dev-Abnahme
-     der aktuellen Version v2.3.0 steht noch aus** (im NAS-Chat re-deployen). Noch **NICHT**
-     auf Prod (Prod = v2.1.28).
-- **Nichts blockiert auf main.** Die nächste Aktion liegt im **NAS-Chat** (v2.3.0 auf Dev
-  nachziehen → nach Abnahme Prod-Promotion). Details §6.1.
-- **Offen auf main:** §6.3 **Zeitumsatz-Tooltip** (kleine Aufgabe, vom User gewünscht) → danach
-  niedrig-prio §6.2 (TZ-Kohärenz-Folgepunkte + persistenter MySQL-Session-Store P3/M1). Nichts blockiert.
+  2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — **LIVE AUF PROD** (NAS-Dev-Abnahme
+     bestanden, bit-identisch promotet: Prod v2.1.28 → v2.3.0, Image `af97e6786e65`).
+  3. **Zeitumsatz-Tooltip** (v2.3.3) — **main fertig** (Info-Icon am Zeitumsatz-Toggle erklärt
+     die Linie); **NAS-Dev-Abnahme + Prod-Promotion stehen aus** (Prod = v2.3.0).
+- **Nichts blockiert auf main.** Nächste NAS-Aktion: **v2.3.3 auf Dev nachziehen → Prod-Promotion**
+  (NAS-Chat, §6.1).
+- **Offen auf main (§6.2, niedrig-prio):** (a) TZ-Kohärenz (`scheduler.ts` + `Reports.tsx`
+  Default-Monatsgrenzen auf `warsawDateKey`); (b) persistenter MySQL-Session-Store (P3/M1 — DB-
+  Migration + Dependency, Vorgehen mit User klären).
 - **Deploy (nach A5):** committen + `git push origin main` (Hook bumpt Version + baut `dist/`,
   **kein** Restart) → **Rollout-Manifest** erzeugen + committen + **Tag** `v<version>`; NAS-Deploy
   getrennt im **NAS-Chat** via `/nas-rollout`. Siehe §3, [[feedback_deploy_workflow]],
@@ -31,7 +33,7 @@
 
 1. **Branch/Worktree prüfen:** `cd C:\Projects\ProTrackr_main` → `git branch --show-current`
    == `main`; `git fetch origin`; Drift `git rev-list --left-right --count origin/main...HEAD`
-   == `0 0`; HEAD-Version == 2.3.0 oder neuer.
+   == `0 0`; HEAD-Version == 2.3.3 oder neuer.
 2. **Memory lesen:** `MEMORY.md` + verlinkte Einträge, v.a. [[feedback_deploy_workflow]]
    (nach A5!), [[feedback_worktree_separation]], [[feedback_3agent_workflow]],
    [[feedback_prod_only_via_dev_promotion]], [[project_umsatzchart_task]],
@@ -96,7 +98,7 @@ alles erledigt.
   `computeAppTitle` in `main.tsx`. `VITE_APP_TITLE` (T3a) entfernt. Env-Werte: NAS setzt
   `APP_ENV_LABEL=DEV` in `compose.dev.yml`, Prod unset. Referenz [[project_app_env_label_runtime_title]].
 
-### 4.2 Umsatzentwicklung-Chart — ✅ main fertig (v2.3.0); NAS-Dev-Abnahme v2.3.0 offen
+### 4.2 Umsatzentwicklung-Chart — ✅ LIVE AUF PROD (v2.3.0) + Zeitumsatz-Tooltip (v2.3.3, main)
 Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Datenleck**
 (Dashboard = user-internal; Netto/Provision dürfen dort).
 - **Geteilte Wahrheitsquelle** `client/src/lib/monthlyFinancials.ts` (`computeMonthlyAmounts`,
@@ -115,14 +117,18 @@ Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Dat
     dünnte „Juni" weg); ReferenceLine y=0.
   - `0d361fe` **v2.3.0** — Default-Ansicht **12M / monatlich / PLN**; Y-Achse Tausender-Format
     mit Währungssymbol (`250000 → 250k€/zł/$/£/CHF`, via `CURRENCY_SYMBOLS`); Null-/Break-even-
-    Linie dunkelgold `#b98847` gestrichelt (statt Netto-Gelb).
+    Linie dunkelgold `#b98847` gestrichelt (statt Netto-Gelb). **LIVE AUF PROD** (Image `af97e6786e65`).
+  - `8cbe589` **v2.3.3** — **Zeitumsatz-Tooltip:** lucide-`Info`-Icon am Zeitumsatz-Toggle,
+    Radix-Tooltip als `UiTooltip` aliased (recharts exportiert ebenfalls `Tooltip`). Erklärt:
+    Zeitumsatz = Umsatz aus Arbeitszeit ohne RK, Abstand zur Brutto-Linie = exklusive RK.
+    Fragment-Lesson beachtet (Serien-Array unangetastet). Nur main, Prod-Promotion offen.
 - Referenz [[project_umsatzchart_task]] (inkl. recharts-Fragment-Lesson).
 
 ### 4.3 Version/Prod-Stand
-- **origin/main = v2.3.0.** Manifeste vorhanden: `2.1.28`, `2.2.0`, `2.2.2`, `2.2.3`, `2.3.0`.
-- **PROD (NAS :9443) = v2.1.28** (APP_ENV_LABEL live). Der **Umsatzchart ist noch NICHT auf
-  Prod** — er durchläuft die NAS-Dev-Abnahme (zuletzt v2.3.0). Erst nach Dev-Freigabe →
-  Prod-Promotion (Prod springt dann v2.1.28 → v2.3.0).
+- **origin/main = v2.3.3.** Manifeste vorhanden: `2.1.28`, `2.2.0`, `2.2.2`, `2.2.3`, `2.3.0`, `2.3.3`.
+- **PROD (NAS :9443) = v2.3.0** (APP_ENV_LABEL + Umsatzchart live, Image `af97e6786e65`). Der
+  **Zeitumsatz-Tooltip (v2.3.3) ist noch NICHT auf Prod** — NAS-Dev-Abnahme + Promotion stehen
+  aus (Prod springt dann v2.3.0 → v2.3.3).
 
 ## 5. VERHÄLTNIS ZUR NAS-WELT
 
@@ -135,13 +141,13 @@ Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Dat
 
 ## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE
 
-### 6.1 NAS-Nachzug Umsatzchart v2.3.0 (NAS-Chat, nicht hier)
-Im NAS-Chat: `/nas-rollout` auf **Dev** mit **Manifest `2.3.0`** (Commit `0d361fe`, Tag
-`v2.3.0`). Abnahme auf `:9444` (unified/PLN): 2–3 Linien (Brutto teal, Netto gold, optional
-Zeit gestrichelt), alle 12 Monatslabels inkl. Juni, Y-Achse `250kzł`, dunkelgoldene Null-Linie
-bei Verlustmonaten, Default 12M/monatlich/PLN. **Danach Prod-Promotion** (Prod v2.1.28 → v2.3.0).
-Auf der **main-Seite ist hierfür nichts zu tun** außer ggf. Nachbesserungen, wenn die Abnahme
-etwas findet.
+### 6.1 NAS-Nachzug Zeitumsatz-Tooltip v2.3.3 (NAS-Chat, nicht hier)
+Umsatzchart v2.3.0 ist bereits **live auf Prod** (Image `af97e6786e65`). Offen ist nur noch der
+**Zeitumsatz-Tooltip (v2.3.3)**: im NAS-Chat `/nas-rollout` auf **Dev** mit **Manifest `2.3.3`**
+(Commit `8cbe589`, Tag `v2.3.3`). Abnahme auf `:9444` (unified/PLN): Info-Icon rechts neben dem
+Zeitumsatz-Toggle, Hover/Tab-Fokus zeigt den Erklärtext; Chart-Linien unverändert gerendert.
+**Danach Prod-Promotion** (Prod v2.3.0 → v2.3.3). Reine Client-UI, keine Migration.
+Auf der **main-Seite ist hierfür nichts zu tun** außer ggf. Nachbesserungen aus der Abnahme.
 
 ### 6.2 Niedrig-prio (main/App-Code) — nach dem NAS-Nachzug
 - **(a) TZ-Kohärenz:** `Reports.tsx` Default-Monatsgrenzen (`getTodayLocalDate`/`startDate`/
@@ -157,14 +163,13 @@ etwas findet.
   User klären** (unkritisch, Single-User; Login-Verlust pro Deploy zumutbar).
 
 ### 6.3 Umsatzchart-Nachpolituren
-- **Zeitumsatz-Tooltip (vom User GEWÜNSCHT — nächste kleine main-Aufgabe):** erklärenden
-  Tooltip/Hinweis für die „Zeitumsatz"-Linie ergänzen (`client/src/pages/Dashboard.tsx`).
-  **Inhalt:** Zeitumsatz = reiner Umsatz aus abgerechneter Arbeitszeit (Σ `entry.calculatedAmount`
-  pro Monat, in Zielwährung), **OHNE** Reisekosten; der Abstand zur Bruttoumsatz-Linie = die
-  durchgereichten **exklusiven** Reisekosten. Umsetzung z.B. Info-Icon (lucide/`Info`) an der
-  CardDescription oder am Zeitumsatz-Toggle, oder ein erklärender recharts-Tooltip-Zusatz.
-  User-internal (kein Datenleck); **recharts-Fragment-Lesson beachten** (Serien nie in `<>…</>`).
-- (optional) Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie vom User spezifiziert);
+- **Zeitumsatz-Tooltip — ✅ ERLEDIGT (v2.3.3, Commit `8cbe589`).** Info-Icon (lucide `Info`) am
+  Zeitumsatz-Toggle in `client/src/pages/Dashboard.tsx`; Radix-Tooltip als `UiTooltip` aliased
+  (recharts-`Tooltip`-Namenskonflikt). Text: Zeitumsatz = Umsatz aus abgerechneter Arbeitszeit
+  ohne durchgereichte RK, Abstand zur Bruttoumsatz-Linie = exklusive RK (deckt sich mit
+  `computeMonthlyDisplayRevenue`: `grossCents − timeCents = travelCents`). 3-Agenten-Loop grün
+  (tsc/pre-commit-Tests/Build), Fragment-Lesson beachtet. NAS-Dev-Abnahme + Prod-Promotion §6.1.
+- (optional, offen) Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie spezifiziert);
   Label-Überlappung auf schmalen Viewports ggf. `angle={-45} textAnchor="end"`.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
@@ -200,12 +205,12 @@ etwas findet.
 
 ## 9. ROLLBACK-/SICHERHEITSPUNKTE
 
-- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main` = v2.3.0. Tags: `v2.1.28`,
-  `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `nas-rollout/2.1.28`, `nas-rollout/2.1.22` etc.
+- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main` = v2.3.3. Tags: `v2.1.28`,
+  `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
 - Umsatzchart v2.0→v2.3.0 waren reine Client-/UI-Änderungen (kein Schema-Change seit 0024);
   Tests grün. **P3 (Session-Store) wird das ändern** (DB-`sessions`-Tabelle + Dependency) →
   dort vor Umsetzung Backup/Test-Strategie festlegen.
-- PROD (v2.1.28) unberührt, solange kein Rollout im NAS-Chat gefahren wird.
+- PROD (NAS :9443) = v2.3.0 (APP_ENV_LABEL + Umsatzchart live); der Tooltip v2.3.3 folgt via NAS-Chat.
 
 ---
 
