@@ -2057,3 +2057,19 @@ Tooltip ✓, (b) Reports-Default-Monat korrekt ✓, (c) **Session-Überlebt-Test
 **Damit §6.2 erledigt** (TZ-Kohärenz + Session-Store). Alle NAS-Chat- und zugehörigen main-Folgepunkte
 durch; NAS-Chat bleibt reines Rollout-Ziel. **Rollback-Netze:** frisch = v2.4.0 (`…23-15-25` Image +
 2 DB-Backups); ältere (v2.3.0/v2.1.28/v2.1.22) nach ein paar Tagen v2.4.0-Stabilität aufräumbar (§6.1).
+
+## 2026-07-06 — §6.1: Rollback-Cleanup nach v2.4.0 (konservativ, 2 Generationen behalten)
+
+Nach v2.4.0-Prod-Live die alten Rollback-Artefakte aufgeräumt (User-Wahl: konservativ, nachdem die
+Rollback-Fähigkeit versichert war). Read-only Bestandsaufnahme, dann gezielt.
+- **Gelöscht:** Images `rollback-2026-07-06_20-26-58` (v2.1.28, `8151af1e`) + `rollback-2026-07-06_11-38-32`
+  (v2.1.22, `8a3f855c`) — je 693 MB, **~1,4 GB frei**. DB-Backups `prod-pre-promote-2026-07-05_17-47-17`
+  (v2.1.22-Puffer), `…11-38-32` (v2.1.28), `dev-pre-2.4.0.sql` (Dev-Wegwerf) via `shred -u`.
+  db-migration/ 728 KB → 368 KB.
+- **Behalten (2 Generationen Puffer):** laufendes `protrackr-app:latest` (`91e95665`, v2.4.0) + Rückfall-
+  Image `rollback-2026-07-06_23-15-25` (`af97e678`, v2.3.0); DB-Backups v2.4.0 (`…23-13-21` vor Migration,
+  `…23-15-25`) + v2.3.0 (`…20-26-58`).
+- **Rollback-Fähigkeit unverändert** (dem User zugesichert): Image-Sofortrollback v2.4.0→v2.3.0
+  (`af97e678`) + Daten via DB-Backups; alles Ältere über **Git-Tags** (jede Version `git checkout <tag>`
+  + `docker compose build` neu baubar). Löschen der alten Images nimmt nur die Sofort-Bequemlichkeit
+  für >1 Generation zurück, nicht die Fähigkeit.
