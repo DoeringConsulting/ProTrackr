@@ -25,8 +25,9 @@
 - **Nichts blockiert auf main.** Nächste NAS-Aktion: **v2.4.0 auf Dev nachziehen → Prod-Promotion**
   (NAS-Chat, §6.1). Prod ist v2.3.0; Tooltip (v2.3.3) + TZ-Fix (v2.3.5) + Session-Store (v2.4.0)
   noch nicht promotet. **v2.4.0 bringt Migration `0025` + neue Runtime-Dependency** → Container-Rebuild.
-- **Offen auf main:** derzeit **nichts** Priorisiertes. Kandidaten (niedrig, siehe §6.2): TZ-Restpunkt
-  im Scheduler-Monatstrigger (`now` server-lokal, out of scope des a-Fixes); `sessionStore.close()`
+- **Offen auf main:** derzeit **nichts** Priorisiertes. Der TZ-Restpunkt (Scheduler-Monatstrigger +
+  db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
+  bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Einziger Rest-Kandidat: `sessionStore.close()`
   beim Shutdown (unkritisch, Prozess terminiert ohnehin).
 - **Deploy (nach A5):** committen + `git push origin main` (Hook bumpt Version + baut `dist/`,
   **kein** Restart) → **Rollout-Manifest** erzeugen + committen + **Tag** `v<version>`; NAS-Deploy
@@ -156,27 +157,25 @@ Abnahme auf `:9444`: Tooltip sichtbar (Hover/Tab), Reports-Default-Monat korrekt
 `DATABASE_URL` fällt der Store auf In-Memory zurück. **Danach Prod-Promotion** (Prod v2.3.0 → v2.4.0).
 Auf der **main-Seite ist hierfür nichts zu tun** außer ggf. Nachbesserungen aus der Abnahme.
 
-**Zusätzliches NAS-To-do (vom User 2026-07-06 freigegeben) — Zeitzonen-Anker:** Verifizieren/setzen,
-dass der App-**Container** auf **`Europe/Warsaw`** läuft. Der gesamte server-lokale Zeit-Code setzt das
-voraus: `server/db.ts` Range-Filter (`localDayStartUtc` u.a., **produktiv im Reisekostenbericht**) UND
-`server/scheduler.ts` Monats-Trigger (`isLastDayOfMonth`, `now`). Der v2.3.5-Fix hat nur die *immer*-
-UTC-Stellen (`toISOString`) TZ-fest gemacht; die server-lokalen `now`-Stellen bleiben korrekt, **solange
-der Container Warschau läuft**. **⚠ ACHTUNG Host ≠ Container:** Das **Host-DSM steht bereits auf Warschau**
-(User-Screenshot 2026-07-06, 22:27 korrekt) — aber ein Docker-Container **erbt die Host-TZ NICHT
-automatisch** (Default UTC), außer `TZ` ist gesetzt ODER `/etc/localtime` gemountet. Also NICHT vom Host
-schließen — **direkt im Container prüfen:** `docker exec <app-container> date` (zeigt `22:27` = Warschau ok;
-`20:27` = UTC → `TZ=Europe/Warsaw` in `compose.*.yml` setzen + Container neu starten). Kleinste kohärente
-Absicherung (deckt Scheduler **und** db.ts) — **kein main-Code-Change nötig**.
+**Zeitzonen-Anker — ✅ BESTÄTIGT ERLEDIGT (User-Check 2026-07-06, kein Handlungsbedarf):** Beide
+App-Container laufen bereits auf **Europe/Warsaw**: `docker exec protrackr-app date` **und**
+`docker exec protrackr-app-dev date` → beide **`CEST`** (22:34 = UTC+2, Warschauer Sommerzeit). Unraid
+reicht die Host-TZ hier durch (typ. `/etc/localtime`-Mount). Damit steht der gesamte server-lokale
+Zeit-Code auf korrektem Anker: `server/db.ts` Range-Filter (`localDayStartUtc` u.a., produktiv im
+Reisekostenbericht) UND `server/scheduler.ts` Monats-Trigger (`isLastDayOfMonth`, `now`). Der v2.3.5-Fix
+hatte bereits die *immer*-UTC-Stellen (`toISOString`) TZ-fest gemacht. **Nichts zu tun.** Einzige künftige
+Kontrolle: bei Compose-/Container-Änderungen darf `docker exec <app-container> date` **`CEST`/`CET`**
+zeigen, nie `UTC`.
 
 ### 6.2 Niedrig-prio (main/App-Code) — ✅ ERLEDIGT (v2.3.5 + v2.4.0)
 - **(a) TZ-Kohärenz — ✅ v2.3.5 (Commit `cd69da1`, Tag `v2.3.5`).** `server/scheduler.ts`
   `checkMonthEnd`: `expenses`-Monatsgrenzen via `warsawDateKey(firstDay/lastDay)` statt
   `toISOString().slice(0,10)` (UTC-Kippung behoben). `Reports.tsx`: Default `startDate`/`endDate`
   über `warsawDateKey()` statt browser-lokalem `getTodayLocalDate` (entfernt). Senior-APPROVE (beide
-  Server-TZ durchgerechnet), 26 Tests grün. **Restpunkt → Beschluss (2026-07-06):** der Scheduler-
+  Server-TZ durchgerechnet), 26 Tests grün. **Restpunkt → ✅ abgesichert (2026-07-06):** der Scheduler-
   *Monatstrigger* (`now`, `isLastDayOfMonth`) + die `db.ts`-Range-Filter bleiben server-lokal →
-  abgesichert über **Container-`TZ=Europe/Warsaw`** (NAS-To-do oben in §6.1), NICHT via Code-Umbau
-  (User-Entscheid, weil db.ts bericht-kritisch ist und die Container-TZ Scheduler + db.ts gemeinsam deckt).
+  Anker = **Container-TZ Europe/Warsaw, per User-Check bestätigt** (beide Container `CEST`, §6.1), NICHT
+  via Code-Umbau (db.ts bericht-kritisch; Container-TZ deckt Scheduler + db.ts gemeinsam).
 - **(b) P3/M1 MySQL-Session-Store — ✅ v2.4.0 (Commit `328aa38`, Tag `v2.4.0`), main-Teil.**
   `express-mysql-session` (+ `@types`) als Dependency; `server/_core/index.ts` nutzt `MySQLStore`
   mit dediziertem `mysql2/promise`-Pool aus `DATABASE_URL` (`createDatabaseTable:false`); Tabelle via
