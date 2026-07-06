@@ -10,11 +10,20 @@ import "./index.css";
 import "./i18n";
 import { registerServiceWorker } from "./registerSW";
 import { ensureCsrfToken, getCsrfHeaderName, getCsrfToken } from "./lib/csrf";
+import { computeAppTitle } from "./lib/appTitle";
 
-// App-Titel aus VITE_APP_TITLE (Build-Zeit) setzen; zwingender Fallback, damit
-// der Titel bei fehlender Env-Var nicht leer bleibt (Konsistenz mit index.html).
-document.title =
-  import.meta.env.VITE_APP_TITLE || "Döring Consulting - Projekt & Abrechnungsmanagement";
+declare global {
+  interface Window {
+    /** Vom Server zur Laufzeit injiziert (siehe server/_core/envLabel.ts). */
+    __APP_ENV_LABEL__?: string;
+  }
+}
+
+// App-Titel zur LAUFZEIT aus dem vom Server injizierten Umgebungslabel
+// (window.__APP_ENV_LABEL__ ← process.env.APP_ENV_LABEL) — NICHT mehr build-time
+// (VITE_APP_TITLE). So zeigt EIN Production-Image in Dev/Prod den richtigen Titel
+// (bit-identische Promotion). Leer/unset ⇒ Prod-Titel.
+document.title = computeAppTitle(window.__APP_ENV_LABEL__);
 
 const queryClient = new QueryClient();
 

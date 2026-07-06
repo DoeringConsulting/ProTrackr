@@ -92,7 +92,8 @@ CRON_SECRET=HIER_EIN_LANGES_SECRET
 
 DATABASE_URL=mysql://protrackr_user:DEIN_DB_PASSWORT@127.0.0.1:3306/protrackr
 
-VITE_APP_TITLE=ProTrackr
+# APP_ENV_LABEL: optionales Runtime-Tab-Label (KEIN VITE_-Prefix). Leer/unset ⇒ Prod-Titel; DEV ⇒ "ProTrackr (DEV)"
+APP_ENV_LABEL=
 VITE_APP_LOGO=
 
 # Wichtig fuer lokalen Start mit http://localhost und pnpm start

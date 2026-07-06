@@ -1,10 +1,11 @@
-import express, { type Express } from "express";
+import express, { type Express, type RequestHandler } from "express";
 import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
+import { injectAppEnvLabel } from "./envLabel";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -39,7 +40,11 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx?v=${nanoid()}"`
       );
       const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      // Runtime-Umgebungslabel auch im Dev-Server injizieren (Konsistenz mit Prod).
+      res
+        .status(200)
+        .set({ "Content-Type": "text/html; charset=utf-8" })
+        .end(injectAppEnvLabel(page));
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -58,10 +63,31 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  const indexHtmlPath = path.resolve(distPath, "index.html");
 
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
-  });
+  // index.html IMMER durch die Laufzeit-Injektion (APP_ENV_LABEL) ausliefern — nie roh
+  // über express.static. Sonst käme der Titel ohne Umgebungslabel auf den Client (genau
+  // der Prod-Tab-"(DEV)"-Bug bzw. dessen Umkehrung). Der Wert wird pro Request frisch aus
+  // process.env gelesen, damit dasselbe Image je Umgebung den richtigen Titel zeigt.
+  const sendIndexHtml: RequestHandler = (_req, res) => {
+    fs.promises
+      .readFile(indexHtmlPath, "utf-8")
+      .then((html) => {
+        res
+          .status(200)
+          .set({ "Content-Type": "text/html; charset=utf-8" })
+          .send(injectAppEnvLabel(html));
+      })
+      .catch(() => {
+        res.status(500).send("index.html not found — build the client first");
+      });
+  };
+
+  app.get("/", sendIndexHtml);
+  app.get("/index.html", sendIndexHtml);
+  // Statische Assets (gehashte JS/CSS, favicon, version.json …). index:false, damit "/"
+  // nicht die un-injizierte index.html ausliefert, sondern der Handler oben greift.
+  app.use(express.static(distPath, { index: false }));
+  // SPA-Fallback: alle übrigen Routen → injizierte index.html
+  app.use("*", sendIndexHtml);
 }

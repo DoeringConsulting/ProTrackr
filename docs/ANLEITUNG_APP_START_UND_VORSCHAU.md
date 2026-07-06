@@ -48,7 +48,8 @@ OAUTH_SERVER_URL=
 OWNER_OPEN_ID=
 OWNER_NAME=
 VITE_OAUTH_PORTAL_URL=
-VITE_APP_TITLE=ProTrackr
+# APP_ENV_LABEL: optionales Runtime-Tab-Label (KEIN VITE_-Prefix). Leer/unset ⇒ Prod-Titel; DEV ⇒ "ProTrackr (DEV)"
+APP_ENV_LABEL=
 VITE_APP_LOGO=
 
 # Lokal mit `pnpm start` ueber http://localhost:
