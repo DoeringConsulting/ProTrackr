@@ -16,7 +16,15 @@ import {
   Users,
 } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { aggregateMonthlyTaxResults } from "@/lib/taxEnginePl";
+import { aggregateMonthlyTaxResults, computeMonthlyTaxSeries } from "@/lib/taxEnginePl";
+import {
+  computeMonthlyAmounts,
+  computeMonthlyDisplayRevenue,
+} from "@/lib/monthlyFinancials";
+import {
+  createCustomerIdsByDateMap,
+  createEntriesById,
+} from "@/lib/expenseAttribution";
 import {
   formatLocalDate,
   getDateKey,
@@ -89,6 +97,11 @@ export default function Dashboard() {
   const [selectedMonths, setSelectedMonths] = useState<3 | 6 | 12>(6);
   const [showUnifiedCurrency, setShowUnifiedCurrency] = useState(false);
   const [targetCurrency, setTargetCurrency] = useState<SupportedCurrency>("EUR");
+  // Umsatzchart-Steuerung (nur im vereinheitlichte-Währung-Modus relevant).
+  const [chartMode, setChartMode] = useState<"monthly" | "cumulative">("monthly");
+  const [showGross, setShowGross] = useState(true);
+  const [showNet, setShowNet] = useState(true);
+  const [showTime, setShowTime] = useState(false);
 
   // One shared date range for all chart sections.
   const now = new Date();
@@ -123,6 +136,51 @@ export default function Dashboard() {
   const customersById = useMemo(
     () => new Map((customers ?? []).map((customer) => [customer.id, customer])),
     [customers]
+  );
+
+  // Attribution-Maps (wie im Buchhaltungsbericht) für getExpenseBillingCustomerId.
+  const entriesById = useMemo(() => createEntriesById(timeEntries), [timeEntries]);
+  const customerIdsByDate = useMemo(
+    () => createCustomerIdsByDateMap(timeEntries),
+    [timeEntries]
+  );
+  const attributionMaps = useMemo(
+    () => ({ entriesById, customerIdsByDate }),
+    [entriesById, customerIdsByDate]
+  );
+
+  // Steuer-Profil/-Config einmal mappen; von Kosten- UND Umsatzchart genutzt.
+  const mappedTaxProfile = useMemo(
+    () =>
+      taxProfile
+        ? {
+            taxCalculationMode: taxProfile.taxCalculationMode,
+            taxForm: taxProfile.taxForm,
+            zusRegime: taxProfile.zusRegime,
+            choroboweEnabled: taxProfile.choroboweEnabled,
+            fpFsEnabled: taxProfile.fpFsEnabled,
+            wypadkowaRateBp: taxProfile.wypadkowaRateBp,
+            zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
+            pitRateBp: taxProfile.pitRateBp,
+          }
+        : null,
+    [taxProfile]
+  );
+  const mappedTaxConfig = useMemo(
+    () =>
+      taxConfig
+        ? {
+            year: taxConfig.year,
+            socialMinBaseCents: taxConfig.socialMinBaseCents,
+            zdrowotnaMinBaseCents: taxConfig.zdrowotnaMinBaseCents,
+            zdrowotnaMinAmountCents: taxConfig.zdrowotnaMinAmountCents,
+            zdrowotnaDeductionLimitYearlyCents: taxConfig.zdrowotnaDeductionLimitYearlyCents,
+            socialContributionRateBp: taxConfig.socialContributionRateBp,
+            choroboweRateBp: taxConfig.choroboweRateBp,
+            fpFsRateBp: taxConfig.fpFsRateBp,
+          }
+        : null,
+    [taxConfig]
   );
 
   const timeEntriesDetailed = useMemo(
@@ -171,41 +229,107 @@ export default function Dashboard() {
       monthStarts.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
     }
 
+    // Monatsgrenzen als String bauen (Europe/Warsaw-sicher, nie toISOString).
+    const monthBounds = (monthStart: Date): { ms: string; me: string; ym: string } => {
+      const y = monthStart.getFullYear();
+      const m = monthStart.getMonth();
+      const ms = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      const me = `${y}-${String(m + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      return { ms, me, ym: ms.slice(0, 7) };
+    };
+
     if (showUnifiedCurrency) {
-      const totalsByMonth = new Map<string, number>();
       let missingRates = 0;
-
-      for (const monthStart of monthStarts) {
-        totalsByMonth.set(getDateKey(monthStart).slice(0, 7), 0);
-      }
-
-      for (const entry of timeEntriesDetailed) {
-        const yearMonth = getDateKey(entry.date).slice(0, 7);
-        if (!totalsByMonth.has(yearMonth)) continue;
-        const converted = convertAmountCents(
-          entry.calculatedAmount,
-          entry.sourceCurrency,
-          targetCurrency,
-          rateMap
-        );
+      const toTarget = (amountCents: number, sourceCurrency: string): number => {
+        const converted = convertAmountCents(amountCents, sourceCurrency, targetCurrency, rateMap);
         if (converted === null) {
           missingRates += 1;
-          continue;
+          return 0;
         }
-        totalsByMonth.set(yearMonth, (totalsByMonth.get(yearMonth) ?? 0) + converted);
+        return converted;
+      };
+      const toPln = (amountCents: number, sourceCurrency: string): number => {
+        const converted = convertAmountCents(amountCents, sourceCurrency, "PLN", rateMap);
+        if (converted === null) {
+          missingRates += 1;
+          return 0;
+        }
+        return converted;
+      };
+
+      // Ein Monat Fixkosten in PLN (Steuer-Basis).
+      const monthlyFixedCostsPln = fixedCostsDetailed.reduce(
+        (sum, cost) => sum + toPln(cost.amount, cost.sourceCurrency),
+        0
+      );
+
+      // Nettogewinn je Monat über dieselbe Engine wie der Buchhaltungsbericht:
+      // Monats-Beträge (PLN, geteilte Wahrheitsquelle) → Steuer-Ergebnis je Monat →
+      // netProfit → Zielwährung. ZUS/Zdrowotna-Minima sind PLN-definiert, daher wird
+      // in PLN gerechnet und erst danach konvertiert.
+      const netTargetByMonth = new Map<string, number>();
+      const taxSeries = computeMonthlyTaxSeries({
+        startDate: rangeStart,
+        endDate: rangeEnd,
+        getMonthlyAmounts: (ms, me) =>
+          computeMonthlyAmounts(ms, me, {
+            timeEntries: timeEntriesDetailed,
+            expenses: expensesDetailed,
+            customersById,
+            attributionMaps,
+            monthlyFixedCostsCents: monthlyFixedCostsPln,
+            toPln,
+          }),
+        profile: mappedTaxProfile,
+        config: mappedTaxConfig,
+        legacySettings: taxSettings,
+      });
+      for (const point of taxSeries) {
+        const netTarget = convertAmountCents(point.result.netProfit, "PLN", targetCurrency, rateMap);
+        if (netTarget === null) {
+          missingRates += 1;
+          netTargetByMonth.set(point.monthStart.slice(0, 7), 0);
+        } else {
+          netTargetByMonth.set(point.monthStart.slice(0, 7), netTarget);
+        }
       }
 
-      return {
-        data: monthStarts.map((monthStart) => {
-          const yearMonth = getDateKey(monthStart).slice(0, 7);
-          return {
-            month: monthStart.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }),
-            umsatz: (totalsByMonth.get(yearMonth) ?? 0) / 100,
-          };
-        }),
-        seriesKeys: ["umsatz"],
-        missingRates,
+      const displayCtx = {
+        timeEntries: timeEntriesDetailed,
+        expenses: expensesDetailed,
+        customersById,
+        attributionMaps,
+        toTarget,
       };
+
+      // Kumuliert = laufende Summe je Serie über das Fenster, Start 0.
+      let bruttoCum = 0;
+      let nettoCum = 0;
+      let zeitCum = 0;
+      const data = monthStarts.map((monthStart) => {
+        const { ms, me, ym } = monthBounds(monthStart);
+        const rev = computeMonthlyDisplayRevenue(ms, me, displayCtx);
+        let bruttoCents = rev.grossCents;
+        let zeitCents = rev.timeCents;
+        let nettoCents = netTargetByMonth.get(ym) ?? 0;
+        if (chartMode === "cumulative") {
+          bruttoCum += bruttoCents;
+          zeitCum += zeitCents;
+          nettoCum += nettoCents;
+          bruttoCents = bruttoCum;
+          zeitCents = zeitCum;
+          nettoCents = nettoCum;
+        }
+        return {
+          month: monthStart.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }),
+          brutto: bruttoCents / 100,
+          netto: nettoCents / 100,
+          zeit: zeitCents / 100,
+        };
+      });
+
+      return { data, seriesKeys: ["brutto", "netto", "zeit"], missingRates };
     }
 
     const totalsByMonthCurrency = new Map<string, CurrencyValueMap>();
@@ -397,62 +521,36 @@ export default function Dashboard() {
         ? convertAmountCents(variableCostsEur, "EUR", "PLN", rateMap) ?? variableCostsEur
         : 0;
 
+    const toPlnForTax = (amountCents: number, sourceCurrency: string): number => {
+      const converted = convertAmountCents(amountCents, sourceCurrency, "PLN", rateMap);
+      if (converted === null) {
+        missingRates += 1;
+        return 0;
+      }
+      return converted;
+    };
+    const monthlyFixedCostsPln = fixedCostsDetailed.reduce(
+      (sum, cost) => sum + toPlnForTax(cost.amount, cost.sourceCurrency),
+      0
+    );
     const taxResult = aggregateMonthlyTaxResults({
       startDate: rangeStart,
       endDate: rangeEnd,
-      getMonthlyAmounts: (monthStart, monthEnd) => {
-        let monthRevenueEur = 0;
-        for (const entry of timeEntriesDetailed) {
-          if (!isWithinDateRange(entry.date, monthStart, monthEnd)) continue;
-          const eur = toEur(entry.calculatedAmount, entry.sourceCurrency);
-          if (eur !== null) monthRevenueEur += eur;
-        }
-        let monthVariableEur = 0;
-        for (const expense of expensesDetailed) {
-          if (!isWithinDateRange(expense.date, monthStart, monthEnd)) continue;
-          const eur = toEur(expense.amount, expense.sourceCurrency);
-          if (eur !== null) monthVariableEur += eur;
-        }
-        const monthFixedEur = fixedCostsDetailed.reduce((sum, cost) => {
-          const eur = toEur(cost.amount, cost.sourceCurrency);
-          return eur !== null ? sum + eur : sum;
-        }, 0);
-        const revPln = convertAmountCents(monthRevenueEur, "EUR", "PLN", rateMap);
-        const fixPln = convertAmountCents(monthFixedEur, "EUR", "PLN", rateMap);
-        const varPln = convertAmountCents(monthVariableEur, "EUR", "PLN", rateMap);
-        if (revPln === null || fixPln === null || varPln === null) {
-          missingRates += 1;
-        }
-        return {
-          revenueCents: revPln ?? 0,
-          fixedCostsCents: fixPln ?? 0,
-          variableCostsCents: varPln ?? 0,
-        };
-      },
-      profile: taxProfile
-        ? {
-            taxCalculationMode: taxProfile.taxCalculationMode,
-            taxForm: taxProfile.taxForm,
-            zusRegime: taxProfile.zusRegime,
-            choroboweEnabled: taxProfile.choroboweEnabled,
-            fpFsEnabled: taxProfile.fpFsEnabled,
-            wypadkowaRateBp: taxProfile.wypadkowaRateBp,
-            zdrowotnaRateLiniowyBp: taxProfile.zdrowotnaRateLiniowyBp,
-            pitRateBp: taxProfile.pitRateBp,
-          }
-        : null,
-      config: taxConfig
-        ? {
-            year: taxConfig.year,
-            socialMinBaseCents: taxConfig.socialMinBaseCents,
-            zdrowotnaMinBaseCents: taxConfig.zdrowotnaMinBaseCents,
-            zdrowotnaMinAmountCents: taxConfig.zdrowotnaMinAmountCents,
-            zdrowotnaDeductionLimitYearlyCents: taxConfig.zdrowotnaDeductionLimitYearlyCents,
-            socialContributionRateBp: taxConfig.socialContributionRateBp,
-            choroboweRateBp: taxConfig.choroboweRateBp,
-            fpFsRateBp: taxConfig.fpFsRateBp,
-          }
-        : null,
+      // Geteilte Monats-Logik (lib/monthlyFinancials) — identisch zum
+      // Buchhaltungsbericht und zur Umsatzchart-Nettolinie. Schließt die früheren
+      // 2 Lücken (exkl. RK im Umsatz, Provision in variable), damit die Steuerwerte
+      // des Kosten-Pies mit dem Netto konsistent sind.
+      getMonthlyAmounts: (monthStart, monthEnd) =>
+        computeMonthlyAmounts(monthStart, monthEnd, {
+          timeEntries: timeEntriesDetailed,
+          expenses: expensesDetailed,
+          customersById,
+          attributionMaps,
+          monthlyFixedCostsCents: monthlyFixedCostsPln,
+          toPln: toPlnForTax,
+        }),
+      profile: mappedTaxProfile,
+      config: mappedTaxConfig,
       legacySettings: taxSettings,
     });
 
@@ -821,16 +919,65 @@ export default function Dashboard() {
                 <CardTitle>Umsatzentwicklung</CardTitle>
               </div>
               <CardDescription>
-                Monatlicher Umsatz ({selectedPeriodLabel}){" "}
-                {showUnifiedCurrency ? `in ${targetCurrency}` : "in Originalwährungen"}
+                {showUnifiedCurrency
+                  ? `Umsatz & Nettogewinn (${selectedPeriodLabel}) in ${targetCurrency}`
+                  : `Monatlicher Umsatz (${selectedPeriodLabel}) in Originalwährungen`}
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {showUnifiedCurrency && (
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <div className="inline-flex overflow-hidden rounded-md border">
+                    <Button
+                      variant={chartMode === "monthly" ? "default" : "ghost"}
+                      size="sm"
+                      className="rounded-none"
+                      onClick={() => setChartMode("monthly")}
+                    >
+                      Monatlich
+                    </Button>
+                    <Button
+                      variant={chartMode === "cumulative" ? "default" : "ghost"}
+                      size="sm"
+                      className="rounded-none"
+                      onClick={() => setChartMode("cumulative")}
+                    >
+                      Kumuliert
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Button
+                      variant={showGross ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowGross((v) => !v)}
+                    >
+                      Bruttoumsatz
+                    </Button>
+                    <Button
+                      variant={showNet ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowNet((v) => !v)}
+                    >
+                      Nettogewinn
+                    </Button>
+                    <Button
+                      variant={showTime ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowTime((v) => !v)}
+                    >
+                      Zeitumsatz
+                    </Button>
+                  </div>
+                </div>
+              )}
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={revenueChart.data}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
-                  <YAxis />
+                  {/* Untergrenze min(0, dataMin): 0-Basislinie bei reinen Umsätzen, aber
+                      negative Nettomonate (Verlust, z.B. Anlaufmonate mit Fixkosten) werden
+                      NICHT auf 0 abgeschnitten (recharts-Default wäre [0, 'auto']). */}
+                  <YAxis domain={[(dataMin: number) => Math.min(0, dataMin), "auto"]} />
                   <Tooltip
                     formatter={(value, name) => {
                       const numeric = Number(value ?? 0);
@@ -840,13 +987,39 @@ export default function Dashboard() {
                   />
                   <Legend />
                   {showUnifiedCurrency ? (
-                    <Line
-                      type="monotone"
-                      dataKey="umsatz"
-                      stroke="#048998"
-                      strokeWidth={2}
-                      name={targetCurrency}
-                    />
+                    <>
+                      {showGross && (
+                        <Line
+                          type="monotone"
+                          dataKey="brutto"
+                          stroke="#048998"
+                          strokeWidth={2}
+                          name="Bruttoumsatz"
+                          dot={false}
+                        />
+                      )}
+                      {showNet && (
+                        <Line
+                          type="monotone"
+                          dataKey="netto"
+                          stroke="#eda100"
+                          strokeWidth={2}
+                          name="Nettogewinn"
+                          dot={false}
+                        />
+                      )}
+                      {showTime && (
+                        <Line
+                          type="monotone"
+                          dataKey="zeit"
+                          stroke="#898781"
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          name="Zeitumsatz"
+                          dot={false}
+                        />
+                      )}
+                    </>
                   ) : (
                     revenueChart.seriesKeys.map((currency, index) => (
                       <Line

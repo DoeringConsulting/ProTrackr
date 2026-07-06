@@ -214,42 +214,43 @@ export function calculatePolishTaxResult(input: {
   });
 }
 
-/**
- * Aggregate tax results by calculating per month and summing.
- * This gives correct ZUS/health/tax when period spans multiple months,
- * because monthly caps and minimums are applied per month.
- */
-export function aggregateMonthlyTaxResults(input: {
+export type MonthlyAmounts = {
+  revenueCents: number;
+  fixedCostsCents: number;
+  variableCostsCents: number;
+};
+
+export type MonthlyTaxPoint = {
+  monthStart: string;
+  monthEnd: string;
+  amounts: MonthlyAmounts;
+  result: TaxCalculationResult;
+};
+
+type MonthlyTaxInput = {
   startDate: string;
   endDate: string;
-  getMonthlyAmounts: (monthStart: string, monthEnd: string) => {
-    revenueCents: number;
-    fixedCostsCents: number;
-    variableCostsCents: number;
-  };
+  getMonthlyAmounts: (monthStart: string, monthEnd: string) => MonthlyAmounts;
   profile?: TaxProfilePl | null;
   config?: TaxConfigPl | null;
   legacySettings?: LegacyTaxSettings | null;
-}): TaxCalculationResult {
+};
+
+/**
+ * Per-month tax breakdown: for each calendar month in [startDate, endDate], pull
+ * that month's amounts (via getMonthlyAmounts) and run the Polish tax result, so
+ * monthly caps/minimums (ZUS, zdrowotna) apply per month. Month boundaries are
+ * built as strings (never toISOString) — Europe/Warsaw safe. Returns [] for
+ * invalid or inverted ranges. This is the building block for BOTH the aggregate
+ * (Buchhaltungsbericht) and the dashboard per-month net-profit series.
+ */
+export function computeMonthlyTaxSeries(input: MonthlyTaxInput): MonthlyTaxPoint[] {
   const { startDate, endDate, getMonthlyAmounts, profile, config, legacySettings } = input;
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
 
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return calculatePolishTaxResult({
-      revenueCents: 0, fixedCostsCents: 0, variableCostsCents: 0,
-      startDate, endDate, profile, config, legacySettings,
-    });
-  }
-
-  let totalZus = 0;
-  let totalHealth = 0;
-  let totalTax = 0;
-  let totalTaxBase = 0;
-  let totalDeductibleHealth = 0;
-  let totalNetProfit = 0;
-  let source: "regime_config" | "legacy" = "legacy";
-
+  const points: MonthlyTaxPoint[] = [];
   const current = new Date(start.getFullYear(), start.getMonth(), 1);
   const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
 
@@ -261,8 +262,7 @@ export function aggregateMonthlyTaxResults(input: {
     const monthEnd = `${y}-${String(m + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
     const amounts = getMonthlyAmounts(monthStart, monthEnd);
-
-    const monthResult = calculatePolishTaxResult({
+    const result = calculatePolishTaxResult({
       revenueCents: amounts.revenueCents,
       fixedCostsCents: amounts.fixedCostsCents,
       variableCostsCents: amounts.variableCostsCents,
@@ -273,15 +273,49 @@ export function aggregateMonthlyTaxResults(input: {
       legacySettings,
     });
 
-    totalZus += monthResult.zus;
-    totalHealth += monthResult.healthInsurance;
-    totalTax += monthResult.tax;
-    totalTaxBase += monthResult.taxBase;
-    totalDeductibleHealth += monthResult.deductibleHealth;
-    totalNetProfit += monthResult.netProfit;
-    source = monthResult.source;
-
+    points.push({ monthStart, monthEnd, amounts, result });
     current.setMonth(current.getMonth() + 1);
+  }
+  return points;
+}
+
+/**
+ * Aggregate tax results by calculating per month and summing.
+ * This gives correct ZUS/health/tax when period spans multiple months,
+ * because monthly caps and minimums are applied per month.
+ */
+export function aggregateMonthlyTaxResults(input: MonthlyTaxInput): TaxCalculationResult {
+  const { startDate, endDate, profile, config, legacySettings } = input;
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+
+  // Invalid dates keep the historical fallback (single all-zero result, which for
+  // a valid profile/config still yields the monthly ZUS/zdrowotna minimum).
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return calculatePolishTaxResult({
+      revenueCents: 0, fixedCostsCents: 0, variableCostsCents: 0,
+      startDate, endDate, profile, config, legacySettings,
+    });
+  }
+
+  // Valid dates → sum the per-month series. An inverted range yields an empty
+  // series and therefore an all-zero result, exactly as before.
+  let totalZus = 0;
+  let totalHealth = 0;
+  let totalTax = 0;
+  let totalTaxBase = 0;
+  let totalDeductibleHealth = 0;
+  let totalNetProfit = 0;
+  let source: "regime_config" | "legacy" = "legacy";
+
+  for (const { result } of computeMonthlyTaxSeries(input)) {
+    totalZus += result.zus;
+    totalHealth += result.healthInsurance;
+    totalTax += result.tax;
+    totalTaxBase += result.taxBase;
+    totalDeductibleHealth += result.deductibleHealth;
+    totalNetProfit += result.netProfit;
+    source = result.source;
   }
 
   return {
