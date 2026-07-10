@@ -1,13 +1,14 @@
 # Entwicklungs- und Programmierprinzipien — ProTrackr
 
 > **Projekt:** ProTrackr (DÖRING Consulting — Projekt-, Reisekosten- und Abrechnungsmanagement, Polish JDG)
-> **Dokument-Version:** 1.0.0
+> **Dokument-Version:** 1.1.0 — *v1.1.0: NAS-/Infrastruktur-Prinzipien (§13) ergänzt und §3.1 auf den
+> real umgesetzten Stand korrigiert (Zulieferung der NAS-Setup-Sitzung, gegen Ground Truth verifiziert).*
 > **Stand:** 2026-07-07 · App-Release **v2.4.0** (komplett live auf Prod)
 > **Geltungsbereich:** Verbindliche Methodik für die gesamte Weiterentwicklung von ProTrackr.
 > **Verhältnis zu anderen Dokumenten:** Dies ist die konsolidierte Prinzipien-Referenz. Sie fasst
 > die über die Projektlaufzeit gereiften Regeln aus `~/.claude/CLAUDE.md` (global), `CLAUDE.md`
 > (projektspezifisch), `HANDOVER-MAIN.md`, `docs/DEPLOYMENT-BLUEPRINT.md` und den Memory-Dateien
-> zusammen — in ihrer **heutigen, ausgereiften Fassung** samt Zielausprägung (§13).
+> zusammen — in ihrer **heutigen, ausgereiften Fassung** samt Zielausprägung (§14).
 
 ---
 
@@ -69,17 +70,45 @@ Qualitätsprinzip des Projekts.
 Der Laptop ist **ausschließlich Autoren-Maschine** (Code, Git, `tsc`, `vitest`). Die App läuft **nur**
 auf dem Unraid-Server (AOOSTAR WTR MAX 8845), in zwei isolierten Umgebungen:
 
-| Umgebung | Zweck | Git-Ref | Compose | Container | Host-Port | Tailscale |
-|---|---|---|---|---|---|---|
-| **PROD** | produktiv, echte Daten | `production` | `compose.prod.yml` | `protrackr-app` (+ eigener MySQL-Container) | 3010 | `:9443` |
-| **DEV** | Staging / Prod-Klon | `main` | `compose.dev.yml` | `protrackr-app-dev` (+ eigener MySQL-Container) | 3011 | `:9444` |
+| Merkmal | **PROD** | **DEV** |
+|---|---|---|
+| Compose-Datei | `docker-compose.yml` | `compose.dev.yml` (`name: protrackr-dev`) |
+| App-Container | `protrackr-app` | `protrackr-app-dev` |
+| DB-Container | `protrackr-mysql` | `protrackr-mysql-dev` |
+| App-Image | `protrackr-app:latest` | `protrackr-dev-app:latest` |
+| Volume / Netz | `mysql_data` / `protrackr_net` | `mysql_data_dev` / `protrackr_dev_net` |
+| Env-Datei | `.env` | `.env.dev` (via `env_file:`) |
+| Host-Port-Bind | `127.0.0.1:3010:3000` | `127.0.0.1:3011:3000` |
+| Tailscale Serve | `:9443` → localhost:3010 | `:9444` → localhost:3011 |
+| `APP_ENV_LABEL` | **unset** (⇒ Prod-Titel) | `DEV` |
+| **Git-Ref** | **`nas-setup`** | **`nas-setup`** |
 
-- **Image-Promotion Dev→Prod** (bit-identisch, kein Rebuild). Dev-DB = periodischer Klon der Prod-DB
-  (Richtung immer nur Prod→Dev).
+> **Nicht aus dem Blueprint ableiten:** Die Plan-Namen aus `docs/DEPLOYMENT-BLUEPRINT.md` §1
+> (`production`-Branch, `compose.prod.yml`, `mysql-prod`, `protrackr-app-prod`, `.env.prod`) wurden
+> **NICHT** umgesetzt — obige Tabelle ist der reale Stand. **Ground Truth:** `docker-compose.yml`,
+> `compose.dev.yml` (nas-setup).
+
+**Trennmodell — Image-, nicht Branch-basiert:** Beide Umgebungen laufen aus **demselben Git-Stand
+(`nas-setup`)** im selben Compose-Verzeichnis `/mnt/user/appdata/protrackr` (`git clone --branch nas-setup
+--single-branch`). Es gibt **keinen** `production`-Branch. Die Trennung ist **strukturell** (eigene Compose-
+Datei, Container, Volume, Netz, `.env`, Host-Port je Umgebung) **plus Image-Promotion**: `deploy-prod.sh`
+taggt das in Dev getestete `protrackr-dev-app:latest` bit-identisch auf `protrackr-app:latest` und startet
+Prod mit `--no-build`. „Live in Prod" = „exakt das in Dev abgenommene Image", ohne Rebuild-Drift; Prod
+bekommt beim Promote **kein** Git-Update, nur das Image. Dev-DB = Wegwerf-Klon der Prod-DB (Richtung immer
+nur Prod→Dev, `clone-prod-to-dev.sh`).
+
 - `localhost:3001` ist **komplett abgeschaltet**; lokale `MySQL84` steht auf **Manual/aus**; der frühere
   `post-commit`-Server-Restart wurde entfernt (v2.1.9).
-- Container-interner Port immer **3000**. `VITE_*`-Variablen sind **build-time** (Docker build-args) —
-  laufzeitabhängige Werte gehören NICHT hinein (→ §7.8).
+- Container-interner Port immer **3000** (App-Code/Healthcheck/`PORT` unverändert); nur die Host-Ports
+  unterscheiden sich (3010/3011), gebunden an `127.0.0.1` — **keine LAN-Exposition** (TLS via Tailscale Serve).
+- **Image ist umgebungs-neutral:** Das Dockerfile nutzt **keine build-args** mehr. Der einzige
+  umgebungsabhängige Client-Wert (Tab-Titel) läuft zur **Laufzeit** über `APP_ENV_LABEL` (§7.8), nicht
+  build-time — nur so ist die bit-identische Promotion möglich. Verbleibende `VITE_*` sind statische
+  Build-Konstanten, keine Umgebungs-Parameter.
+- **Tailscale Serve** terminiert TLS (Let's-Encrypt-Cert): `tailscale serve --bg --https=9443
+  http://localhost:3010` (Prod) / `--https=9444 …:3011` (Dev). **Reboot-Persistenz nicht automatisch**
+  (`--bg` überlebt keinen NAS-Reboot) → via Unraid **User Scripts** („At Startup of Array"); nach jedem
+  NAS-Reboot verifizieren.
 
 ### 3.2 Worktree-Trennung (physisch getrennte Arbeitsordner)
 
@@ -141,6 +170,12 @@ Semantic Versioning `MAJOR.MINOR.PATCH`, automatisch aus der Commit-Message abge
 3. **Rollout-Manifest** erzeugen (§5.2) + **Milestone-Tag** `vX.Y.Z` setzen + pushen.
 4. **NAS-Deploy läuft getrennt im NAS-Chat** via `/nas-rollout` — niemals aus dem Main-Chat.
 
+**Dev-Deploy im NAS-Chat (`scripts/deploy-dev.sh`, 5 Schritte, Prod unberührt):** (1) `git fetch` +
+`git reset --hard origin/nas-setup` (Hash-Vergleich); (2) erwartete Version aus `package.json`; (3)
+`docker compose -f compose.dev.yml up -d --build --no-deps app` — **`--no-deps`** lässt `protrackr-mysql-dev`
+unangetastet (nur App neu gebaut); (4) Health-Warten 30×5 s auf `healthy`; (5) Health-Gate
+`curl :3011/version.json` == erwartete Version, sonst Exit 1.
+
 ### 5.2 Rollout-Manifest — die deterministische Übergabe
 
 Für **jede** auf `main` freigegebene Release erzeugt der Main-Chat ein Manifest
@@ -175,6 +210,21 @@ bei jedem Prod-Eingriff **ohne** Marker (Unraid-Dashboard + Mail an a.doering@do
 reboot-fest. **Ehrliche Grenze:** root kann nicht 100 % gesperrt werden — die Guards machen direkte
 Prod-Änderungen unwahrscheinlich und **sichtbar**, nicht unmöglich.
 
+**Prod-Promotion im Detail (`deploy-prod.sh`, 8 Schritte):** (1) Quelle prüfen — `protrackr-dev-app:latest`
+muss existieren (sonst erst Dev deployen); (2) Success-Criteria-Gate — interaktiv `PROMOTE` eintippen; (3)
+**Prod-DB-Backup VOR Änderung** (`mysqldump` → `db-migration/prod-pre-promote-<TS>.sql`, Größen-Sanity < 1000 B
+→ Abbruch); (4) Rollback-Tag `protrackr-app:rollback-<TS>`; (5) Promotion `docker tag protrackr-dev-app:latest
+protrackr-app:latest` (Image-ID Dev==Prod); (6) Deploy-Marker (für den Guard) + `compose up -d --no-build
+app`; (7) Health-Gate 30×5 s auf `healthy` + `curl :3010/version.json`; (8) Auto-Rollback bei Fehler
+(Rollback-Image zurücktaggen). `--dry-run` zeigt den Ablauf ohne Änderung. **Schema-Migrationen macht das
+Skript NICHT** — additive Migrationen laufen manuell vor dem Deploy (→ §7.5).
+
+**Dev-DB = Prod-Klon (`clone-prod-to-dev.sh`):** Richtung **fest verdrahtet Prod→Dev** (harte Assertion
+`PROD_DB != DEV_DB`). Prod wird nur **gelesen**, Dev komplett **ersetzt** (Wegwerf-Klon); direkter Stream
+Prod → `grep -v '^mysqldump:'` → Dev **ohne Zwischendatei** (keine Produktivdaten auf Disk). Verifikation:
+Tabellen- + Row-Counts Prod==Dev, sonst Exit 1. Dev jederzeit neu herstellbar (`down -v` + `--yes`), Prod
+bleibt unberührt.
+
 ### 5.4 Freeze-Tags & Rollback
 
 - **Freeze-Tags vor riskanten Eingriffen**, immer auf `origin` gepusht:
@@ -205,6 +255,12 @@ Prod-Änderungen unwahrscheinlich und **sichtbar**, nicht unmöglich.
 - **SSR-Repro als Diagnose ohne Browser:** `renderToStaticMarkup` mit fest dimensioniertem Chart rendert
   das SVG statisch; per Regex (`recharts-line-curve`, Tick-Count, `/NaN/`) lässt sich Render-Verhalten
   ohne laufende App verifizieren — sehr wertvoll, weil lokal keine echten Daten vorliegen (→ §10.2).
+- **Container-Healthchecks als Deploy-Gate-Fundament:** App (Prod+Dev) `wget --spider :3000/`
+  (interval 30 s, retries 5, start_period 30 s); MySQL `mysqladmin ping` (Dev als `CMD-SHELL` mit
+  `-p"$$MYSQL_ROOT_PASSWORD"`, s. §13.2). `depends_on: mysql { condition: service_healthy }` verhindert
+  Crash-Loops beim Boot. Das Health-Gate der Deploy-Skripte (30×5 s auf `healthy` + `version.json`-Abgleich)
+  hat u.a. den recharts-Fragment-Bug (v2.2.0) und den unvollständigen Attribution-Fix (v2.1.15) **vor Prod**
+  gefangen — der Beweis, dass die Dev→Prod-Governance (§5.3) wirkt.
 
 ---
 
@@ -387,17 +443,90 @@ umlautfrei halten (Encoding-Sicherheit).
   Migration `0025`).
 - **Tooling:** pnpm; husky (pre-/post-commit, §4); Vitest; `node_modules` jederzeit per `pnpm install`
   regenerierbar.
-- **Betrieb:** Docker/Compose auf Unraid 7.3.1; Tailscale-Zugriff; NBP-API als feste externe Abhängigkeit.
+- **Betrieb:** Docker Compose auf **Unraid 7.3.1** (Docker 29.3.1, x86_64); Tailscale-Zugriff; NBP-API als
+  feste externe Abhängigkeit.
+- **Unraid-Besonderheiten:** `docker compose` ist auf Unraid **nicht nativ** — nachgerüstet über das Plugin
+  **„Compose Manager Plus"** (CLI + Web-UI). **GHCR wird heute NICHT genutzt** — Images werden **lokal auf dem
+  NAS** gebaut (`docker compose build`), kein Registry-Push/-Pull (GHCR ist Zielbild §14, nicht Ist-Zustand).
+  Container läuft **non-root** (`protrackr:nodejs`, UID/GID 1001; Bind-Mounts ggf. `chown 1001:1001`, da
+  Unraid-Default-User UID 99). Log-Rotation json-file 10 MB × 5. Zusätzliches tägliches `mysqldump`-Backup als
+  Unraid User Script (03:00, Retention 14 Tage) — getrennt vom In-App-Backup (§7.6).
+- *(Kosmetisch: die Header-Kommentare in `docker-compose.yml`/`Dockerfile` nennen noch Unraid 7.2.5 — der
+  Host wurde inzwischen auf 7.3.1 aktualisiert.)*
 
 ---
 
-## 13. Zielausprägung / Ausblick
+## 13. NAS-/Infrastruktur-Prinzipien
+
+> Die folgenden Punkte sind reale, in Commits gefixte Fallstricke des Server-Betriebs (Zulieferung der
+> NAS-Setup-Sitzung, Stand 2026-07-07). Ground Truth: die Compose-/Dockerfile-/Skript-Dateien auf
+> `nas-setup` (Zugriff via `git show origin/nas-setup:<pfad>`, Anhang A.2).
+
+### 13.1 Compose `env_file` je Service (Isolations-Kern)
+Dev-Services binden explizit `env_file: [.env.dev]`. Ohne das zieht `docker compose -f compose.dev.yml`
+für `${VAR}`-Interpolation die **Default-`.env` (= PROD-Credentials)** → Dev startet gegen die **Prod-DB**
+(Wurzel des ursprünglichen Isolations-Bugs). Nicht-Secret-Konstanten (`APP_ENV_LABEL`, `TZ`, `NODE_ENV`,
+`PORT`) stehen fest in `environment:` (versioniert, kein manueller NAS-Schritt).
+
+### 13.2 Healthcheck-`$$VAR`-Escaping
+In `CMD-SHELL`-Healthchecks mit Secret `$` **verdoppeln**: `-p"$$MYSQL_ROOT_PASSWORD"`. Einfaches `${…}`
+würde Compose zur Parse-Zeit aus der Prod-`.env` interpolieren → falsches Passwort → Container nie `healthy`.
+`$$` gibt das Literal an den Container, der es zur Laufzeit aus `.env.dev` evaluiert.
+
+### 13.3 `docker events` → `.Action`, nicht `.Status`
+Docker 20.10+/29.x nennt das Event-Feld `.Action`; `{{.Status}}` wirft `can't evaluate field Status`. Der
+Guard nutzt `--format '{{.Time}} {{.Action}}'`.
+
+### 13.4 tzdata + Container-Zeitzone (Infra-Seite zu §7.3/§10.3)
+Alpine liefert **keine** Zeitzonen-DB → `TZ=Europe/Warsaw` fällt still auf UTC zurück. `apk add --no-cache
+tzdata` im Runtime-Stage macht die TZ auflösbar — betrifft **App** (Node-local-TZ) **und** MySQL
+(TIMESTAMP-String-Reads). Die Host-TZ wird **nicht** vererbt → `docker exec <c> date` muss `CEST`/`CET`
+zeigen, nie `UTC`.
+
+### 13.5 `lower_case_table_names=1` (nur bei DB-Init)
+Der Windows-MySQL-Dump enthält lowercase-Tabellennamen; Drizzle liest camelCase (`timeEntries`).
+Linux-MySQL-Default LCTN=0 (case-sensitive) → `SELECT … FROM timeEntries` scheitert gegen `timeentries`.
+`command: --lower-case-table-names=1` normalisiert. **Nur beim ersten Init wirksam** — nachträgliche
+Änderung erfordert Volume-Neuaufbau + Re-Import.
+
+### 13.6 `mysqldump`-stderr nie in Dump/Stream
+`mysqldump` schreibt Warnings („Using a password …") auf stderr. Ein `2>&1`-Merge macht die Warning zur
+**ersten Dump-Zeile** → Import bricht mit `ERROR 1064`. Zwei-Schichten-Schutz: (a) Stream durch
+`grep -v '^mysqldump:'` filtern; (b) an der Quelle stderr trennen, nie mergen. Zusätzlich `--no-tablespaces`
+gegen die PROCESS-privilege-Warnung.
+
+### 13.7 Port-Konflikte auf Shared-NAS
+Der NAS hostet Nachbardienste; **Obsidian belegt den Range 3000–3001** (3000 erst per `ss -tlnp` gefunden).
+Host-Ports daher **3010** (Prod) / **3011** (Dev); container-intern bleibt **3000** unverändert. Weitere
+belegte Ports: 443 (Unraid-GUI), 8080 (Open WebUI), 8443 (Nextcloud). Host-Ports an `127.0.0.1` gebunden.
+
+### 13.8 Zwei bewusste Dockerfile-Kompromisse (dokumentieren, nicht „aufräumen")
+- **Full `node_modules` statt slim (branch-lokal):** Das Runtime-Image kopiert `node_modules` aus dem
+  `build`-Stage (mit devDependencies, +~200 MB) statt aus `prod-deps`, weil `server/_core/vite.ts`
+  **statische** ESM-Imports von `vite`/`vite.config` hat, die bei Modul-Load feuern (auch wenn `serveStatic`
+  statt `setupVite` läuft) → sonst `ERR_MODULE_NOT_FOUND`. Der saubere Fix (dynamische Imports) wäre App-Code
+  auf `main`; bewusst branch-lokal im Dockerfile gehalten.
+- **`--ignore-scripts` im `prod-deps`-Stage:** `package.json` hat `"prepare": "husky"`; pnpm läuft `prepare`
+  nach jedem Install, husky ist devDependency → im `--prod`-Stage `husky: not found` → Build-Abbruch.
+  `--ignore-scripts` überspringt Lifecycle-Scripts (nur hier nötig; `bcryptjs` ist pure-JS → kein Rebuild).
+
+---
+
+## 14. Zielausprägung / Ausblick
 
 Die Prinzipien laufen auf folgende Zielbilder zu:
 
 1. **CI/CD Level 3 (Phase B):** Automatisierte Pipeline via **GitHub Actions + self-hosted Unraid-Runner +
-   GHCR** — die heute manuelle `/nas-rollout`-Promotion wird pipeline-gestützt, unter Beibehaltung des
-   Dev→Prod-Governance-Gates. Bauplan: `docs/DEPLOYMENT-BLUEPRINT.md`.
+   GHCR**, drei Jobs: (a) **`build-test`** (GitHub-Runner): `tsc` + `vitest` gegen einen `mysql:8.0`-Service,
+   dann `docker build` + Push nach GHCR als `:${sha}`; (b) **`deploy-dev`** (self-hosted Unraid-Runner): zieht
+   `:${sha}`, `compose.dev.yml up`, Health-Check gegen `:3011`; (c) **`promote-prod`** (Unraid-Runner,
+   **GitHub Environment „production" mit Required Reviewer = Freigabe-Tor**): Backup → `up` mit demselben
+   `:${sha}`-Image → Migration → Health-Check/Rollback. **Kern:** dasselbe getestete GHCR-Image wird
+   bit-identisch nach Prod deployt — die heutige `docker tag`-Promotion in Pipeline-Form; das GitHub-Gate
+   ersetzt das interaktive `PROMOTE`-Prompt + den Guard-Watcher. Bauplan: `docs/DEPLOYMENT-BLUEPRINT.md`.
+   **⚠ Bei der Umsetzung:** Die Blueprint-Skizze nutzt noch die Plan-Namen (`compose.prod.yml`,
+   `protrackr-app-prod`, `production`-Branch, `drizzle-kit migrate` im Container) — an die **realen** Namen
+   (§3.1) + die **manuelle** Migrationsmechanik anpassen, nicht 1:1 übernehmen.
 2. **Vollständige „eine Wahrheitsquelle":** verbleibende doppelte Logik konsequent in geteilte Module
    überführen (Divergenz-Klasse dauerhaft eliminieren).
 3. **TZ-Robustheit als Standard:** Container-TZ-Anker (`Europe/Warsaw`) als fester, dokumentierter Bestandteil
@@ -469,7 +598,7 @@ gegen den Ground-Truth-Code prüfen → bei Abweichung Code = Wahrheit, Doku akt
 | `feedback_nas_umzug_branch.md` | §3.3 NAS-Branch-Isolation, NAS-Doku-Pflicht |
 | `feedback_main_only_session.md` | §3.3 main-only, §11 |
 | `feedback_handover_entry_prompt.md` | §9 Einstiegsprompt |
-| `project_two_env_server_architecture.md` | §3.1 Zwei-Umgebungen, §13 CI/CD-Ziel |
+| `project_two_env_server_architecture.md` | §3.1 Zwei-Umgebungen, §14 CI/CD-Ziel |
 | `project_a5_localhost_shutdown.md` | §3.1 A5-Umstellung, §6 Post-A5-Stolperfalle |
 | `project_app_env_label_runtime_title.md` | §7.8 Laufzeit-Konfiguration |
 | `project_umsatzchart_task.md` | §7.1 eine Wahrheitsquelle, §10.1/10.2 recharts |
@@ -506,10 +635,10 @@ gegen den Ground-Truth-Code prüfen → bei Abweichung Code = Wahrheit, Doku akt
 | `scripts/migrate-db.ps1`, `scripts/migrate-db.sh` | §7.5 Migrations-Mechanik |
 | `NAS_SETUP_README.md` | NAS-Setup-Übersicht |
 
-> Diese Kategorie ist bewusst nur referenziert, nicht inhaltlich ausgeführt — die NAS-/Infrastruktur-
-> Ausführungsprinzipien (Compose-Konventionen, Healthcheck-Escaping, `tzdata`, `env_file`, `mysqldump`-
-> Feinheiten) sind in `HANDOVER-NAS-SETUP.md` §9 dokumentiert und werden durch die NAS-Setup-Sitzung
-> ergänzt (governance-konform: Zulieferung als Vorschlag, Einarbeitung auf `main`).
+> Diese Infrastruktur-Prinzipien sind inzwischen **inhaltlich ausgeführt in §13 (NAS-/Infrastruktur-
+> Prinzipien)** — Zulieferung der NAS-Setup-Sitzung, gegen Ground Truth verifiziert und auf `main`
+> eingearbeitet (2026-07-07). Primärquelle bleibt `HANDOVER-NAS-SETUP.md` §9 + die Compose-/Dockerfile-/
+> Skript-Dateien.
 
 ### A.4 Prinzip → Primärquelle → Validierungs-Code (Mapping)
 
@@ -517,7 +646,7 @@ gegen den Ground-Truth-Code prüfen → bei Abweichung Code = Wahrheit, Doku akt
 |---|---|---|---|
 | 1 | Sprache / Code-Qualität | `CLAUDE.md` global §1–4,10 | — |
 | 2 | 3-Agenten-Workflow | `feedback_3agent_workflow.md`; HANDOVER-MAIN §7 | — (Prozess) |
-| 3.1 | Zwei Umgebungen | `project_two_env_server_architecture.md`; `project_a5_localhost_shutdown.md` | Compose-Dateien (nas-setup) |
+| 3.1 | Zwei Umgebungen | `project_two_env_server_architecture.md`; `project_a5_localhost_shutdown.md` | `docker-compose.yml`, `compose.dev.yml`, `deploy-prod.sh`, `deploy-dev.sh` (nas-setup) |
 | 3.2/3.3 | Worktree / Branch | `feedback_worktree_separation.md`; `feedback_main_only_session.md`; `feedback_nas_umzug_branch.md` | `git worktree list`, `git branch -vv` |
 | 4 | Versionierung | `CLAUDE.md` projekt §6 | `.husky/post-commit`, `scripts/increment-version.mjs` |
 | 5 | Deploy / Rollout / Governance | `feedback_deploy_workflow.md`; `feedback_prod_only_via_dev_promotion.md`; `feedback_rollout_manifest.md` | `scripts/generate-rollout-manifest.mjs`; `scripts/deploy-prod.sh` (nas-setup) |
@@ -535,7 +664,8 @@ gegen den Ground-Truth-Code prüfen → bei Abweichung Code = Wahrheit, Doku akt
 | 10 | Lessons Learned | HANDOVER-MAIN §8; `project_*`-Memory | jeweiliger Beleg-Code (§7.x, §10.x) |
 | 11 | Eskalation / Governance | HANDOVER-MAIN §7; `feedback_*` | — |
 | 12 | Werkzeug-Stack | `CLAUDE.md` projekt §1 | `package.json`; Compose/Dockerfile (nas-setup) |
-| 13 | Zielausprägung | `project_two_env_server_architecture.md`; `docs/DEPLOYMENT-BLUEPRINT.md` | — (Zielbild) |
+| 13 | NAS-/Infrastruktur-Prinzipien | `HANDOVER-NAS-SETUP.md` §9; NAS-Setup-Zulieferung | `docker-compose.yml`, `compose.dev.yml`, `Dockerfile`, `scripts/*.sh` (nas-setup) |
+| 14 | Zielausprägung | `project_two_env_server_architecture.md`; `docs/DEPLOYMENT-BLUEPRINT.md` | — (Zielbild) |
 
 ---
 
