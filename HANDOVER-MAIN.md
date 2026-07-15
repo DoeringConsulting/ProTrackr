@@ -2,7 +2,7 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-07-06 · App-Release v2.4.0 (komplett live auf Prod) · origin/main synchron.**
+> **Stand: 2026-07-15 · App-Release v2.5.0 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
 
 ---
@@ -11,9 +11,9 @@
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich). NIE in
   `ProTrackr_developing_path` (= `nas-setup`, NAS-Welt).
-- **Stand:** main-HEAD **v2.4.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
-  App-Release **v2.4.0** — **komplett LIVE AUF PROD (2026-07-06)**. Baum sauber, Drift `0 0`. Alle Workstreams dieser Sitzungsreihe sind
-  **live**:
+- **Stand:** main-HEAD **v2.5.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
+  App-Release **v2.5.0** — **auf main (2026-07-15); NAS-Prod-Rollout offen**. Baum sauber, Drift `0 0`. Die Workstreams bis v2.4.0 sind
+  **live auf Prod**:
   1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — live auf Prod (Prod-Tab-„(DEV)"-Bug behoben).
   2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — live auf Prod.
   3. **Zeitumsatz-Tooltip** (v2.3.3) — **live auf Prod** (im v2.4.0-Rollout).
@@ -23,8 +23,9 @@
 - **Nichts offen, nichts blockiert.** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
   (Prod v2.3.0 → v2.4.0, Image `91e956650dd9`); Migration `0025` auf Dev+Prod angewandt. **Erster
   NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
-- **Offen auf main:** **Dashboard-Backlog (§6.4, User-Auftrag 2026-07-07, noch nicht begonnen — erst planen +
-  Freigabe):** (1) „Berichte"-Kachel zeigt statisch `0`; (2) Umsatzentwicklung-Prognose-Schalter. — Sonst nur
+- **Zuletzt erledigt auf main (v2.5.0, 2026-07-15):** **Dashboard-Backlog (§6.4)** — (1) „Berichte"-Kachel →
+  „Rechnungen" (Anzahl Rechnungsnummern lfd. Jahr); (2) Umsatzentwicklung-**Prognose-Toggle**. Live auf main,
+  **NAS-Prod-Rollout offen** (Manifest `2.5.0.json`, NAS-Chat). — Sonst nur
   der TZ-Restpunkt (Scheduler-Monatstrigger +
   db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
   bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
@@ -195,19 +196,27 @@ zeigen, nie `UTC`.
 - (optional, offen) Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie spezifiziert);
   Label-Überlappung auf schmalen Viewports ggf. `angle={-45} textAnchor="end"`.
 
-### 6.4 Dashboard-Backlog — 🔲 OFFEN (User-Auftrag 2026-07-07)
-**Noch nicht begonnen. Erst planen (Konzept + Rückfragen), dann nach User-Freigabe im 3-Agenten-Workflow.**
-Detail-Notiz: Memory [[project_dashboard_backlog]].
-1. **Dashboard-Kachel „Berichte" zeigt nur `0`.** In `client/src/pages/Dashboard.tsx` (`stats`-Array) ist
-   `value: "0"` **hartkodiert** (`description: "Ausstehend"`, `isLoading:false // statisch`). Ziel: (a) echter
-   Wert statt statisch 0; (b) **klären + beschriften, WELCHE Berichte** gemeint sind (Buchhaltungs-/Kunden-
-   bericht / ausstehende Rechnungen?) — Semantik vorher mit User präzisieren.
-2. **Umsatzentwicklung — Prognose-Schalter.** Button/Toggle im `buildRevenueChart`, der **prognostizierte
-   Umsätze** aus **bereits in der Zukunft hinterlegten Zeiteinträgen** zeigt (die `timeEntries.list`-Query
-   nutzt heute nur `rangeStart..rangeEnd` = Vergangenheit → Zukunftsfenster ergänzen). **Optional:** Kosten-
-   entwicklungs-Prognose aus **historischen Daten** hochgerechnet (Methodik im Konzept festlegen). Beachten:
-   recharts-Fragment-Lesson, `monthlyFinancials.ts` (eine Wahrheitsquelle), kein Datenleck; Prognose optisch
-   abheben (gestrichelt/eigene Farbe).
+### 6.4 Dashboard-Backlog — ✅ ERLEDIGT (v2.5.0, 2026-07-15), live auf main
+**Umgesetzt im 3-Agenten-Workflow (Junior→Senior→QA). Rein clientseitig, KEIN Schema-Change. Detail:
+Memory [[project_dashboard_backlog]].**
+1. **Kachel „Berichte" → „Rechnungen".** `client/src/pages/Dashboard.tsx`: statische `0` ersetzt durch
+   Anzahl der im laufenden Jahr vergebenen Rechnungsnummern (`invoiceNumbers.list({ year })`, existierte
+   bereits), `isLoading` gekoppelt. User-Entscheidung: „Rechnungen dieses Jahr" (Alternative „unbezahlt"
+   hätte Zahlungsstatus-Migration gebraucht — nicht im Datenmodell).
+2. **Umsatzentwicklung — Prognose-Toggle** (nur Einheitliche-Währung-Modus). Umsatz aus real erfassten
+   Zukunfts-Zeiteinträgen (separater konditionaler Query); Kosten-**Run-Rate** (Ø letzte 3 abgeschl. Monate
+   variable + Fixkosten) als eigene Linie UND Netto-Input; Netto via `computeMonthlyTaxSeries` (geteilte
+   Wahrheitsquelle). Neue reine lib `client/src/lib/revenueForecast.ts` + Unit-Test
+   `server/revenueForecast.test.ts` (**ins pre-commit-Gate aufgenommen**, jetzt 3 Suites). Gestrichelt/
+   gedämpft, „heute"-Marker, Methodik-Disclaimer; Serien als Array (Fragment-Lesson), Warschau-Strings,
+   kein Datenleck.
+   - **K1-Lesson (Senior-Blocker, gefixt):** Run-Rate/gleitender Ø braucht ein Query-Fenster, das das
+     Berechnungsfenster VOLL abdeckt. IST-ctx (`rangeStart..rangeEnd`) ließ im 3M-View Monat −3 fehlen →
+     stille `0` → Ø ~1/3 zu niedrig (Verstoß gegen globale Regel §6, Missing-Data-Penalty). Fix: dedizierter
+     Run-Rate-Query über die letzten 3 abgeschlossenen Monate, entkoppelt vom Anzeigezeitraum.
+**Offen:** NAS-Prod-Rollout im **NAS-Chat** via `/nas-rollout` (Manifest `.claude/rollouts/2.5.0.json`,
+`breaking:false`, keine neue Migration). Visuelle e2e-Abnahme in NAS-Dev — Prognose zeigt Zukunftsmonate
+nur, wenn Zeiteinträge in der Zukunft erfasst sind.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
