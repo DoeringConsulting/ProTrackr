@@ -23,7 +23,9 @@ import { aggregateMonthlyTaxResults, computeMonthlyTaxSeries } from "@/lib/taxEn
 import {
   computeMonthlyAmounts,
   computeMonthlyDisplayRevenue,
+  type MonthlyAmountsContext,
 } from "@/lib/monthlyFinancials";
+import { computeVariableRunRateCents } from "@/lib/revenueForecast";
 import {
   createCustomerIdsByDateMap,
   createEntriesById,
@@ -44,12 +46,16 @@ import {
 type CurrencyValueMap = Map<string, number>;
 
 type RevenueChartState = {
-  data: Array<Record<string, string | number>>;
+  data: Array<Record<string, string | number | null>>;
   seriesKeys: string[];
   missingRates: number;
   // Nur der Nettogewinn kann negativ werden (Brutto/Zeit sind Umsätze ≥ 0). Steuert die
   // goldene Null-Referenzlinie: nur zeigen, wenn Verlustwerte sichtbar sind.
   nettoHasNegative: boolean;
+  // Prognose: Label des aktuellen Monats (für die „heute"-ReferenceLine) und ob
+  // überhaupt Prognosemonate angehängt wurden (steuert Forecast-Serien + Marker).
+  todayLabel: string;
+  hasForecast: boolean;
 };
 
 type ProjectChartState = {
@@ -117,6 +123,8 @@ export default function Dashboard() {
   const [showGross, setShowGross] = useState(true);
   const [showNet, setShowNet] = useState(true);
   const [showTime, setShowTime] = useState(false);
+  // Prognose-Toggle: hängt Zukunftsmonate an (nur im Modus „Einheitliche Währung").
+  const [showForecast, setShowForecast] = useState(false);
 
   // One shared date range for all chart sections.
   const now = new Date();
@@ -125,6 +133,18 @@ export default function Dashboard() {
   const rangeStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - (selectedMonths - 1), 1));
   const rangeEnd = currentMonthEnd;
   const selectedPeriodLabel = `${selectedMonths} Monate`;
+
+  // Prognose-Fenster: erster Tag des NÄCHSTEN Monats bis letzter Tag von
+  // (aktueller Monat + selectedMonths). Als String über die lokale now-Instanz
+  // (nie toISOString) — Europe/Warsaw-sicher, analog zu rangeStart/rangeEnd.
+  const forecastStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+  const forecastEnd = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + selectedMonths + 1, 0));
+
+  // Dediziertes Run-Rate-Fenster: die letzten 3 ABGESCHLOSSENEN Monate (Vormonat
+  // zurück), entkoppelt von selectedMonths. Sonst lädt der 3M-View den Monat −3 nicht
+  // und die Kosten-Run-Rate würde ihn als stille 0 mitteln (Missing-Data-Penalty).
+  const runRateStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth() - 3, 1));
+  const runRateEnd = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 0));
 
   const { data: customers, isLoading: customersLoading } = trpc.customers.list.useQuery();
   const { data: timeEntries = [], isLoading: timeEntriesLoading } = trpc.timeEntries.list.useQuery({
@@ -135,14 +155,36 @@ export default function Dashboard() {
     startDate: rangeStart,
     endDate: rangeEnd,
   });
+  // Zukunftsdaten nur laden, wenn die Prognose im Einheitliche-Währung-Modus aktiv ist
+  // (sonst keine Netzwerklast; Chart verhält sich exakt wie bisher).
+  const { data: forecastTimeEntries = [] } = trpc.timeEntries.list.useQuery(
+    { startDate: forecastStart, endDate: forecastEnd },
+    { enabled: showForecast && showUnifiedCurrency },
+  );
+  const { data: forecastExpenses = [] } = trpc.expenses.list.useQuery(
+    { startDate: forecastStart, endDate: forecastEnd },
+    { enabled: showForecast && showUnifiedCurrency },
+  );
+  // Historie der letzten 3 abgeschlossenen Monate — Basis der Kosten-Run-Rate,
+  // unabhängig vom selektierten Ist-Fenster (fixt Unterschätzung im 3M-View).
+  const { data: runRateTimeEntries = [] } = trpc.timeEntries.list.useQuery(
+    { startDate: runRateStart, endDate: runRateEnd },
+    { enabled: showForecast && showUnifiedCurrency },
+  );
+  const { data: runRateExpenses = [] } = trpc.expenses.list.useQuery(
+    { startDate: runRateStart, endDate: runRateEnd },
+    { enabled: showForecast && showUnifiedCurrency },
+  );
   const { data: fixedCosts, isLoading: fixedCostsLoading } = trpc.fixedCosts.list.useQuery();
   const { data: exchangeRates = [], isLoading: exchangeRatesLoading } = trpc.exchangeRatesManagement.list.useQuery({});
+  const { data: invoiceNumbersList = [], isLoading: invoiceNumbersLoading } =
+    trpc.invoiceNumbers.list.useQuery({ year: now.getFullYear() });
 
   // Aggregate-Loading: solange irgendeine der Hauptqueries hydriert, soll das
   // Dashboard Skeletons zeigen statt potenziell missverständliche "0"-Werte.
   // (Tax-Queries werden ausgeklammert, weil sie nur in Charts unten relevant sind.)
   const dashboardLoading =
-    customersLoading || timeEntriesLoading || expensesLoading || fixedCostsLoading || exchangeRatesLoading;
+    customersLoading || timeEntriesLoading || expensesLoading || fixedCostsLoading || exchangeRatesLoading || invoiceNumbersLoading;
   const { data: taxProfile } = trpc.taxSettings.getProfile.useQuery();
   const { data: taxConfig } = trpc.taxSettings.getConfig.useQuery({ year: now.getFullYear() });
   const { data: taxSettings } = trpc.taxSettings.get.useQuery();
@@ -223,6 +265,90 @@ export default function Dashboard() {
     [expenses]
   );
 
+  // Forecast-Detaildaten (sourceCurrency-Anreicherung) exakt nach dem Muster von
+  // timeEntriesDetailed / expensesDetailed — nur mit den Zukunftsdaten.
+  const forecastTimeEntriesDetailed = useMemo(
+    () =>
+      forecastTimeEntries.map((entry) => {
+        const customer = customersById.get(entry.customerId);
+        const sourceCurrency =
+          (entry.entryType === "onsite"
+            ? customer?.onsiteRateCurrency
+            : customer?.remoteRateCurrency) || "EUR";
+        return {
+          ...entry,
+          sourceCurrency: String(sourceCurrency).toUpperCase(),
+        };
+      }),
+    [customersById, forecastTimeEntries]
+  );
+
+  const forecastExpensesDetailed = useMemo(
+    () =>
+      forecastExpenses.map((expense) => ({
+        ...expense,
+        sourceCurrency: String(expense.currency || "EUR").toUpperCase(),
+      })),
+    [forecastExpenses]
+  );
+
+  // Eigene Attribution-Maps für die Zukunft: die Ist-Maps kennen keine
+  // Zukunfts-Time-Entries — sonst liefe die exklusive Reisekosten-Weiterberechnung
+  // der Prognose (timeEntryId-/Datums-Fallback in getExpenseBillingCustomerId) ins
+  // Leere und der Zukunftsumsatz würde unterzählt. Dieselben Shared-Helper.
+  const forecastEntriesById = useMemo(
+    () => createEntriesById(forecastTimeEntries),
+    [forecastTimeEntries]
+  );
+  const forecastCustomerIdsByDate = useMemo(
+    () => createCustomerIdsByDateMap(forecastTimeEntries),
+    [forecastTimeEntries]
+  );
+  const forecastAttributionMaps = useMemo(
+    () => ({ entriesById: forecastEntriesById, customerIdsByDate: forecastCustomerIdsByDate }),
+    [forecastEntriesById, forecastCustomerIdsByDate]
+  );
+
+  // Run-Rate-Historie: gleiche Anreicherung + eigene Attribution wie die Forecast-Daten,
+  // nur über das 3-Monats-Historienfenster (runRateStart..runRateEnd).
+  const runRateTimeEntriesDetailed = useMemo(
+    () =>
+      runRateTimeEntries.map((entry) => {
+        const customer = customersById.get(entry.customerId);
+        const sourceCurrency =
+          (entry.entryType === "onsite"
+            ? customer?.onsiteRateCurrency
+            : customer?.remoteRateCurrency) || "EUR";
+        return {
+          ...entry,
+          sourceCurrency: String(sourceCurrency).toUpperCase(),
+        };
+      }),
+    [customersById, runRateTimeEntries]
+  );
+
+  const runRateExpensesDetailed = useMemo(
+    () =>
+      runRateExpenses.map((expense) => ({
+        ...expense,
+        sourceCurrency: String(expense.currency || "EUR").toUpperCase(),
+      })),
+    [runRateExpenses]
+  );
+
+  const runRateEntriesById = useMemo(
+    () => createEntriesById(runRateTimeEntries),
+    [runRateTimeEntries]
+  );
+  const runRateCustomerIdsByDate = useMemo(
+    () => createCustomerIdsByDateMap(runRateTimeEntries),
+    [runRateTimeEntries]
+  );
+  const runRateAttributionMaps = useMemo(
+    () => ({ entriesById: runRateEntriesById, customerIdsByDate: runRateCustomerIdsByDate }),
+    [runRateEntriesById, runRateCustomerIdsByDate]
+  );
+
   const fixedCostsDetailed = useMemo(
     () =>
       (fixedCosts ?? []).map((cost) => ({
@@ -283,24 +409,32 @@ export default function Dashboard() {
       // Monats-Beträge (PLN, geteilte Wahrheitsquelle) → Steuer-Ergebnis je Monat →
       // netProfit → Zielwährung. ZUS/Zdrowotna-Minima sind PLN-definiert, daher wird
       // in PLN gerechnet und erst danach konvertiert.
+      // Geteilter PLN-Kontext: speist die Ist-Nettolinie UND (wiederverwendet) die
+      // Kosten-Run-Rate der Prognose — eine Wahrheitsquelle, keine Parallel-Logik.
+      const monthlyAmountsCtxPln: MonthlyAmountsContext = {
+        timeEntries: timeEntriesDetailed,
+        expenses: expensesDetailed,
+        customersById,
+        attributionMaps,
+        monthlyFixedCostsCents: monthlyFixedCostsPln,
+        toPln,
+      };
+
       const netTargetByMonth = new Map<string, number>();
       const taxSeries = computeMonthlyTaxSeries({
         startDate: rangeStart,
         endDate: rangeEnd,
-        getMonthlyAmounts: (ms, me) =>
-          computeMonthlyAmounts(ms, me, {
-            timeEntries: timeEntriesDetailed,
-            expenses: expensesDetailed,
-            customersById,
-            attributionMaps,
-            monthlyFixedCostsCents: monthlyFixedCostsPln,
-            toPln,
-          }),
+        getMonthlyAmounts: (ms, me) => computeMonthlyAmounts(ms, me, monthlyAmountsCtxPln),
         profile: mappedTaxProfile,
         config: mappedTaxConfig,
         legacySettings: taxSettings,
       });
+      // Kumulierte Ist-Kosten (variabel + fix, PLN) als Startbasis der kumulierten
+      // Kostenprognose-Linie — so teilt sie dieselbe Zeitachsen-Nulllinie wie
+      // Brutto/Netto (statt im Kumuliert-Modus baseless bei 0 zu starten).
+      let istCostSumPln = 0;
       for (const point of taxSeries) {
+        istCostSumPln += point.amounts.variableCostsCents + point.amounts.fixedCostsCents;
         const netTarget = convertAmountCents(point.result.netProfit, "PLN", targetCurrency, rateMap);
         if (netTarget === null) {
           missingRates += 1;
@@ -322,7 +456,7 @@ export default function Dashboard() {
       let bruttoCum = 0;
       let nettoCum = 0;
       let zeitCum = 0;
-      const data = monthStarts.map((monthStart) => {
+      const data: Array<Record<string, string | number | null>> = monthStarts.map((monthStart) => {
         const { ms, me, ym } = monthBounds(monthStart);
         const rev = computeMonthlyDisplayRevenue(ms, me, displayCtx);
         let bruttoCents = rev.grossCents;
@@ -336,16 +470,189 @@ export default function Dashboard() {
           zeitCents = zeitCum;
           nettoCents = nettoCum;
         }
-        return {
+        const row: Record<string, string | number | null> = {
           month: monthStart.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }),
           brutto: bruttoCents / 100,
           netto: nettoCents / 100,
           zeit: zeitCents / 100,
         };
+        // Ist-Monate tragen leere Prognose-Keys (Anschluss erst am letzten Ist-Monat).
+        if (showForecast) {
+          row.bruttoForecast = null;
+          row.nettoForecast = null;
+          row.zeitForecast = null;
+          row.kostenForecast = null;
+        }
+        return row;
       });
 
-      const nettoHasNegative = data.some((row) => Number(row.netto) < 0);
-      return { data, seriesKeys: ["brutto", "netto", "zeit"], missingRates, nettoHasNegative };
+      // Label des aktuellen Monats (= letzter Ist-Monat) für die „heute"-ReferenceLine.
+      const todayLabel = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("de-DE", {
+        month: "short",
+        year: "2-digit",
+      });
+      let hasForecast = false;
+
+      if (showForecast) {
+        // Prognosemonate von forecastStart..forecastEnd aufzählen (Warsaw-sicher).
+        const forecastMonthStarts: Date[] = [];
+        const fStart = new Date(`${forecastStart}T00:00:00`);
+        const fEnd = new Date(`${forecastEnd}T00:00:00`);
+        if (!Number.isNaN(fStart.getTime()) && !Number.isNaN(fEnd.getTime())) {
+          const cursor = new Date(fStart.getFullYear(), fStart.getMonth(), 1);
+          const endMonth = new Date(fEnd.getFullYear(), fEnd.getMonth(), 1);
+          while (cursor <= endMonth) {
+            forecastMonthStarts.push(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+        }
+
+        // Leere Zukunftsmonate am ENDE abschneiden: ohne erfassten Zeiteintrag gibt es
+        // keine reale Umsatzprognose (wir extrapolieren Umsatz NICHT).
+        const monthHasForecastEntry = (ms: string, me: string): boolean =>
+          forecastTimeEntriesDetailed.some((entry) => isWithinDateRange(entry.date, ms, me));
+        const trimmedForecastMonths = [...forecastMonthStarts];
+        while (trimmedForecastMonths.length > 0) {
+          const { ms, me } = monthBounds(trimmedForecastMonths[trimmedForecastMonths.length - 1]);
+          if (monthHasForecastEntry(ms, me)) break;
+          trimmedForecastMonths.pop();
+        }
+
+        if (trimmedForecastMonths.length > 0) {
+          hasForecast = true;
+
+          // Run-Rate variabler Kosten (PLN, konstant über alle Prognosemonate) aus den
+          // letzten 3 abgeschlossenen Monaten. Eigener ctx über das dedizierte
+          // Run-Rate-Fenster (NICHT der IST-ctx) — sonst fiele im 3M-View der nicht
+          // geladene Monat −3 als stille 0 in den Ø. Fixkosten bleiben konstant.
+          const runRateCtxPln: MonthlyAmountsContext = {
+            timeEntries: runRateTimeEntriesDetailed,
+            expenses: runRateExpensesDetailed,
+            customersById,
+            attributionMaps: runRateAttributionMaps,
+            monthlyFixedCostsCents: monthlyFixedCostsPln,
+            toPln,
+          };
+          const runRateVariablePln = computeVariableRunRateCents(currentMonthStart, 3, runRateCtxPln);
+          const monthlyForecastCostPln = runRateVariablePln + monthlyFixedCostsPln;
+          const monthlyForecastCostTargetRaw = convertAmountCents(
+            monthlyForecastCostPln,
+            "PLN",
+            targetCurrency,
+            rateMap
+          );
+          if (monthlyForecastCostTargetRaw === null) missingRates += 1;
+          const monthlyForecastCostTarget = monthlyForecastCostTargetRaw ?? 0;
+          const istCostSumTarget = convertAmountCents(istCostSumPln, "PLN", targetCurrency, rateMap) ?? 0;
+
+          // Forecast-Kontexte: gleiche Einschluss-Logik, aber Zukunftsdaten + eigene
+          // Attribution (Ist-Maps kennen keine Zukunfts-Time-Entries).
+          const displayCtxForecast = {
+            timeEntries: forecastTimeEntriesDetailed,
+            expenses: forecastExpensesDetailed,
+            customersById,
+            attributionMaps: forecastAttributionMaps,
+            toTarget,
+          };
+          const ctxForecastPln: MonthlyAmountsContext = {
+            timeEntries: forecastTimeEntriesDetailed,
+            expenses: forecastExpensesDetailed,
+            customersById,
+            attributionMaps: forecastAttributionMaps,
+            monthlyFixedCostsCents: monthlyFixedCostsPln,
+            toPln,
+          };
+
+          // Netto-Prognose je Monat: erfasster Zukunftsumsatz − Run-Rate-Kosten → Steuer.
+          // variableCostsCents = Run-Rate (konstant), NICHT die erfassten Zukunftskosten
+          // — Konsistenz mit der Kostenlinie; Pass-Through-RK der Zukunft deckt die Run-Rate ab.
+          const lastForecastMonthEnd = monthBounds(
+            trimmedForecastMonths[trimmedForecastMonths.length - 1]
+          ).me;
+          const forecastTaxSeries = computeMonthlyTaxSeries({
+            startDate: forecastStart,
+            endDate: lastForecastMonthEnd,
+            getMonthlyAmounts: (ms, me) => ({
+              revenueCents: computeMonthlyAmounts(ms, me, ctxForecastPln).revenueCents,
+              variableCostsCents: runRateVariablePln,
+              fixedCostsCents: monthlyFixedCostsPln,
+            }),
+            profile: mappedTaxProfile,
+            config: mappedTaxConfig,
+            legacySettings: taxSettings,
+          });
+          const netForecastByMonth = new Map<string, number>();
+          for (const point of forecastTaxSeries) {
+            const netTarget = convertAmountCents(point.result.netProfit, "PLN", targetCurrency, rateMap);
+            if (netTarget === null) {
+              missingRates += 1;
+              netForecastByMonth.set(point.monthStart.slice(0, 7), 0);
+            } else {
+              netForecastByMonth.set(point.monthStart.slice(0, 7), netTarget);
+            }
+          }
+
+          // Anknüpfpunkt: der letzte Ist-Monat trägt zusätzlich die Prognose-Werte =
+          // seine Ist-Werte, damit die gestrichelten Linien nahtlos ansetzen.
+          const anchorRow = data[data.length - 1];
+          if (anchorRow) {
+            anchorRow.bruttoForecast = anchorRow.brutto;
+            anchorRow.nettoForecast = anchorRow.netto;
+            anchorRow.zeitForecast = anchorRow.zeit;
+            // Kostenlinie hat keine Ist-Entsprechung: Monatsmodus = konstante Run-Rate,
+            // Kumuliert = kumulierte Ist-Kosten als Startpunkt (Zeitachsen-konsistent).
+            anchorRow.kostenForecast =
+              chartMode === "cumulative" ? istCostSumTarget / 100 : monthlyForecastCostTarget / 100;
+          }
+
+          // Prognose-Kumulation vom letzten Ist-Kumulwert fortführen (nicht bei 0 neu).
+          let bruttoForecastCum = bruttoCum;
+          let nettoForecastCum = nettoCum;
+          let zeitForecastCum = zeitCum;
+          let kostenForecastCum = istCostSumTarget;
+          for (const monthStart of trimmedForecastMonths) {
+            const { ms, me, ym } = monthBounds(monthStart);
+            const rev = computeMonthlyDisplayRevenue(ms, me, displayCtxForecast);
+            let bruttoCents = rev.grossCents;
+            let zeitCents = rev.timeCents;
+            let nettoCents = netForecastByMonth.get(ym) ?? 0;
+            let kostenCents = monthlyForecastCostTarget;
+            if (chartMode === "cumulative") {
+              bruttoForecastCum += bruttoCents;
+              zeitForecastCum += zeitCents;
+              nettoForecastCum += nettoCents;
+              kostenForecastCum += kostenCents;
+              bruttoCents = bruttoForecastCum;
+              zeitCents = zeitForecastCum;
+              nettoCents = nettoForecastCum;
+              kostenCents = kostenForecastCum;
+            }
+            data.push({
+              month: monthStart.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }),
+              brutto: null,
+              netto: null,
+              zeit: null,
+              bruttoForecast: bruttoCents / 100,
+              nettoForecast: nettoCents / 100,
+              zeitForecast: zeitCents / 100,
+              kostenForecast: kostenCents / 100,
+            });
+          }
+        }
+      }
+
+      // Verlustwerte auch in der Prognose berücksichtigen (steuert die goldene Null-Linie).
+      const nettoHasNegative = data.some(
+        (row) => Number(row.netto) < 0 || Number(row.nettoForecast) < 0
+      );
+      return {
+        data,
+        seriesKeys: ["brutto", "netto", "zeit"],
+        missingRates,
+        nettoHasNegative,
+        todayLabel,
+        hasForecast,
+      };
     }
 
     const totalsByMonthCurrency = new Map<string, CurrencyValueMap>();
@@ -379,7 +686,9 @@ export default function Dashboard() {
       return row;
     });
 
-    return { data, seriesKeys, missingRates: 0, nettoHasNegative: false };
+    // Prognose nur im Einheitliche-Währung-Modus; hier stets aus (todayLabel unbenutzt,
+    // weil die ReferenceLine auf showUnifiedCurrency && hasForecast gated ist).
+    return { data, seriesKeys, missingRates: 0, nettoHasNegative: false, todayLabel: "", hasForecast: false };
   };
 
   const buildProjectChart = (): ProjectChartState => {
@@ -764,12 +1073,12 @@ export default function Dashboard() {
       isLoading: expensesLoading || exchangeRatesLoading,
     },
     {
-      title: "Berichte",
-      value: "0",
+      title: "Rechnungen",
+      value: invoiceNumbersList.length,
       icon: FileBarChart,
-      description: "Ausstehend",
+      description: String(now.getFullYear()),
       color: "text-primary",
-      isLoading: false, // statisch
+      isLoading: invoiceNumbersLoading,
     },
   ];
 
@@ -1003,15 +1312,51 @@ export default function Dashboard() {
                         </p>
                       </TooltipContent>
                     </UiTooltip>
+                    {/* Prognose: hängt Zukunftsmonate an (gestrichelt, „heute"-Marker). */}
+                    <Button
+                      variant={showForecast ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowForecast((v) => !v)}
+                    >
+                      Prognose
+                    </Button>
+                    {/* Pflicht-Hinweis zur Prognose-Methodik (nur sichtbar wenn aktiv). */}
+                    {showForecast && (
+                      <UiTooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label="Wie ist die Prognose zu verstehen?"
+                          >
+                            <Info className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>
+                            <strong>Prognose:</strong> Umsätze stammen aus bereits erfassten
+                            zukünftigen Zeiteinträgen. Kosten und Nettogewinn sind eine Schätzung
+                            (Run-Rate = Ø der letzten 3 Monate). Sind künftige Reise-/Kostenpositionen
+                            noch nicht erfasst, fällt der prognostizierte Nettogewinn tendenziell zu
+                            optimistisch aus.
+                          </p>
+                        </TooltipContent>
+                      </UiTooltip>
+                    )}
                   </div>
                 </div>
               )}
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={revenueChart.data}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  {/* interval={0} erzwingt ALLE 12 Monatslabels (recharts-Default dünnt sonst
-                      aus und lässt z.B. „Juni" weg); kleinere Schrift gegen Überlappung. */}
-                  <XAxis dataKey="month" interval={0} tick={{ fontSize: 11 }} />
+                  {/* interval={0} erzwingt ALLE Monatslabels (recharts-Default dünnt sonst aus).
+                      Bei aktiver Prognose (mehr Monate) auf preserveStartEnd, sonst überlappen
+                      die Labels; kleinere Schrift gegen Überlappung. */}
+                  <XAxis
+                    dataKey="month"
+                    interval={showForecast && revenueChart.hasForecast ? "preserveStartEnd" : 0}
+                    tick={{ fontSize: 11 }}
+                  />
                   {/* Untergrenze min(0, dataMin): 0-Basislinie bei reinen Umsätzen, aber
                       negative Nettomonate (Verlust, z.B. Anlaufmonate mit Fixkosten) werden
                       NICHT auf 0 abgeschnitten (recharts-Default wäre [0, 'auto']). */}
@@ -1036,6 +1381,16 @@ export default function Dashboard() {
                     // UND der gelben Netto-Linie ab. Nur wenn Verlustwerte sichtbar sind (sonst
                     // ist 0 der Achsenboden). Direktes LineChart-Kind (nicht im Fragment!).
                     <ReferenceLine y={0} stroke="#b98847" strokeWidth={1.5} strokeDasharray="6 4" />
+                  )}
+                  {/* Vertikaler „heute"-Marker an der Grenze Ist/Prognose. Direktes
+                      LineChart-Kind (nicht im Serien-Array). */}
+                  {showUnifiedCurrency && showForecast && revenueChart.hasForecast && (
+                    <ReferenceLine
+                      x={revenueChart.todayLabel}
+                      stroke="#9aa6b2"
+                      strokeDasharray="3 3"
+                      label={{ value: "heute", position: "top", fontSize: 11, fill: "#6b7280" }}
+                    />
                   )}
                   <Tooltip
                     formatter={(value, name) => {
@@ -1082,6 +1437,66 @@ export default function Dashboard() {
                           strokeDasharray="5 5"
                           name="Zeitumsatz"
                           dot={false}
+                        />
+                      ),
+                      // Prognose-Linien: gestrichelt + gedämpft, setzen am letzten Ist-Monat
+                      // an (connectNulls=false überspringt die leeren Ist-Monate davor).
+                      showForecast && revenueChart.hasForecast && showGross && (
+                        <Line
+                          key="bruttoForecast"
+                          type="monotone"
+                          dataKey="bruttoForecast"
+                          stroke="#048998"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          name="Bruttoumsatz (Prognose)"
+                          dot={false}
+                          connectNulls={false}
+                          strokeOpacity={0.55}
+                        />
+                      ),
+                      showForecast && revenueChart.hasForecast && showNet && (
+                        <Line
+                          key="nettoForecast"
+                          type="monotone"
+                          dataKey="nettoForecast"
+                          stroke="#eda100"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          name="Nettogewinn (Prognose)"
+                          dot={false}
+                          connectNulls={false}
+                          strokeOpacity={0.55}
+                        />
+                      ),
+                      showForecast && revenueChart.hasForecast && showTime && (
+                        <Line
+                          key="zeitForecast"
+                          type="monotone"
+                          dataKey="zeitForecast"
+                          stroke="#898781"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          name="Zeitumsatz (Prognose)"
+                          dot={false}
+                          connectNulls={false}
+                          strokeOpacity={0.55}
+                        />
+                      ),
+                      // Kostenlinie existiert NUR als Prognose (keine Ist-Entsprechung),
+                      // daher unabhängig von showGross/showNet.
+                      showForecast && revenueChart.hasForecast && (
+                        <Line
+                          key="kostenForecast"
+                          type="monotone"
+                          dataKey="kostenForecast"
+                          stroke="#b98847"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          name="Kosten (Prognose)"
+                          dot={false}
+                          connectNulls={false}
+                          strokeOpacity={0.55}
                         />
                       ),
                     ]

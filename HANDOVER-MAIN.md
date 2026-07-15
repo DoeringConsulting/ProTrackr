@@ -2,7 +2,7 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-07-06 · Release v2.3.3 · origin/main synchron.**
+> **Stand: 2026-07-06 · App-Release v2.4.0 (komplett live auf Prod) · origin/main synchron.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
 
 ---
@@ -11,19 +11,25 @@
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich). NIE in
   `ProTrackr_developing_path` (= `nas-setup`, NAS-Welt).
-- **Stand:** **v2.3.3** auf main + origin, Baum sauber, Drift `0 0`. Die großen Workstreams
-  dieser Sitzungsreihe sind **abgeschlossen**:
-  1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — **main + NAS live auf Prod**. Behebt den
-     Prod-Tab-„(DEV)"-Bug (Titel zur Laufzeit statt build-time).
-  2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — **LIVE AUF PROD** (NAS-Dev-Abnahme
-     bestanden, bit-identisch promotet: Prod v2.1.28 → v2.3.0, Image `af97e6786e65`).
-  3. **Zeitumsatz-Tooltip** (v2.3.3) — **main fertig** (Info-Icon am Zeitumsatz-Toggle erklärt
-     die Linie); **NAS-Dev-Abnahme + Prod-Promotion stehen aus** (Prod = v2.3.0).
-- **Nichts blockiert auf main.** Nächste NAS-Aktion: **v2.3.3 auf Dev nachziehen → Prod-Promotion**
-  (NAS-Chat, §6.1).
-- **Offen auf main (§6.2, niedrig-prio):** (a) TZ-Kohärenz (`scheduler.ts` + `Reports.tsx`
-  Default-Monatsgrenzen auf `warsawDateKey`); (b) persistenter MySQL-Session-Store (P3/M1 — DB-
-  Migration + Dependency, Vorgehen mit User klären).
+- **Stand:** main-HEAD **v2.4.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
+  App-Release **v2.4.0** — **komplett LIVE AUF PROD (2026-07-06)**. Baum sauber, Drift `0 0`. Alle Workstreams dieser Sitzungsreihe sind
+  **live**:
+  1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — live auf Prod (Prod-Tab-„(DEV)"-Bug behoben).
+  2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — live auf Prod.
+  3. **Zeitumsatz-Tooltip** (v2.3.3) — **live auf Prod** (im v2.4.0-Rollout).
+  4. **§6.2-Aufräumaufgaben — live auf Prod (v2.4.0):** (a) **TZ-Kohärenz** (v2.3.5, `warsawDateKey`);
+     (b) **persistenter MySQL-Session-Store** (v2.4.0, `express-mysql-session` + Migration
+     `0025_sessions`) — Abnahme bestanden (Login überlebt Container-Restart).
+- **Nichts offen, nichts blockiert.** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
+  (Prod v2.3.0 → v2.4.0, Image `91e956650dd9`); Migration `0025` auf Dev+Prod angewandt. **Erster
+  NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
+- **Offen auf main:** **Dashboard-Backlog (§6.4, User-Auftrag 2026-07-07, noch nicht begonnen — erst planen +
+  Freigabe):** (1) „Berichte"-Kachel zeigt statisch `0`; (2) Umsatzentwicklung-Prognose-Schalter. — Sonst nur
+  der TZ-Restpunkt (Scheduler-Monatstrigger +
+  db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
+  bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
+  NICHT priorisiert): `sessionStore.close()` beim Shutdown (Prozess terminiert ohnehin); optionales
+  CHF-Y-Achsen-Symbol im Umsatzchart (§6.3).
 - **Deploy (nach A5):** committen + `git push origin main` (Hook bumpt Version + baut `dist/`,
   **kein** Restart) → **Rollout-Manifest** erzeugen + committen + **Tag** `v<version>`; NAS-Deploy
   getrennt im **NAS-Chat** via `/nas-rollout`. Siehe §3, [[feedback_deploy_workflow]],
@@ -33,14 +39,14 @@
 
 1. **Branch/Worktree prüfen:** `cd C:\Projects\ProTrackr_main` → `git branch --show-current`
    == `main`; `git fetch origin`; Drift `git rev-list --left-right --count origin/main...HEAD`
-   == `0 0`; HEAD-Version == 2.3.3 oder neuer.
+   == `0 0`; HEAD-Version == 2.4.0 oder neuer.
 2. **Memory lesen:** `MEMORY.md` + verlinkte Einträge, v.a. [[feedback_deploy_workflow]]
    (nach A5!), [[feedback_worktree_separation]], [[feedback_3agent_workflow]],
    [[feedback_prod_only_via_dev_promotion]], [[project_umsatzchart_task]],
    [[project_app_env_label_runtime_title]].
 3. **Dieses Handover lesen.**
-4. **Nächster Schritt:** siehe §6. Kein main-Blocker; ggf. auf NAS-Dev-Abnahme des Umsatzcharts
-   warten, danach §6.2 (niedrig-prio) anbieten.
+4. **Nächster Schritt:** derzeit **keiner offen** — v2.4.0 ist komplett live auf Prod (§6.1), §6.2 (a+b)
+   erledigt, Zeitzonen-Anker bestätigt. Neue App-Themen wie gewohnt hier auf `main` starten (§3).
 
 ## 2. PROJEKT-KONTEXT (Stack)
 
@@ -52,11 +58,12 @@ ProTrackr = Projekt-/Abrechnungs-/Reisekosten-Management (DÖRING Consulting, Ma
   Entry `server/_core/index.ts`; Static/SPA-Serving `server/_core/vite.ts` (`serveStatic` prod,
   `setupVite` dev).
 - **DB:** MySQL via Drizzle (`drizzle/schema.ts`, Migrationen `drizzle/*.sql`, aktuell bis
-  `0024_expenses_customer_id.sql`). **Geld = int Cents**; Wechselkurse = Zehntausendstel;
+  `0025_sessions.sql`). **Geld = int Cents**; Wechselkurse = Zehntausendstel;
   `manDays` = Tausendstel; `hours` = Minuten. **Zeitzone Europe/Warsaw** — Monatsgrenzen als
   String bauen (`${y}-${mm}-01`), NIE `toISOString` (kippt auf Vortag).
-- **Tooling:** pnpm; husky. **pre-commit** = `tsc` + `vitest` (2 Dateien: `taxEnginePl.test.ts`
-  + `uiValidationReportsDashboard.test.ts`; braucht DB nur für den Fixture-Cleanup). **post-commit**
+- **Tooling:** pnpm; husky. **pre-commit** = NUR `vitest` (2 Dateien: `taxEnginePl.test.ts`
+  + `uiValidationReportsDashboard.test.ts`; braucht DB nur für den Fixture-Cleanup → `SKIP_TEST_CLEANUP=1`).
+  **`tsc` läuft NICHT im Hook** — separat `npx tsc --noEmit` vor Commits. **post-commit**
   = Auto-Version-Bump (conventional commits: `feat!`/BREAKING→major, `feat`→minor, sonst→patch)
   + Production-Build + `git --amend` (**kein Restart**, A5).
 
@@ -82,7 +89,7 @@ git commit …`** (client-only/Nicht-DB-Fixes; Tests laufen normal) ODER `Start-
 (Admin-PowerShell) vor Commits mit DB-Fixtures. Nach Push ggf. `git checkout -- client/public/sw.js`
 (Build-Artefakt-Drift). Drift danach `0 0` prüfen.
 
-## 4. AKTUELLER STAND (v2.3.0)
+## 4. AKTUELLER STAND (v2.4.0, komplett live auf Prod)
 
 **Frühere Basis:** task_bba37780 (Reisekosten-Berichte) komplett + LIVE auf Prod (v2.1.22).
 Fehler #1/#2/#3, Backlog P1/P2/P4/P5, A5-localhost-Shutdown, NAS-Rollout-Tooling + Blueprint —
@@ -98,7 +105,7 @@ alles erledigt.
   `computeAppTitle` in `main.tsx`. `VITE_APP_TITLE` (T3a) entfernt. Env-Werte: NAS setzt
   `APP_ENV_LABEL=DEV` in `compose.dev.yml`, Prod unset. Referenz [[project_app_env_label_runtime_title]].
 
-### 4.2 Umsatzentwicklung-Chart — ✅ LIVE AUF PROD (v2.3.0) + Zeitumsatz-Tooltip (v2.3.3, main)
+### 4.2 Umsatzentwicklung-Chart — ✅ LIVE AUF PROD (Chart v2.3.0 + Zeitumsatz-Tooltip v2.3.3, via v2.4.0)
 Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Datenleck**
 (Dashboard = user-internal; Netto/Provision dürfen dort).
 - **Geteilte Wahrheitsquelle** `client/src/lib/monthlyFinancials.ts` (`computeMonthlyAmounts`,
@@ -121,14 +128,14 @@ Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Dat
   - `8cbe589` **v2.3.3** — **Zeitumsatz-Tooltip:** lucide-`Info`-Icon am Zeitumsatz-Toggle,
     Radix-Tooltip als `UiTooltip` aliased (recharts exportiert ebenfalls `Tooltip`). Erklärt:
     Zeitumsatz = Umsatz aus Arbeitszeit ohne RK, Abstand zur Brutto-Linie = exklusive RK.
-    Fragment-Lesson beachtet (Serien-Array unangetastet). Nur main, Prod-Promotion offen.
+    Fragment-Lesson beachtet (Serien-Array unangetastet). **LIVE AUF PROD** (im v2.4.0-Rollout).
 - Referenz [[project_umsatzchart_task]] (inkl. recharts-Fragment-Lesson).
 
 ### 4.3 Version/Prod-Stand
-- **origin/main = v2.3.3.** Manifeste vorhanden: `2.1.28`, `2.2.0`, `2.2.2`, `2.2.3`, `2.3.0`, `2.3.3`.
-- **PROD (NAS :9443) = v2.3.0** (APP_ENV_LABEL + Umsatzchart live, Image `af97e6786e65`). Der
-  **Zeitumsatz-Tooltip (v2.3.3) ist noch NICHT auf Prod** — NAS-Dev-Abnahme + Promotion stehen
-  aus (Prod springt dann v2.3.0 → v2.3.3).
+- **origin/main-HEAD = v2.4.x** (laufende Doku-Bumps); letzter **App-Release = v2.4.0**. Manifeste: `2.1.28`,
+  `2.2.0`, `2.2.2`, `2.2.3`, `2.3.0`, `2.3.3`, `2.3.5`, `2.4.0`.
+- **PROD (NAS :9443) = v2.4.0** (2026-07-06, Image `91e956650dd9`) — Tooltip + TZ-Fix + Session-Store
+  live; Migration `0025` angewandt; APP_ENV_LABEL-Titel-Garantie intakt. **Prod + Dev beide v2.4.0, healthy.**
 
 ## 5. VERHÄLTNIS ZUR NAS-WELT
 
@@ -141,26 +148,42 @@ Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Dat
 
 ## 6. OFFENE PUNKTE / NÄCHSTE SCHRITTE
 
-### 6.1 NAS-Nachzug Zeitumsatz-Tooltip v2.3.3 (NAS-Chat, nicht hier)
-Umsatzchart v2.3.0 ist bereits **live auf Prod** (Image `af97e6786e65`). Offen ist nur noch der
-**Zeitumsatz-Tooltip (v2.3.3)**: im NAS-Chat `/nas-rollout` auf **Dev** mit **Manifest `2.3.3`**
-(Commit `8cbe589`, Tag `v2.3.3`). Abnahme auf `:9444` (unified/PLN): Info-Icon rechts neben dem
-Zeitumsatz-Toggle, Hover/Tab-Fokus zeigt den Erklärtext; Chart-Linien unverändert gerendert.
-**Danach Prod-Promotion** (Prod v2.3.0 → v2.3.3). Reine Client-UI, keine Migration.
-Auf der **main-Seite ist hierfür nichts zu tun** außer ggf. Nachbesserungen aus der Abnahme.
+### 6.1 NAS-Nachzug v2.4.0 — ✅ ERLEDIGT, LIVE AUF PROD (2026-07-06)
+v2.4.0 ist über den Dev-Loop ausgerollt und **bit-identisch nach Prod promotet** (Prod v2.3.0 → v2.4.0,
+Image `91e956650dd9`). Enthält kumulativ: Zeitumsatz-Tooltip (v2.3.3), TZ-Kohärenz (v2.3.5) und den
+persistenten Session-Store (v2.4.0). **Erster NAS-Rollout mit Schema-Change:** Migration
+`0025_sessions.sql` auf Dev **und** Prod angewandt (Backup → Migration → verify → deploy); neue
+Dependency `express-mysql-session` beim Image-Rebuild gezogen (`createDatabaseTable:false` → Tabelle
+war vor App-Start da). Dev-Abnahme (:9444) grün: Tooltip da, Reports-Default-Monat korrekt,
+**Login → Container-Restart → Session überlebt**. Prod + Dev beide v2.4.0, healthy. **Nichts offen.**
 
-### 6.2 Niedrig-prio (main/App-Code) — nach dem NAS-Nachzug
-- **(a) TZ-Kohärenz:** `Reports.tsx` Default-Monatsgrenzen (`getTodayLocalDate`/`startDate`/
-  `endDate`) sind browser-lokal; `server/scheduler.ts` (~Z.32-33) baut die `expenses`-Monatsgrenzen
-  der Monatsend-Notification via `toISOString().slice(0,10)` (UTC). Beide unkritisch für Warschau-
-  Nutzer, aber Kandidaten für das schon vorhandene `shared/dateStichtag.ts` `warsawDateKey()`.
-  Klein + risikoarm → eigener kleiner 3-Agenten-Commit.
-- **(b) P3/M1 MySQL-Session-Store:** `server/_core/index.ts` (~Z.66) nutzt `MemoryStore`
-  (Sessions gehen bei Container-Restart/Deploy verloren). Umstellen auf `express-mysql-session`;
-  dedizierter mysql2-Pool aus `DATABASE_URL`; `sessions`-Tabelle per echter Migration
-  `0025_sessions.sql` + `schema.ts`; Sessions NICHT ins Backup. Neue Dependency → NAS-Container-
-  Build muss sie ziehen; Laufzeit-Test nur in NAS-Dev. **Vor Beginn Vorgehen/Test-Strategie mit
-  User klären** (unkritisch, Single-User; Login-Verlust pro Deploy zumutbar).
+**Zeitzonen-Anker — ✅ BESTÄTIGT ERLEDIGT (User-Check 2026-07-06, kein Handlungsbedarf):** Beide
+App-Container laufen bereits auf **Europe/Warsaw**: `docker exec protrackr-app date` **und**
+`docker exec protrackr-app-dev date` → beide **`CEST`** (22:34 = UTC+2, Warschauer Sommerzeit). Unraid
+reicht die Host-TZ hier durch (typ. `/etc/localtime`-Mount). Damit steht der gesamte server-lokale
+Zeit-Code auf korrektem Anker: `server/db.ts` Range-Filter (`localDayStartUtc` u.a., produktiv im
+Reisekostenbericht) UND `server/scheduler.ts` Monats-Trigger (`isLastDayOfMonth`, `now`). Der v2.3.5-Fix
+hatte bereits die *immer*-UTC-Stellen (`toISOString`) TZ-fest gemacht. **Nichts zu tun.** Einzige künftige
+Kontrolle: bei Compose-/Container-Änderungen darf `docker exec <app-container> date` **`CEST`/`CET`**
+zeigen, nie `UTC`.
+
+### 6.2 Niedrig-prio (main/App-Code) — ✅ ERLEDIGT (v2.3.5 + v2.4.0)
+- **(a) TZ-Kohärenz — ✅ v2.3.5 (Commit `cd69da1`, Tag `v2.3.5`).** `server/scheduler.ts`
+  `checkMonthEnd`: `expenses`-Monatsgrenzen via `warsawDateKey(firstDay/lastDay)` statt
+  `toISOString().slice(0,10)` (UTC-Kippung behoben). `Reports.tsx`: Default `startDate`/`endDate`
+  über `warsawDateKey()` statt browser-lokalem `getTodayLocalDate` (entfernt). Senior-APPROVE (beide
+  Server-TZ durchgerechnet), 26 Tests grün. **Restpunkt → ✅ abgesichert (2026-07-06):** der Scheduler-
+  *Monatstrigger* (`now`, `isLastDayOfMonth`) + die `db.ts`-Range-Filter bleiben server-lokal →
+  Anker = **Container-TZ Europe/Warsaw, per User-Check bestätigt** (beide Container `CEST`, §6.1), NICHT
+  via Code-Umbau (db.ts bericht-kritisch; Container-TZ deckt Scheduler + db.ts gemeinsam).
+- **(b) P3/M1 MySQL-Session-Store — ✅ v2.4.0 (Commit `328aa38`, Tag `v2.4.0`), main-Teil.**
+  `express-mysql-session` (+ `@types`) als Dependency; `server/_core/index.ts` nutzt `MySQLStore`
+  mit dediziertem `mysql2/promise`-Pool aus `DATABASE_URL` (`createDatabaseTable:false`); Tabelle via
+  Migration `0025_sessions.sql` + `schema.ts`. Ohne `DATABASE_URL` Fallback auf In-Memory (lokales
+  Tooling). `sessions` bewusst NICHT im Backup. Cast überbrückt @types-Divergenz (Lib nutzt intern
+  `mysql2/promise`, laufzeit-verifiziert). tsc + esbuild + 26 Tests grün, Senior-APPROVE.
+  **✅ Live auf Prod:** Laufzeit-Beweis (Session überlebt Restart) bestanden, Migration `0025` auf
+  Dev+Prod angewandt (§6.1).
 
 ### 6.3 Umsatzchart-Nachpolituren
 - **Zeitumsatz-Tooltip — ✅ ERLEDIGT (v2.3.3, Commit `8cbe589`).** Info-Icon (lucide `Info`) am
@@ -168,9 +191,23 @@ Auf der **main-Seite ist hierfür nichts zu tun** außer ggf. Nachbesserungen au
   (recharts-`Tooltip`-Namenskonflikt). Text: Zeitumsatz = Umsatz aus abgerechneter Arbeitszeit
   ohne durchgereichte RK, Abstand zur Bruttoumsatz-Linie = exklusive RK (deckt sich mit
   `computeMonthlyDisplayRevenue`: `grossCents − timeCents = travelCents`). 3-Agenten-Loop grün
-  (tsc/pre-commit-Tests/Build), Fragment-Lesson beachtet. NAS-Dev-Abnahme + Prod-Promotion §6.1.
+  (tsc/pre-commit-Tests/Build), Fragment-Lesson beachtet. ✅ Live auf Prod (v2.4.0-Rollout, §6.1).
 - (optional, offen) Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie spezifiziert);
   Label-Überlappung auf schmalen Viewports ggf. `angle={-45} textAnchor="end"`.
+
+### 6.4 Dashboard-Backlog — 🔲 OFFEN (User-Auftrag 2026-07-07)
+**Noch nicht begonnen. Erst planen (Konzept + Rückfragen), dann nach User-Freigabe im 3-Agenten-Workflow.**
+Detail-Notiz: Memory [[project_dashboard_backlog]].
+1. **Dashboard-Kachel „Berichte" zeigt nur `0`.** In `client/src/pages/Dashboard.tsx` (`stats`-Array) ist
+   `value: "0"` **hartkodiert** (`description: "Ausstehend"`, `isLoading:false // statisch`). Ziel: (a) echter
+   Wert statt statisch 0; (b) **klären + beschriften, WELCHE Berichte** gemeint sind (Buchhaltungs-/Kunden-
+   bericht / ausstehende Rechnungen?) — Semantik vorher mit User präzisieren.
+2. **Umsatzentwicklung — Prognose-Schalter.** Button/Toggle im `buildRevenueChart`, der **prognostizierte
+   Umsätze** aus **bereits in der Zukunft hinterlegten Zeiteinträgen** zeigt (die `timeEntries.list`-Query
+   nutzt heute nur `rangeStart..rangeEnd` = Vergangenheit → Zukunftsfenster ergänzen). **Optional:** Kosten-
+   entwicklungs-Prognose aus **historischen Daten** hochgerechnet (Methodik im Konzept festlegen). Beachten:
+   recharts-Fragment-Lesson, `monthlyFinancials.ts` (eine Wahrheitsquelle), kein Datenleck; Prognose optisch
+   abheben (gestrichelt/eigene Farbe).
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
@@ -205,12 +242,16 @@ Auf der **main-Seite ist hierfür nichts zu tun** außer ggf. Nachbesserungen au
 
 ## 9. ROLLBACK-/SICHERHEITSPUNKTE
 
-- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main` = v2.3.3. Tags: `v2.1.28`,
-  `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
-- Umsatzchart v2.0→v2.3.0 waren reine Client-/UI-Änderungen (kein Schema-Change seit 0024);
-  Tests grün. **P3 (Session-Store) wird das ändern** (DB-`sessions`-Tabelle + Dependency) →
-  dort vor Umsetzung Backup/Test-Strategie festlegen.
-- PROD (NAS :9443) = v2.3.0 (APP_ENV_LABEL + Umsatzchart live); der Tooltip v2.3.3 folgt via NAS-Chat.
+- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main-HEAD` = v2.4.x (App-Release v2.4.0).
+  Tags: `v2.1.28`, `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `v2.3.5`, `v2.4.0`; NAS-Prod-Rollout-
+  Tags `nas-rollout/2.4.0` (2026-07-06), `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
+- **v2.4.0 war der ERSTE NAS-Rollout mit Schema-Change seit 0024** (live auf Prod): `sessions`-Tabelle
+  (Migration `0025`) + neue Runtime-Dependency `express-mysql-session`. **Rollback (falls je nötig):**
+  Migration `0025` ist additiv (`CREATE TABLE IF NOT EXISTS`, keine bestehende Tabelle berührt) →
+  Roll-back = altes Image (NAS hält 2 Generationen vor: v2.4.0 + v2.3.0); die Tabelle kann bleiben
+  (alter Code ignoriert sie). `sessions` ist NICHT im Backup.
+- **PROD (NAS :9443) = v2.4.0** (2026-07-06, Image `91e956650dd9`) — alles live: APP_ENV_LABEL,
+  Umsatzchart, Tooltip, TZ-Fix, Session-Store. Dev + Prod beide v2.4.0, healthy.
 
 ---
 
