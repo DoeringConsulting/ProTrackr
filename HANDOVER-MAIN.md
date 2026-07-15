@@ -23,7 +23,9 @@
 - **Nichts offen, nichts blockiert.** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
   (Prod v2.3.0 → v2.4.0, Image `91e956650dd9`); Migration `0025` auf Dev+Prod angewandt. **Erster
   NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
-- **Offen auf main:** derzeit **nichts** Priorisiertes. Der TZ-Restpunkt (Scheduler-Monatstrigger +
+- **Offen auf main:** **Dashboard-Backlog (§6.4, User-Auftrag 2026-07-07, noch nicht begonnen — erst planen +
+  Freigabe):** (1) „Berichte"-Kachel zeigt statisch `0`; (2) Umsatzentwicklung-Prognose-Schalter. — Sonst nur
+  der TZ-Restpunkt (Scheduler-Monatstrigger +
   db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
   bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
   NICHT priorisiert): `sessionStore.close()` beim Shutdown (Prozess terminiert ohnehin); optionales
@@ -192,6 +194,20 @@ zeigen, nie `UTC`.
   (tsc/pre-commit-Tests/Build), Fragment-Lesson beachtet. ✅ Live auf Prod (v2.4.0-Rollout, §6.1).
 - (optional, offen) Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie spezifiziert);
   Label-Überlappung auf schmalen Viewports ggf. `angle={-45} textAnchor="end"`.
+
+### 6.4 Dashboard-Backlog — 🔲 OFFEN (User-Auftrag 2026-07-07)
+**Noch nicht begonnen. Erst planen (Konzept + Rückfragen), dann nach User-Freigabe im 3-Agenten-Workflow.**
+Detail-Notiz: Memory [[project_dashboard_backlog]].
+1. **Dashboard-Kachel „Berichte" zeigt nur `0`.** In `client/src/pages/Dashboard.tsx` (`stats`-Array) ist
+   `value: "0"` **hartkodiert** (`description: "Ausstehend"`, `isLoading:false // statisch`). Ziel: (a) echter
+   Wert statt statisch 0; (b) **klären + beschriften, WELCHE Berichte** gemeint sind (Buchhaltungs-/Kunden-
+   bericht / ausstehende Rechnungen?) — Semantik vorher mit User präzisieren.
+2. **Umsatzentwicklung — Prognose-Schalter.** Button/Toggle im `buildRevenueChart`, der **prognostizierte
+   Umsätze** aus **bereits in der Zukunft hinterlegten Zeiteinträgen** zeigt (die `timeEntries.list`-Query
+   nutzt heute nur `rangeStart..rangeEnd` = Vergangenheit → Zukunftsfenster ergänzen). **Optional:** Kosten-
+   entwicklungs-Prognose aus **historischen Daten** hochgerechnet (Methodik im Konzept festlegen). Beachten:
+   recharts-Fragment-Lesson, `monthlyFinancials.ts` (eine Wahrheitsquelle), kein Datenleck; Prognose optisch
+   abheben (gestrichelt/eigene Farbe).
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
