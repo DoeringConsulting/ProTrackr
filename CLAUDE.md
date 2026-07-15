@@ -46,7 +46,7 @@ Desktop-Shortcut `C:\Users\adoer\Desktop\ProTrackr.lnk` zeigt auf `…ProTrackr_
 
 ## 4. Build- & Deploy-Workflow
 
-1. `git commit` auf `main` → `pre-commit` Hook führt Tests aus (`server/taxEnginePl.test.ts`, `server/uiValidationReportsDashboard.test.ts`).
+1. `git commit` auf `main` → `pre-commit` Hook führt Tests aus (`server/taxEnginePl.test.ts`, `server/uiValidationReportsDashboard.test.ts`, `server/revenueForecast.test.ts`).
 2. Commit wird erstellt.
 3. `post-commit` Hook **gated auf `main`**: liest Commit-Message, leitet Bump-Level ab (siehe §6), bumpt Version, baut `dist/`, `git commit --amend --no-edit --no-verify` foldet die Versionsdateien ein, `protrackr.ps1 Restart` als detached Process.
 4. Nach manuellem `git push`: Hash-Drift möglich, falls Hook nochmal amended hat. Auflösen mit `git reset --hard origin/main` (Inhalt war identisch).

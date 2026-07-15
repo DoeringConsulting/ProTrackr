@@ -5,4 +5,4 @@
 # version-bump hook that runs earlier cannot include its own changes in the
 # resulting commit.
 echo "[pre-commit] Unit-Tests werden ausgeführt..."
-npx vitest run server/taxEnginePl.test.ts server/uiValidationReportsDashboard.test.ts
+npx vitest run server/taxEnginePl.test.ts server/uiValidationReportsDashboard.test.ts server/revenueForecast.test.ts
