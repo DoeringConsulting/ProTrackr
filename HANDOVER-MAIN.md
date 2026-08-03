@@ -2,7 +2,7 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-07-15 · App-Release v2.5.0 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
+> **Stand: 2026-08-03 · App-Release v2.5.2 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
 
 ---
@@ -23,9 +23,10 @@
 - **Nichts offen, nichts blockiert.** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
   (Prod v2.3.0 → v2.4.0, Image `91e956650dd9`); Migration `0025` auf Dev+Prod angewandt. **Erster
   NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
-- **Zuletzt erledigt auf main (v2.5.0, 2026-07-15):** **Dashboard-Backlog (§6.4)** — (1) „Berichte"-Kachel →
-  „Rechnungen" (Anzahl Rechnungsnummern lfd. Jahr); (2) Umsatzentwicklung-**Prognose-Toggle**. Live auf main,
-  **NAS-Prod-Rollout offen** (Manifest `2.5.0.json`, NAS-Chat). — Sonst nur
+- **Zuletzt erledigt auf main:** (a) **v2.5.0** Dashboard-Backlog (§6.4) — „Rechnungen"-Kachel +
+  Umsatzentwicklung-**Prognose-Toggle**; (b) **v2.5.2** (§6.5) **Reisekosten-Zeitraum-Zuordnung vereinheitlicht**
+  (`expense.date` kanonisch — behebt Divergenz Report/Dashboard + Doppelzählung, ADR `docs/adr/0001`).
+  **NAS-Prod-Rollout beider Releases offen** (Manifeste `2.5.0.json` + `2.5.2.json`, NAS-Chat). — Sonst nur
   der TZ-Restpunkt (Scheduler-Monatstrigger +
   db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
   bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
@@ -217,6 +218,39 @@ Memory [[project_dashboard_backlog]].**
 **Offen:** NAS-Prod-Rollout im **NAS-Chat** via `/nas-rollout` (Manifest `.claude/rollouts/2.5.0.json`,
 `breaking:false`, keine neue Migration). Visuelle e2e-Abnahme in NAS-Dev — Prognose zeigt Zukunftsmonate
 nur, wenn Zeiteinträge in der Zukunft erfasst sind.
+
+### 6.5 Reisekosten-Zeitraum-Zuordnung — ✅ ERLEDIGT (v2.5.2, 2026-08-03), live auf main
+**Auslöser (User-Beobachtung):** Buchhaltungsbericht Juli 2026 zeigte **38.090 €** Bruttoumsatz, das
+Dashboard **37.940 €** — Differenz 150 € = ein Hotelbeleg über den Monatswechsel (30.06.–02.07.).
+
+**Ursache — zwei konkurrierende Datums-Konventionen:** Der Server-Ladefilter `getAllExpenses`
+(`server/db.ts:746-755`) lädt per **Overlap** (`COALESCE(checkOutDate, checkInDate, date)`), und
+`Reports.tsx` übernahm diese Ladung **ungefiltert**; `monthlyFinancials.ts` (Dashboard **und
+Steuerbasis**) ordnet dagegen nach **`expense.date`** zu. Folgen: Divergenz Report/Dashboard, der
+**angezeigte Bruttoumsatz wich von der Steuerbasis desselben Berichts ab** (Nettogewinn basierte auf
+37.940 €), und ein monatsübergreifender Beleg zählte im Juni- **und** Juli-Bericht voll
+(Doppelzählung; bei exclusive-Kunden Doppelfakturierung).
+
+**Entscheidung (User) + Umsetzung:** `expense.date` ist kanonisch. Eine exportierte reine Funktion
+`isExpenseInPeriod()` in `monthlyFinancials.ts` (K4 SSoT); `Reports.tsx` filtert an **genau einer**
+Stelle, bevor die Belegmenge in irgendeinen Konsumenten fließt. Bewusst unverändert: Server-Ladefilter
+(ist ein *Lade*-, kein *Zuordnungs*filter — die Kalenderansicht spannt Hotelnächte über
+checkIn..checkOut auf, `TimeTracking.tsx:538-582`) und `reportStichtag` (Kursfrage, nicht Monatsfrage).
+**Vollständige Begründung + Alternativen: ADR `docs/adr/0001-reisekosten-zeitraum-zuordnung.md`.**
+
+- **Steuerbasis bei Vollmonats-Berichten nachweislich unverändert** (Invarianz-Test); bei
+  **Teilmonats**-Berichten kann sie sinken (vorher asymmetrisch: Zeiteinträge exakt, Belege per Overlap).
+- **⚠️ Außenwirkung:** Kundenberichte/-exporte (`costModel: exclusive`) liefern für betroffene Monate
+  jetzt **korrigierte, niedrigere** Beträge. Wurden dafür bereits Rechnungen versandt, weicht eine
+  Neuerstellung ab — sachlich Korrektur der vorherigen Doppelfakturierung. **Vor NAS-Prod-Rollout beachten.**
+- **Invariante:** `date` liegt bei Hotels auf `checkInDate` (erzwungen in `TimeTracking.tsx:1258` +
+  `Import.tsx:649`) → die Server-Ladung ist garantiert eine Obermenge der `date`-Konvention.
+- Neu: `server/expensePeriodAttribution.test.ts` (10 Tests, inkl. Regressionsfall + Invarianz-Beweis).
+  **pre-commit-Gate jetzt 5 Suites** (+ `monthlyFinancials`, + `expensePeriodAttribution`), 35 Tests.
+
+**🔑 Lesson:** Ein *Lade*-Filter (welche Daten kommen aus der DB) ist **nicht** dieselbe Frage wie eine
+*Zuordnungs*-Regel (in welchen Zeitraum zählt ein Datensatz). Wer beides vermischt, bekommt Divergenz
+**und** Doppelzählung. Zuordnung gehört in **eine** geteilte, getestete Funktion.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
