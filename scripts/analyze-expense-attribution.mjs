@@ -79,6 +79,52 @@ const DIVERGING_SQL = `
   ORDER BY e.date ASC, e.id ASC
 `;
 
+/**
+ * DATENQUALITAET des Enddatums — die Voraussetzung dafuer, dass ADR 0002 ueberhaupt
+ * greifen kann. Belege, deren `checkOutDate` fehlt oder mit dem Startdatum
+ * zusammenfaellt, werden still dem START-Monat zugeordnet, obwohl die Leistung
+ * spaeter endet. Zwei bekannte Ursachen (beide in v2.5.5 gefixt, wirken aber nur
+ * nach vorn):
+ *   - KI-Beleg-Pfad setzte `checkOutDate = checkInDate`, wenn die Rechnung nur
+ *     "N Naechte" nennt (server/receiptAi.ts).
+ *   - Workbook-Import leitete das Check-out per toISOString ab -> in Warschau
+ *     ganzjaehrig der Vortag (client/src/pages/Import.tsx).
+ * Geprueft werden Hotels UND Rundfluege (dort ist `checkOutDate` das Rueckflug-
+ * datum) — bei Flugtickets ist die Fehlerklasse identisch, nur unauffaelliger.
+ */
+const DATA_QUALITY_SQL = `
+  SELECT
+    e.id,
+    e.category,
+    e.flightRouteType,
+    e.amount,
+    e.currency,
+    DATE_FORMAT(e.date, '%Y-%m-%d')        AS belegDatum,
+    DATE_FORMAT(e.checkInDate, '%Y-%m-%d') AS checkIn,
+    DATE_FORMAT(e.checkOutDate, '%Y-%m-%d') AS checkOut,
+    c.projectName,
+    c.costModel,
+    e.comment,
+    CASE
+      WHEN e.checkOutDate IS NULL THEN 'kein Enddatum erfasst'
+      WHEN DATE(e.checkOutDate) = DATE(COALESCE(e.checkInDate, e.date))
+        THEN 'Enddatum = Startdatum (verdaechtig: 0 Naechte / KI-Pfad / Import)'
+      ELSE 'ok'
+    END AS befund
+  FROM expenses e
+  LEFT JOIN timeEntries te ON te.id = e.timeEntryId
+  LEFT JOIN customers  c  ON c.id  = COALESCE(e.customerId, te.customerId)
+  WHERE (
+          e.category = 'hotel'
+       OR (e.category = 'flight' AND (e.flightRouteType IS NULL OR e.flightRouteType <> 'one_way'))
+        )
+    AND (
+          e.checkOutDate IS NULL
+       OR DATE(e.checkOutDate) = DATE(COALESCE(e.checkInDate, e.date))
+        )
+  ORDER BY e.date ASC, e.id ASC
+`;
+
 /** Wie viele Hotelbelege gibt es insgesamt (Bezugsgroesse fuer die Quote). */
 const TOTALS_SQL = `
   SELECT
@@ -100,9 +146,10 @@ const conn = await mysql.createConnection(url);
 try {
   const [rows] = await conn.execute(DIVERGING_SQL);
   const [[totals]] = await conn.execute(TOTALS_SQL);
+  const [quality] = await conn.execute(DATA_QUALITY_SQL);
 
   if (asJson) {
-    console.log(JSON.stringify({ totals, diverging: rows }, null, 2));
+    console.log(JSON.stringify({ totals, diverging: rows, dataQuality: quality }, null, 2));
   } else {
     console.log("");
     console.log("=".repeat(100));
@@ -144,10 +191,33 @@ try {
       }
     }
 
+    // Datenqualitaet: Belege, bei denen die Zuordnung nach ADR 0002 gar nicht
+    // greifen KANN, weil das Enddatum fehlt oder gleich dem Startdatum ist.
+    console.log("");
+    console.log("-".repeat(100));
+    console.log("DATENQUALITAET ENDDATUM (Hotels + Rundfluege — Voraussetzung dafuer, dass ADR 0002 greift)");
+    console.log("-".repeat(100));
+    if (quality.length === 0) {
+      console.log("\nAlle Hotels und Rundfluege tragen ein verwertbares Enddatum — keine stillen Fehlzuordnungen moeglich.\n");
+    } else {
+      console.log("");
+      for (const q of quality) {
+        const exclusive = q.costModel === "exclusive";
+        console.log(`Beleg #${q.id}  [${q.category}${q.flightRouteType ? `/${q.flightRouteType}` : ""}]  ${formatAmount(q.amount, q.currency)}`);
+        console.log(`  date: ${q.belegDatum}   Check-in: ${q.checkIn ?? "-"}   Check-out: ${q.checkOut ?? "-"}`);
+        console.log(`  Befund: ${q.befund}${exclusive ? "   <== ABRECHENBAR, geldwirksam" : ""}`);
+        console.log(`  Kunde/Projekt: ${q.projectName ?? "(nicht zugeordnet)"}`);
+        if (q.comment) console.log(`  Kommentar: ${q.comment}`);
+        console.log("");
+      }
+      console.log(`${quality.length} Beleg(e) mit fehlendem/verdaechtigem Enddatum — pruefen, ob das Enddatum`);
+      console.log("nachgetragen werden muss (v2.5.5 fixt nur kuenftige Erfassungen, nicht den Bestand).");
+    }
+
     console.log("");
     console.log("-".repeat(100));
     console.log(`Bestand gesamt: ${totals.gesamt} Belege | davon mit Check-out: ${totals.mitCheckOut} | Hotels: ${totals.hotels}`);
-    console.log(`Abweichend: ${rows.length}`);
+    console.log(`Abweichend (Monatsverschiebung): ${rows.length} | Enddatum fehlend/verdaechtig: ${quality.length}`);
     console.log("-".repeat(100));
     console.log("");
   }

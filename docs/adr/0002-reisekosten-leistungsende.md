@@ -185,6 +185,29 @@ erfasste Hotelbelege mit `nights` tragen sogar `checkOutDate == checkInDate`.
 fahren** und über einen Backfill zu entscheiden. Bei `costModel: "exclusive"` ist die Auswirkung
 geldwirksam (Kundenrechnungen); das Skript weist die betroffenen Belege und die Beträge je Monat aus.
 
+> **✅ ERLEDIGT — Prüfergebnis 2026-08-03 (Prod, read-only):**
+> - **Datenqualität `checkOutDate`: sauber** — 0 defekte von 48 Hotelbelegen. **Kein Backfill nötig.**
+>   Die beiden Erfassungsfehler (Import-Vortag, KI-Pfad `checkOut == checkIn`) haben sich im
+>   Bestand nicht materialisiert.
+> - **Geldwirksame Monatsverschiebung: genau 1 Fall** — Beleg **#596** (Fritzmeier, `exclusive`,
+>   150,00 EUR, Juni → Juli). Check-out 02.07. ist korrekt erfasst, die Verschiebung ist der
+>   **gewollte** Effekt und deckt sich mit dem Beleg-Kommentar („koszt ujęty w lipcu").
+> - **Beleg #368** (273,00 EUR, März → April): keinem Kunden zugeordnet → wirkt nur auf die interne
+>   Steuerbasis, **keine Kundenrechnung betroffen**.
+>
+> **Datenqualitätsseitig grünes Licht für den v2.5.5-Rollout.**
+>
+> **Verbleibender kaufmännischer Abgleich (kein Code-Thema):** Prod läuft noch auf v2.4.0, wo die
+> **Doppelzählung** aktiv ist — #596 erscheint dort im Juni- *und* im Juli-Bericht mit je 150 EUR.
+> Zu prüfen ist daher, ob für Fritzmeier neben der Juli-Rechnung auch eine **Juni-Rechnung mit
+> denselben 150 EUR** versandt wurde. Falls ja, wurden sie doppelt berechnet (Altbestand aus der
+> Doppelzählung, nicht Folge dieser Umstellung) und wären per Gutschrift zu bereinigen.
+>
+> **Nachgezogen:** Das Analyseskript prüft seit diesem Lauf zusätzlich die **Datenqualität des
+> Enddatums für Hotels UND Rundflüge** (`checkOutDate` fehlt oder = Startdatum). Bei Rundflügen ist
+> `checkOutDate` das Rückflugdatum — dieselbe Fehlerklasse, nur unauffälliger, weil eine fehlende
+> Angabe dort keine sichtbare Verschiebung erzeugt, sondern den Beleg still im Abflugmonat hält.
+
 ### 4. Bulk-Delete/Purge filtert weiter über `expenses.date`
 
 `server/routers.ts:3961-3986` löscht per `DATE(expenses.date) BETWEEN dateFrom AND dateTo`. Ein Beleg,

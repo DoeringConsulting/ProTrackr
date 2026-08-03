@@ -277,10 +277,21 @@ Zuordnung hatten oder das Feld **erzeugen**:
 - **Invariante hält:** Die Server-Ladung (Overlap) bleibt Obermenge — für Belege mit `checkOutDate` ist
   die untere Ladegrenze **exakt** das Leistungsende; die obere nutzt den Beleg-*Beginn*, der per
   Validierung (`routers.ts:328-352`: Check-out ≥ Check-in, Rückflug ≥ Hinflug) ≤ Leistungsende ist.
-- **⚠️ Vor Rollout — Bestandsdaten prüfen:** `scripts/analyze-expense-attribution.mjs` (read-only) gegen
-  die Prod-DB fahren. Bereits importierte Hotelbelege ohne explizites Check-out tragen ein
-  deterministisch um **einen Tag zu frühes** `checkOutDate` (alter `toISOString`-Bug, ganzjährig);
-  der Fix wirkt nur nach vorn → **Backfill-Entscheidung nötig**, geldwirksam bei `exclusive`.
+- **✅ Bestandsdaten-Prüfung ERLEDIGT (2026-08-03, Prod, read-only):** Datenqualität `checkOutDate`
+  **sauber** (0 defekte von 48 Hotels) → **kein Backfill**. Genau **1** geldwirksame Verschiebung:
+  Beleg **#596** (Fritzmeier `exclusive`, 150,00 EUR, Juni → Juli) — korrektes Check-out 02.07., also
+  der **gewollte** Effekt (Beleg-Kommentar „koszt ujęty w lipcu"). Beleg #368 (273,00 EUR, März → April)
+  ist keinem Kunden zugeordnet → nur interne Steuerbasis. **Datenqualitätsseitig grünes Licht für
+  v2.5.5.** Details im ADR 0002, offener Punkt 3.
+- **⚠️ Verbleibend (kaufmännisch, kein Code):** Prod läuft noch auf **v2.4.0 mit Doppelzählung** —
+  #596 steht dort im Juni- *und* im Juli-Bericht mit je 150 EUR. Abgleichen, ob für Fritzmeier neben
+  der Juli- auch eine **Juni-Rechnung mit denselben 150 EUR** versandt wurde; falls ja, doppelt
+  berechnet (Altbestand, nicht Folge der Umstellung) → Gutschrift. Ein Beleg, ein Kunde, Grenze
+  Juni/Juli 2026.
+- **Skript erweitert:** `analyze-expense-attribution.mjs` prüft jetzt zusätzlich die **Datenqualität des
+  Enddatums für Hotels UND Rundflüge** (`checkOutDate` fehlt oder = Startdatum). Bei Rundflügen ist
+  `checkOutDate` das Rückflugdatum — dieselbe Fehlerklasse, aber unauffälliger: Eine fehlende Angabe
+  erzeugt dort keine sichtbare Verschiebung, sondern hält den Beleg still im Abflugmonat.
 - `server/expensePeriodAttribution.test.ts` erweitert: Referenzfall #596, Flug, Grenzen inklusive über
   das Leistungsende, K8 (Date-Objekte lokal), Konsistenz Chart ↔ Steuerbasis, `receiptAi`-Payload-
   Ableitung inkl. Jahresgrenze.
