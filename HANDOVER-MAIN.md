@@ -25,8 +25,10 @@
   NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
 - **Zuletzt erledigt auf main:** (a) **v2.5.0** Dashboard-Backlog (§6.4) — „Rechnungen"-Kachel +
   Umsatzentwicklung-**Prognose-Toggle**; (b) **v2.5.2** (§6.5) **Reisekosten-Zeitraum-Zuordnung vereinheitlicht**
-  (`expense.date` kanonisch — behebt Divergenz Report/Dashboard + Doppelzählung, ADR `docs/adr/0001`).
-  **NAS-Prod-Rollout beider Releases offen** (Manifeste `2.5.0.json` + `2.5.2.json`, NAS-Chat). — Sonst nur
+  (Divergenz Report/Dashboard + Doppelzählung behoben, ADR `docs/adr/0001`).
+  **Direkt danach fachlich nachgeschärft (§6.5, ⏳ implementiert, QA/Commit offen):** maßgeblich ist jetzt das
+  **Leistungsende `checkOutDate ?? date`** statt `expense.date` — ADR `docs/adr/0002` **supersedes 0001**.
+  **NAS-Prod-Rollout offen** (Manifeste `2.5.0.json` + `2.5.2.json`, NAS-Chat). — Sonst nur
   der TZ-Restpunkt (Scheduler-Monatstrigger +
   db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
   bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
@@ -219,38 +221,79 @@ Memory [[project_dashboard_backlog]].**
 `breaking:false`, keine neue Migration). Visuelle e2e-Abnahme in NAS-Dev — Prognose zeigt Zukunftsmonate
 nur, wenn Zeiteinträge in der Zukunft erfasst sind.
 
-### 6.5 Reisekosten-Zeitraum-Zuordnung — ✅ ERLEDIGT (v2.5.2, 2026-08-03), live auf main
+### 6.5 Reisekosten-Zeitraum-Zuordnung — Schritt 1 ✅ (v2.5.2, live auf main), Schritt 2 ⏳ (implementiert, QA/Commit offen)
+
+#### Schritt 1 — Vereinheitlichung (v2.5.2, 2026-08-03; ADR 0001, inzwischen superseded)
 **Auslöser (User-Beobachtung):** Buchhaltungsbericht Juli 2026 zeigte **38.090 €** Bruttoumsatz, das
 Dashboard **37.940 €** — Differenz 150 € = ein Hotelbeleg über den Monatswechsel (30.06.–02.07.).
 
 **Ursache — zwei konkurrierende Datums-Konventionen:** Der Server-Ladefilter `getAllExpenses`
 (`server/db.ts:746-755`) lädt per **Overlap** (`COALESCE(checkOutDate, checkInDate, date)`), und
 `Reports.tsx` übernahm diese Ladung **ungefiltert**; `monthlyFinancials.ts` (Dashboard **und
-Steuerbasis**) ordnet dagegen nach **`expense.date`** zu. Folgen: Divergenz Report/Dashboard, der
+Steuerbasis**) ordnete dagegen nach `expense.date` zu. Folgen: Divergenz Report/Dashboard, der
 **angezeigte Bruttoumsatz wich von der Steuerbasis desselben Berichts ab** (Nettogewinn basierte auf
 37.940 €), und ein monatsübergreifender Beleg zählte im Juni- **und** Juli-Bericht voll
 (Doppelzählung; bei exclusive-Kunden Doppelfakturierung).
 
-**Entscheidung (User) + Umsetzung:** `expense.date` ist kanonisch. Eine exportierte reine Funktion
-`isExpenseInPeriod()` in `monthlyFinancials.ts` (K4 SSoT); `Reports.tsx` filtert an **genau einer**
-Stelle, bevor die Belegmenge in irgendeinen Konsumenten fließt. Bewusst unverändert: Server-Ladefilter
-(ist ein *Lade*-, kein *Zuordnungs*filter — die Kalenderansicht spannt Hotelnächte über
-checkIn..checkOut auf, `TimeTracking.tsx:538-582`) und `reportStichtag` (Kursfrage, nicht Monatsfrage).
-**Vollständige Begründung + Alternativen: ADR `docs/adr/0001-reisekosten-zeitraum-zuordnung.md`.**
+**Umsetzung:** Eine exportierte reine Funktion `isExpenseInPeriod()` in `monthlyFinancials.ts`
+(K4 SSoT); `Reports.tsx` filtert an **genau einer** Stelle, bevor die Belegmenge in irgendeinen
+Konsumenten fließt. Zuordnungsfeld war in diesem Schritt `expense.date` (ADR
+`docs/adr/0001-reisekosten-zeitraum-zuordnung.md`, **Status jetzt `superseded by ADR 0002`**).
+Bewusst unverändert: Server-Ladefilter (ist ein *Lade*-, kein *Zuordnungs*filter — die Kalenderansicht
+spannt Hotelnächte über checkIn..checkOut auf, `TimeTracking.tsx:538-582`) und `reportStichtag`
+(Kursfrage, nicht Monatsfrage). Die Struktur (eine Funktion, eine Filterstelle) gilt unverändert weiter.
 
-- **Steuerbasis bei Vollmonats-Berichten nachweislich unverändert** (Invarianz-Test); bei
-  **Teilmonats**-Berichten kann sie sinken (vorher asymmetrisch: Zeiteinträge exakt, Belege per Overlap).
-- **⚠️ Außenwirkung:** Kundenberichte/-exporte (`costModel: exclusive`) liefern für betroffene Monate
-  jetzt **korrigierte, niedrigere** Beträge. Wurden dafür bereits Rechnungen versandt, weicht eine
-  Neuerstellung ab — sachlich Korrektur der vorherigen Doppelfakturierung. **Vor NAS-Prod-Rollout beachten.**
-- **Invariante:** `date` liegt bei Hotels auf `checkInDate` (erzwungen in `TimeTracking.tsx:1258` +
-  `Import.tsx:649`) → die Server-Ladung ist garantiert eine Obermenge der `date`-Konvention.
-- Neu: `server/expensePeriodAttribution.test.ts` (10 Tests, inkl. Regressionsfall + Invarianz-Beweis).
-  **pre-commit-Gate jetzt 5 Suites** (+ `monthlyFinancials`, + `expensePeriodAttribution`), 35 Tests.
+- Neu: `server/expensePeriodAttribution.test.ts` (Regressionsfall + Invarianz-Beweis).
+  **pre-commit-Gate seither 5 Suites** (+ `monthlyFinancials`, + `expensePeriodAttribution`).
 
-**🔑 Lesson:** Ein *Lade*-Filter (welche Daten kommen aus der DB) ist **nicht** dieselbe Frage wie eine
-*Zuordnungs*-Regel (in welchen Zeitraum zählt ein Datensatz). Wer beides vermischt, bekommt Divergenz
-**und** Doppelzählung. Zuordnung gehört in **eine** geteilte, getestete Funktion.
+#### Schritt 2 — Leistungsende statt Belegdatum (⏳ implementiert, QA/Commit offen; ADR 0002)
+**Auslöser:** Prod-Beleg **#596** (Hotel Fritzmeier, 150,00 EUR, `exclusive`): `date`/`checkInDate`
+30.06.2026, `checkOutDate` 02.07.2026 → nach Schritt 1 in **Juni**, gelebte Abrechnungspraxis ist
+**Juli**. Grund: `date` ist bei Hotels der **Check-in** (`TimeTracking.tsx:1258` setzt
+`payloadBase.date = hotelCheckIn`), bei Hin-/Rückflug auf einem Ticket das **Hinflugdatum**.
+
+**Entscheidung (User, K14):** Ein Beleg wird **niemals gesplittet** (Spec-Entwurf v1.0.0 mit
+Nacht-Split bewusst verworfen), sondern zählt komplett in dem Monat, in dem die **Leistung endet**:
+`leistungsende = checkOutDate ?? date`. Hotel → Check-out · Hin-/Rückflug auf einem Ticket →
+Rückflugdatum · alles Übrige (Taxi, Zug, Kraftstoff, km-Pauschale) → `date`. Gilt **einheitlich** für
+Kundenabrechnung, Report-Anzeige, Dashboard **und Steuerbasis** — eine Zahl überall.
+**Vollständige Begründung + Alternativen: ADR `docs/adr/0002-reisekosten-leistungsende.md`
+(supersedes 0001).**
+
+Geändert an der **einen** Regelstelle (`isExpenseInPeriod`) — plus die Stellen, die eine **zweite**
+Zuordnung hatten oder das Feld **erzeugen**:
+- `Dashboard.tsx:812` Kosten-Pie (war eine zweite Zuordnungsregel im selben useMemo wie die
+  Steuer-Slices) und `Dashboard.tsx:1023-1046` Reisekosten-Kachel → beide auf `isExpenseInPeriod`.
+- `Import.tsx:661-664`: Check-out aus `nights` über lokale Datumskomponenten statt `toISOString`
+  (lieferte in Warschau konsequent den **Vortag**).
+- `receiptAi.ts:533-548`: leitete `nights` bislang **gar nicht** ab → `checkOutDate == checkInDate`.
+  Jetzt über den neuen geteilten Helfer `addDaysToDateKey` (`shared/dateStichtag.ts`, TZ-neutral).
+
+- **⚠️ Steuerbasis verschiebt sich bewusst** (monatsübergreifende Belege wandern vom Anreise- in den
+  Abreisemonat) — gewollte K14-Entscheidung, keine stille Nebenwirkung.
+- **⚠️ Außenwirkung:** Kundenberichte/-exporte (`costModel: exclusive`) ändern sich; Beleg #596 =
+  150,00 EUR jetzt in **Juli**. Wurden bereits Rechnungen versandt, weicht eine Neuerstellung ab.
+  **Vor NAS-Prod-Rollout beachten.**
+- **Invariante hält:** Die Server-Ladung (Overlap) bleibt Obermenge — für Belege mit `checkOutDate` ist
+  die untere Ladegrenze **exakt** das Leistungsende; die obere nutzt den Beleg-*Beginn*, der per
+  Validierung (`routers.ts:328-352`: Check-out ≥ Check-in, Rückflug ≥ Hinflug) ≤ Leistungsende ist.
+- **⚠️ Vor Rollout — Bestandsdaten prüfen:** `scripts/analyze-expense-attribution.mjs` (read-only) gegen
+  die Prod-DB fahren. Bereits importierte Hotelbelege ohne explizites Check-out tragen ein
+  deterministisch um **einen Tag zu frühes** `checkOutDate` (alter `toISOString`-Bug, ganzjährig);
+  der Fix wirkt nur nach vorn → **Backfill-Entscheidung nötig**, geldwirksam bei `exclusive`.
+- `server/expensePeriodAttribution.test.ts` erweitert: Referenzfall #596, Flug, Grenzen inklusive über
+  das Leistungsende, K8 (Date-Objekte lokal), Konsistenz Chart ↔ Steuerbasis, `receiptAi`-Payload-
+  Ableitung inkl. Jahresgrenze.
+
+**🔑 Lessons:**
+1. Ein *Lade*-Filter (welche Daten kommen aus der DB) ist **nicht** dieselbe Frage wie eine
+   *Zuordnungs*-Regel (in welchen Zeitraum zählt ein Datensatz). Wer beides vermischt, bekommt Divergenz
+   **und** Doppelzählung. Zuordnung gehört in **eine** geteilte, getestete Funktion.
+2. **Wird eine Zuordnungsregel auf ein anderes Feld umgestellt, müssen ALLE Pfade geprüft werden, die
+   dieses Feld ERZEUGEN — nicht nur die, die es lesen.** Hier: `Import.tsx` (Check-out aus `nights` mit
+   `toISOString`-Vortagsfehler) und `receiptAi.ts` (leitete `nights` überhaupt nicht ab). Ein Feld, das
+   vorher nur Anzeige/Stichtag war, wird durch die Regeländerung **geldwirksam** — seine Erzeuger
+   brauchen dieselbe Sorgfalt wie die Rechenlogik.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 

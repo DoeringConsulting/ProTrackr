@@ -6,15 +6,27 @@
 // Zeitzone, CLAUDE.md §4), nie über toISOString (das liefert UTC und kippt im
 // Fenster 00:00–02:00 Warschau auf den Vortag).
 
-/** Kalendarischer Vortag zu einem YYYY-MM-DD-Key (monats-/jahresübergreifend). */
-export function previousDayKey(dayKey: string): string {
+/**
+ * YYYY-MM-DD-Key plus/minus N Kalendertage (monats-/jahresübergreifend).
+ *
+ * Rechnet bewusst in UTC-Komponenten (`Date.UTC` + `getUTC*`): ein Datums-Key trägt
+ * keine Uhrzeit, die Arithmetik ist damit zeitzonenfrei. Ein lokal konstruiertes Date
+ * mit anschließendem `toISOString().slice(0,10)` würde dagegen in Europe/Warsaw
+ * (UTC+1/+2) auf den Vortag kippen (K8).
+ */
+export function addDaysToDateKey(dayKey: string, days: number): string {
   const [y, m, d] = dayKey.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() - 1);
+  dt.setUTCDate(dt.getUTCDate() + days);
   const yy = dt.getUTCFullYear();
   const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(dt.getUTCDate()).padStart(2, "0");
   return `${yy}-${mm}-${dd}`;
+}
+
+/** Kalendarischer Vortag zu einem YYYY-MM-DD-Key (monats-/jahresübergreifend). */
+export function previousDayKey(dayKey: string): string {
+  return addDaysToDateKey(dayKey, -1);
 }
 
 /**

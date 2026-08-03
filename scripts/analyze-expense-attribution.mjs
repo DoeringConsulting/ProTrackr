@@ -3,19 +3,23 @@
 // scripts/analyze-expense-attribution.mjs
 // =============================================================================
 // DIAGNOSE-SKRIPT (STRIKT READ-ONLY — ausschliesslich SELECTs, keine Schreib-
-// operation, keine DDL). Beantwortet die Frage aus ADR 0001:
+// operation, keine DDL). Beantwortet die Frage aus ADR 0001/0002:
 //
 //   Welche Reisekostenbelege fallen je nach Datums-Konvention in EINEN ANDEREN
 //   Monat, und wie gross ist die betragsmaessige Auswirkung?
 //
 // Hintergrund: Bei Hotels setzt die Erfassung `expenses.date` zwangsweise auf
 // das Check-in-Datum (client/src/pages/TimeTracking.tsx). Ein Aufenthalt ueber
-// den Monatswechsel wird damit dem ANREISE-Monat zugeordnet, auch wenn die
-// Rechnung erst im Folgemonat ausgestellt/beglichen wurde. Dieses Skript zeigt
-// alle betroffenen Belege und stellt die Varianten gegenueber:
+// den Monatswechsel wurde damit dem ANREISE-Monat zugeordnet, obwohl die
+// Leistung erst im Folgemonat endet und dort abgerechnet wird. Dieses Skript
+// zeigt alle betroffenen Belege und stellt die Varianten gegenueber:
 //
-//   Variante A (aktuell, v2.5.2):  expense.date
-//   Variante B (Alternative):      COALESCE(checkOutDate, date)
+//   Variante A (historisch, ADR 0001 / v2.5.2):  expense.date
+//   Variante B (AKTIV seit ADR 0002):            COALESCE(checkOutDate, date)
+//                                                = Leistungsende, kanonische Regel
+//
+// Die Auflistung "A -> B" ist damit die Verschiebung, die der Umstieg auf
+// ADR 0002 bewirkt: Spalte links = alte Zuordnung, Spalte rechts = geltende.
 //
 // Aufruf (DATABASE_URL zeigt auf die zu pruefende DB, z.B. im NAS-Container):
 //   node scripts/analyze-expense-attribution.mjs
@@ -102,7 +106,7 @@ try {
   } else {
     console.log("");
     console.log("=".repeat(100));
-    console.log("BELEGE MIT ABWEICHENDER MONATSZUORDNUNG (Variante A: date  |  Variante B: checkOut ?? date)");
+    console.log("BELEGE MIT ABWEICHENDER MONATSZUORDNUNG (A: date [alt, ADR 0001]  ->  B: checkOut ?? date [AKTIV, ADR 0002])");
     console.log("=".repeat(100));
 
     if (rows.length === 0) {
@@ -113,7 +117,7 @@ try {
         console.log("");
         console.log(`Beleg #${r.id}  [${r.category}]  ${formatAmount(r.amount, r.currency)}`);
         console.log(`  Belegdatum (date): ${r.belegDatum}   Check-in: ${r.checkIn ?? "-"}   Check-out: ${r.checkOut ?? "-"}`);
-        console.log(`  Variante A (aktuell): ${r.monatVarianteA}     ->  Variante B: ${r.monatVarianteB}`);
+        console.log(`  Variante A (alt): ${r.monatVarianteA}     ->  Variante B (aktiv): ${r.monatVarianteB}`);
         console.log(`  Kunde/Projekt: ${r.projectName ?? "(nicht zugeordnet)"} | costModel: ${r.costModel ?? "-"}` +
                     `${exclusive ? "  <== ABRECHENBAR, wirkt auf Kundenrechnung" : ""}`);
         if (r.comment) console.log(`  Kommentar: ${r.comment}`);
@@ -122,7 +126,7 @@ try {
       // Betragsmaessige Auswirkung je Monat und Waehrung: was wandert wohin.
       console.log("");
       console.log("-".repeat(100));
-      console.log("AUSWIRKUNG JE MONAT (nur abrechenbare exclusive-Belege — diese veraendern Kundenrechnungen)");
+      console.log("AUSWIRKUNG JE MONAT DES UMSTIEGS AUF ADR 0002 (nur abrechenbare exclusive-Belege — diese veraendern Kundenrechnungen)");
       console.log("-".repeat(100));
       const impact = new Map();
       for (const r of rows) {

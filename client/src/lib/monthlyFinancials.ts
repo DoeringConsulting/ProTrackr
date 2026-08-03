@@ -77,25 +77,49 @@ function isInPeriod(value: unknown, periodStart: string, periodEnd: string): boo
 }
 
 /**
- * Kanonische Zeitraum-Zuordnung eines (Reisekosten-)Belegs: maßgeblich ist ALLEIN
- * `expense.date`. Bewusst NICHT checkIn/checkOut — ein Hotel über den Monatswechsel
- * (z.B. 30.06.–02.07.) zählt sonst in beiden Monatsberichten voll (Doppelzählung) und
- * divergiert von der Steuerbasis, die schon immer `date` nutzt.
+ * Leistungsende eines Belegs als lokaler YYYY-MM-DD-Key: `checkOutDate ?? date`.
  *
- * EINE Implementierung für alle Verbraucher: Steuerbasis/Dashboard (unten) und der
- * Berichts-Datenfluss in Reports.tsx. Grenzen inklusive, Vergleich auf YYYY-MM-DD-Keys
- * (Europe/Warsaw-sicher, nie toISOString).
+ * Bewusst über `toDateKey` verkettet statt `??` auf den Rohwerten: leere Strings und
+ * unparsebare Werte in `checkOutDate` müssen ebenfalls auf `date` durchfallen — `??`
+ * würde nur bei null/undefined greifen und den Beleg sonst still aus allen Zeiträumen
+ * werfen.
+ */
+function expenseServiceEndKey(expense: {
+  date?: unknown;
+  checkOutDate?: unknown;
+}): string | null {
+  return toDateKey(expense?.checkOutDate) ?? toDateKey(expense?.date);
+}
+
+/**
+ * Kanonische Zeitraum-Zuordnung eines (Reisekosten-)Belegs: maßgeblich ist das
+ * **Leistungsende** (`checkOutDate ?? date`) — siehe `docs/adr/0002`.
  *
- * Nicht zu verwechseln mit dem Kurs-Stichtag (`reportStichtag` in Reports.tsx), der
- * bewusst `checkOutDate` als Ende nimmt — das ist die andere Frage („welcher Tageskurs"),
- * nicht die Zeitraum-Zuordnung.
+ * WARUM Leistungsende: Ein Beleg wird NIE gesplittet, sondern zählt komplett in dem
+ * Monat, in dem die Leistung endet. Bei Hotels ist `date` der Check-in
+ * (`TimeTracking.tsx` setzt `payloadBase.date = hotelCheckIn`), bei Hin-/Rückflug auf
+ * einem Ticket das Hinflugdatum; beide enden bei einem Aufenthalt über den
+ * Monatswechsel erst im Folgemonat — abgerechnet (und verbraucht) wird die Leistung
+ * dort. `date` ist damit nur noch der Fallback für Belege OHNE Enddatum (Taxi, Zug,
+ * Kraftstoff, Kilometerpauschale …), bei denen Leistung und Beleg auf denselben Tag
+ * fallen. Ein Beleg zählt weiterhin in GENAU einem Zeitraum (keine Doppelzählung).
+ *
+ * EINE Implementierung für alle Verbraucher (K4): Steuerbasis/Dashboard (unten) und der
+ * Berichts-Datenfluss in Reports.tsx. Die Regel gilt einheitlich für Kundenabrechnung,
+ * Report-Anzeige, Dashboard UND Steuerbasis — eine Zahl überall. Grenzen inklusive,
+ * Vergleich auf YYYY-MM-DD-Keys (Europe/Warsaw-sicher, nie toISOString).
+ *
+ * Nicht zu verwechseln mit dem Kurs-Stichtag (`reportStichtag` in Reports.tsx): der nutzt
+ * dasselbe Enddatum, beantwortet aber die andere Frage („welcher Tageskurs"), nicht die
+ * Zeitraum-Zuordnung.
  */
 export function isExpenseInPeriod(
-  expense: { date?: unknown },
+  expense: { date?: unknown; checkOutDate?: unknown },
   periodStart: string,
   periodEnd: string
 ): boolean {
-  return isInPeriod(expense?.date, periodStart, periodEnd);
+  const endKey = expenseServiceEndKey(expense);
+  return endKey !== null && endKey >= periodStart && endKey <= periodEnd;
 }
 
 /**

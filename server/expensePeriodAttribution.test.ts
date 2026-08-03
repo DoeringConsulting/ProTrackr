@@ -7,29 +7,38 @@ import {
   type MonthlyCustomer,
   type MonthlyExpense,
 } from "../client/src/lib/monthlyFinancials";
+import { toExpenseMutationPayload, type ReceiptExpenseCandidate } from "./receiptAi";
 
 /**
  * Kanonische Zeitraum-Zuordnung von (Reisekosten-)Belegen. Rein, keine DB.
  *
- * Hintergrund: Buchhaltungsbericht und Dashboard zeigten für Juli 2026
- * unterschiedliche Bruttoumsätze (38.090 € vs. 37.940 €). Ursache waren ZWEI
- * Datums-Konventionen: der Server lädt Belege per Overlap
- * (COALESCE(checkOut, checkIn, date) >= start AND COALESCE(checkIn, date) <= end),
- * der Report zählte die geladene Menge ungefiltert — die Steuerbasis
- * (computeMonthlyAmounts) und das Dashboard dagegen nur Belege mit `expense.date`
- * im Monat. Ein Hotel 30.06.–02.07. steckte dadurch im Juni- UND im Juli-Bericht
- * in voller Höhe (Doppelzählung).
+ * Regel (ADR 0002, löst ADR 0001 ab): Ein Beleg wird NIE gesplittet, sondern zählt
+ * komplett in dem Zeitraum, in dem die LEISTUNG ENDET:
  *
- * Festgelegte Regel: maßgeblich ist ALLEIN `expense.date`.
+ *   leistungsende = checkOutDate ?? date
+ *
+ *   - Hotel                     → checkOutDate (Check-out)
+ *   - Hin-/Rückflug 1 Ticket    → checkOutDate (Rückflugdatum)
+ *   - alles Übrige (Taxi, Zug,
+ *     Kraftstoff, km-Pauschale) → date (kein Enddatum vorhanden)
+ *
+ * Hintergrund: `date` ist bei Hotels der CHECK-IN (`TimeTracking.tsx` setzt
+ * `payloadBase.date = hotelCheckIn`). Die Vorgängerregel (allein `date`, ADR 0001)
+ * buchte einen Aufenthalt über den Monatswechsel deshalb in den Anreisemonat —
+ * abgerechnet wird er aber im Monat des Check-outs.
+ *
+ * Die Regel gilt EINHEITLICH (K4): Kundenabrechnung, Report-Anzeige, Dashboard und
+ * Steuerbasis nutzen dieselbe eine Funktion.
  */
 
 const JUNE = { start: "2026-06-01", end: "2026-06-30" };
 const JULY = { start: "2026-07-01", end: "2026-07-31" };
 
 /**
- * Der Regressionsbeleg: Hotel über den Monatswechsel. Der Server liefert ihn per
- * Overlap AUCH bei einer Juli-Abfrage (checkOutDate 02.07.) — die Zuordnung
- * entscheidet trotzdem `date` (30.06.) → Juni.
+ * Referenzfall — Prod-Beleg #596 (Hotel Fritzmeier, 150,00 EUR, exclusive):
+ * date/checkIn 30.06., checkOut 02.07. Der Server liefert ihn per Overlap sowohl bei
+ * einer Juni- als auch bei einer Juli-Abfrage; die Zuordnung entscheidet allein das
+ * Leistungsende (02.07.) → JULI.
  */
 const hotelAcrossMonthEnd: MonthlyExpense = {
   customerId: 1,
@@ -40,7 +49,20 @@ const hotelAcrossMonthEnd: MonthlyExpense = {
   checkOutDate: "2026-07-02",
 };
 
-describe("isExpenseInPeriod (kanonische Regel: allein expense.date)", () => {
+/**
+ * Hin-/Rückflug auf EINEM Ticket: Hinflug 30.06. (`date`), Rückflug 02.07.
+ * (`checkOutDate`, so befüllt von `TimeTracking.tsx`). Kein checkInDate — der
+ * Fallback muss trotzdem das Rückflugdatum nehmen.
+ */
+const flightAcrossMonthEnd: MonthlyExpense = {
+  customerId: 1,
+  amount: 90_00,
+  sourceCurrency: "PLN",
+  date: "2026-06-30",
+  checkOutDate: "2026-07-02",
+};
+
+describe("isExpenseInPeriod (kanonische Regel: Leistungsende = checkOutDate ?? date)", () => {
   it("Beleg innerhalb des Zeitraums → true", () => {
     expect(isExpenseInPeriod({ date: "2026-07-15" }, JULY.start, JULY.end)).toBe(true);
   });
@@ -50,9 +72,24 @@ describe("isExpenseInPeriod (kanonische Regel: allein expense.date)", () => {
     expect(isExpenseInPeriod({ date: "2026-08-01" }, JULY.start, JULY.end)).toBe(false);
   });
 
-  it("Grenzen sind inklusive (erster und letzter Tag zählen)", () => {
+  it("Grenzen sind inklusive (erster und letzter Tag zählen — auch über das Leistungsende)", () => {
     expect(isExpenseInPeriod({ date: "2026-07-01" }, JULY.start, JULY.end)).toBe(true);
     expect(isExpenseInPeriod({ date: "2026-07-31" }, JULY.start, JULY.end)).toBe(true);
+    // Leistungsende exakt auf der Zeitraumgrenze: Anreise im Vormonat, Check-out am 01.07.
+    expect(
+      isExpenseInPeriod({ date: "2026-06-28", checkOutDate: "2026-07-01" }, JULY.start, JULY.end)
+    ).toBe(true);
+    // … und am letzten Tag des Zeitraums.
+    expect(
+      isExpenseInPeriod({ date: "2026-07-29", checkOutDate: "2026-07-31" }, JULY.start, JULY.end)
+    ).toBe(true);
+    // Ein Tag daneben fällt jeweils raus.
+    expect(
+      isExpenseInPeriod({ date: "2026-06-25", checkOutDate: "2026-06-30" }, JULY.start, JULY.end)
+    ).toBe(false);
+    expect(
+      isExpenseInPeriod({ date: "2026-07-30", checkOutDate: "2026-08-01" }, JULY.start, JULY.end)
+    ).toBe(false);
     // Teilmonats-Zeitraum: dieselbe Regel, engere Grenzen.
     expect(isExpenseInPeriod({ date: "2026-07-15" }, "2026-07-15", "2026-07-20")).toBe(true);
     expect(isExpenseInPeriod({ date: "2026-07-20" }, "2026-07-15", "2026-07-20")).toBe(true);
@@ -67,19 +104,67 @@ describe("isExpenseInPeriod (kanonische Regel: allein expense.date)", () => {
     expect(isExpenseInPeriod({ date: new Date(2026, 6, 15) }, JULY.start, JULY.end)).toBe(true);
     expect(isExpenseInPeriod({ date: new Date(2026, 6, 1) }, JULY.start, JULY.end)).toBe(true);
     expect(isExpenseInPeriod({ date: new Date(2026, 5, 30) }, JULY.start, JULY.end)).toBe(false);
+    // Auch das Leistungsende darf ein Date-Objekt sein: Check-in 30.06., Check-out 02.07.
+    expect(
+      isExpenseInPeriod(
+        { date: new Date(2026, 5, 30), checkOutDate: new Date(2026, 6, 2) },
+        JULY.start,
+        JULY.end
+      )
+    ).toBe(true);
+    expect(
+      isExpenseInPeriod(
+        { date: new Date(2026, 5, 30), checkOutDate: new Date(2026, 6, 2) },
+        JUNE.start,
+        JUNE.end
+      )
+    ).toBe(false);
   });
 
-  it("ohne verwertbares date → false (bewusst KEIN Fallback auf checkIn/checkOut)", () => {
-    const hotelWithoutDate = { checkInDate: "2026-07-05", checkOutDate: "2026-07-08" };
-    expect(isExpenseInPeriod(hotelWithoutDate, JULY.start, JULY.end)).toBe(false);
+  it("ohne checkOutDate bleibt `date` maßgeblich (unveränderte Semantik für Taxi/Zug/Kraftstoff)", () => {
+    expect(isExpenseInPeriod({ date: "2026-07-05" }, JULY.start, JULY.end)).toBe(true);
+    expect(isExpenseInPeriod({ date: "2026-07-05" }, JUNE.start, JUNE.end)).toBe(false);
+    expect(isExpenseInPeriod({ date: "2026-07-05", checkOutDate: null }, JULY.start, JULY.end)).toBe(
+      true
+    );
+    // Leerer String / unparsebarer Wert im Enddatum darf den Beleg NICHT still
+    // verschlucken — Fallback auf `date`.
+    expect(isExpenseInPeriod({ date: "2026-07-05", checkOutDate: "" }, JULY.start, JULY.end)).toBe(
+      true
+    );
+    expect(
+      isExpenseInPeriod({ date: "2026-07-05", checkOutDate: "kein datum" }, JULY.start, JULY.end)
+    ).toBe(true);
+  });
+
+  it("ohne verwertbares Datum → false", () => {
     expect(isExpenseInPeriod({}, JULY.start, JULY.end)).toBe(false);
     expect(isExpenseInPeriod({ date: null }, JULY.start, JULY.end)).toBe(false);
     expect(isExpenseInPeriod({ date: "kein datum" }, JULY.start, JULY.end)).toBe(false);
   });
 
-  it("REGRESSION: Hotel 30.06.–02.07. zählt zu Juni, NICHT zu Juli (keine Doppelzählung)", () => {
-    expect(isExpenseInPeriod(hotelAcrossMonthEnd, JUNE.start, JUNE.end)).toBe(true);
-    expect(isExpenseInPeriod(hotelAcrossMonthEnd, JULY.start, JULY.end)).toBe(false);
+  it("nur checkOutDate (ohne date) → das Leistungsende trägt allein", () => {
+    // Kein produktiver Erfassungsweg erzeugt das, die Regel bleibt aber definiert.
+    const hotelWithoutDate = { checkInDate: "2026-07-05", checkOutDate: "2026-07-08" };
+    expect(isExpenseInPeriod(hotelWithoutDate, JULY.start, JULY.end)).toBe(true);
+  });
+
+  it("REFERENZFALL #596: Hotel 30.06.–02.07. zählt zu JULI, nicht zu Juni", () => {
+    expect(isExpenseInPeriod(hotelAcrossMonthEnd, JULY.start, JULY.end)).toBe(true);
+    expect(isExpenseInPeriod(hotelAcrossMonthEnd, JUNE.start, JUNE.end)).toBe(false);
+  });
+
+  it("Hin-/Rückflug 30.06.→02.07. auf einem Ticket zählt zu JULI (Rückflugdatum)", () => {
+    expect(isExpenseInPeriod(flightAcrossMonthEnd, JULY.start, JULY.end)).toBe(true);
+    expect(isExpenseInPeriod(flightAcrossMonthEnd, JUNE.start, JUNE.end)).toBe(false);
+  });
+
+  it("checkOutDate schlägt date auch dann, wenn beide im selben Zeitraum lägen", () => {
+    // Regel ist unbedingt: existiert ein Enddatum, entscheidet es — keine Sonderfälle.
+    const stayWithinJuly = { date: "2026-07-02", checkOutDate: "2026-07-06" };
+    expect(isExpenseInPeriod(stayWithinJuly, JULY.start, JULY.end)).toBe(true);
+    expect(isExpenseInPeriod(stayWithinJuly, "2026-07-01", "2026-07-03")).toBe(false);
+    expect(isExpenseInPeriod(stayWithinJuly, "2026-07-04", "2026-07-10")).toBe(true);
   });
 });
 
@@ -89,7 +174,7 @@ describe("Invarianz: der Report-Filter ändert die Steuerbasis nicht (K4)", () =
 
   // Explizite customerId ⇒ deterministische Attribution (Option B gewinnt vor der
   // Datums-Heuristik), leere Maps genügen. costModel "exclusive" ⇒ die Belege
-  // zählen als Umsatz UND als variable Kosten — genau der Pfad, auf dem die
+  // zählen als Umsatz UND als variable Kosten — genau der Pfad, auf dem eine
   // Doppelzählung sichtbar würde.
   const customersById = new Map<number, MonthlyCustomer>([
     [1, { costModel: "exclusive", onsiteRateCurrency: "PLN" }],
@@ -110,9 +195,9 @@ describe("Invarianz: der Report-Filter ändert die Steuerbasis nicht (K4)", () =
     },
   ];
 
-  // Die Menge, die der Server für eine Juli-Abfrage per Overlap liefert:
-  // das Juni-Hotel (checkOut 02.07.) ist dabei, ein August-Beleg (checkIn 31.07.)
-  // ebenfalls — beide gehören per `date` NICHT in den Juli.
+  // Die Menge, die der Server für eine Juli-Abfrage per Overlap liefert: das Hotel
+  // 30.06.–02.07. ist dabei (Leistungsende 02.07. → gehört in den Juli) und ein Beleg
+  // mit Check-out 02.08. ebenfalls (Leistungsende im August → gehört NICHT in den Juli).
   const loadedExpenses: MonthlyExpense[] = [
     hotelAcrossMonthEnd,
     { customerId: 1, amount: 300_00, sourceCurrency: "PLN", date: "2026-07-05" },
@@ -120,13 +205,13 @@ describe("Invarianz: der Report-Filter ändert die Steuerbasis nicht (K4)", () =
       customerId: 1,
       amount: 80_00,
       sourceCurrency: "PLN",
-      date: "2026-08-01",
+      date: "2026-07-31",
       checkInDate: "2026-07-31",
       checkOutDate: "2026-08-02",
     },
   ];
 
-  // Genau das, was Reports.tsx jetzt an EINER Stelle tut.
+  // Genau das, was Reports.tsx an EINER Stelle tut.
   const julyFilteredExpenses = loadedExpenses.filter((expense) =>
     isExpenseInPeriod(expense, JULY.start, JULY.end)
   );
@@ -144,9 +229,9 @@ describe("Invarianz: der Report-Filter ändert die Steuerbasis nicht (K4)", () =
   });
 
   it("der Server-Overlap liefert Fremdmonats-Belege, der Filter entfernt genau diese", () => {
-    expect(loadedExpenses).toContain(hotelAcrossMonthEnd);
-    expect(julyFilteredExpenses).not.toContain(hotelAcrossMonthEnd);
-    expect(julyFilteredExpenses).toHaveLength(1);
+    // Das Hotel gehört in den Juli und bleibt drin; der August-Beleg fliegt raus.
+    expect(julyFilteredExpenses).toContain(hotelAcrossMonthEnd);
+    expect(julyFilteredExpenses).toHaveLength(2);
   });
 
   it("computeMonthlyAmounts (Juli) liefert mit voller UND mit gefilterter Belegmenge dasselbe", () => {
@@ -154,15 +239,15 @@ describe("Invarianz: der Report-Filter ändert die Steuerbasis nicht (K4)", () =
     const fromFiltered = computeMonthlyAmounts(JULY.start, JULY.end, ctxWith(julyFilteredExpenses));
     expect(fromFiltered).toEqual(fromLoaded);
     // Ankerwerte, damit die Gleichheit nicht versehentlich "beide 0" bedeutet:
-    // Umsatz = Zeit 1.000 + exkl. RK 300; variable = RK 300; fix = 500.
+    // Umsatz = Zeit 1.000 + exkl. RK (Hotel 150 + 300); variable = 450; fix = 500.
     expect(fromLoaded).toEqual({
-      revenueCents: 1_300_00,
+      revenueCents: 1_450_00,
       fixedCostsCents: 500_00,
-      variableCostsCents: 300_00,
+      variableCostsCents: 450_00,
     });
   });
 
-  it("computeMonthlyDisplayRevenue (Dashboard-Chart) ist ebenso invariant", () => {
+  it("computeMonthlyDisplayRevenue (Dashboard-Chart) ordnet denselben Beleg demselben Monat zu", () => {
     const displayCtx = (expenses: MonthlyExpense[]) => ({
       timeEntries,
       expenses,
@@ -179,17 +264,109 @@ describe("Invarianz: der Report-Filter ändert die Steuerbasis nicht (K4)", () =
     expect(fromFiltered).toEqual(fromLoaded);
     expect(fromLoaded).toEqual({
       timeCents: 1_000_00,
-      travelCents: 300_00,
-      grossCents: 1_300_00,
+      travelCents: 450_00,
+      grossCents: 1_450_00,
     });
+
+    // Konsistenz-Invariante (K4): der Reisekostenanteil des Charts stimmt mit dem
+    // exklusiven RK-Anteil der Steuerbasis überein — dieselbe Regel, beide Monate.
+    const julyAmounts = computeMonthlyAmounts(JULY.start, JULY.end, ctxWith(loadedExpenses));
+    expect(fromLoaded.travelCents).toBe(julyAmounts.variableCostsCents);
+    const juneDisplay = computeMonthlyDisplayRevenue(JUNE.start, JUNE.end, displayCtx(loadedExpenses));
+    const juneAmounts = computeMonthlyAmounts(JUNE.start, JUNE.end, ctxWith(loadedExpenses));
+    expect(juneDisplay.travelCents).toBe(juneAmounts.variableCostsCents);
   });
 
-  it("das Hotel zählt genau einmal — im Juni, wo sein date liegt", () => {
+  it("das Hotel zählt genau einmal — im Juli, wo seine Leistung endet", () => {
+    // Juni: der Beleg ist zwar geladen (Overlap), zählt dort aber in KEINER Größe.
     const june = computeMonthlyAmounts(JUNE.start, JUNE.end, ctxWith(loadedExpenses));
-    expect(june.variableCostsCents).toBe(150_00);
-    expect(june.revenueCents).toBe(150_00);
-    // Und im Juli taucht es in keiner Größe mehr auf.
+    expect(june.variableCostsCents).toBe(0);
+    expect(june.revenueCents).toBe(0);
+    // Juli: genau einmal, in voller Höhe (150) neben dem 300er-Beleg.
     const july = computeMonthlyAmounts(JULY.start, JULY.end, ctxWith(loadedExpenses));
-    expect(july.variableCostsCents).toBe(300_00);
+    expect(july.variableCostsCents).toBe(450_00);
+    // Summe über beide Monate = jeder Beleg genau einmal, nichts doppelt, nichts weg.
+    expect(june.variableCostsCents + july.variableCostsCents).toBe(450_00);
+  });
+});
+
+/**
+ * Erzeugender Pfad: Der KI-Beleg-Import muss ein Enddatum LIEFERN, sonst läuft die
+ * Zuordnungsregel leer. Deutsche Hotelrechnungen nennen sehr häufig nur „2 Nächte"
+ * statt eines Abreisedatums; der Validator lässt das ausdrücklich zu
+ * (EXP-HOT-002: `nights` ODER `checkOutDate`). Ohne Ableitung wäre
+ * `checkOutDate == checkInDate` — der Beleg klebte am Anreisemonat.
+ * Rein, keine DB, kein LLM-Call (nur der Payload-Bau wird aufgerufen).
+ */
+describe("receiptAi.toExpenseMutationPayload: Check-out aus nights (Voraussetzung für ADR 0002)", () => {
+  const hotelCandidate = (
+    overrides: Partial<ReceiptExpenseCandidate>
+  ): ReceiptExpenseCandidate => ({
+    category: "hotel",
+    amount: 150,
+    currency: "EUR",
+    date: "2026-06-30",
+    checkInDate: "2026-06-30",
+    checkOutDate: null,
+    nights: null,
+    ...overrides,
+  });
+
+  it("checkInDate 30.06. + 1 Nacht → checkOutDate 01.07. (NICHT 30.06.) und damit Juli", () => {
+    const payload = toExpenseMutationPayload(hotelCandidate({ nights: 1 }));
+    expect(payload.checkOutDate).toBe("2026-07-01");
+    expect(payload.checkInDate).toBe("2026-06-30");
+    // Und genau so wirkt es sich auf die kanonische Zuordnung aus:
+    const expense = { date: payload.date, checkOutDate: payload.checkOutDate };
+    expect(isExpenseInPeriod(expense, JULY.start, JULY.end)).toBe(true);
+    expect(isExpenseInPeriod(expense, JUNE.start, JUNE.end)).toBe(false);
+  });
+
+  it("Referenzfall #596 als KI-Beleg: 30.06. + 2 Nächte → 02.07., Zuordnung Juli", () => {
+    const payload = toExpenseMutationPayload(hotelCandidate({ nights: 2 }));
+    expect(payload.checkOutDate).toBe("2026-07-02");
+    expect(
+      isExpenseInPeriod({ date: payload.date, checkOutDate: payload.checkOutDate }, JULY.start, JULY.end)
+    ).toBe(true);
+  });
+
+  it("Jahresgrenze: 31.12. + 1 Nacht → 01.01. des Folgejahres", () => {
+    const payload = toExpenseMutationPayload(
+      hotelCandidate({ date: "2026-12-31", checkInDate: "2026-12-31", nights: 1 })
+    );
+    expect(payload.checkOutDate).toBe("2027-01-01");
+  });
+
+  it("explizites checkOutDate schlägt die Ableitung aus nights", () => {
+    const payload = toExpenseMutationPayload(
+      hotelCandidate({ nights: 5, checkOutDate: "2026-07-02" })
+    );
+    expect(payload.checkOutDate).toBe("2026-07-02");
+  });
+
+  it("ohne nights und ohne checkOutDate bleibt der bisherige Fallback (checkIn)", () => {
+    const payload = toExpenseMutationPayload(hotelCandidate({}));
+    expect(payload.checkOutDate).toBe("2026-06-30");
+  });
+
+  it("0 Nächte (Tagesnutzung) bleibt beim Check-in-Tag", () => {
+    const payload = toExpenseMutationPayload(hotelCandidate({ nights: 0 }));
+    expect(payload.checkOutDate).toBe("2026-06-30");
+  });
+
+  it("Flug bleibt unverändert: checkOutDate = Rückflugdatum", () => {
+    const payload = toExpenseMutationPayload({
+      category: "flight",
+      amount: 420,
+      currency: "EUR",
+      date: "2026-06-30",
+      returnDate: "2026-07-02",
+      departureTime: "07:15",
+      flightRouteType: "international",
+    });
+    expect(payload.checkOutDate).toBe("2026-07-02");
+    expect(
+      isExpenseInPeriod({ date: payload.date, checkOutDate: payload.checkOutDate }, JULY.start, JULY.end)
+    ).toBe(true);
   });
 });

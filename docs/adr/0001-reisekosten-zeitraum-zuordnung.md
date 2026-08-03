@@ -1,10 +1,16 @@
 # ADR 0001 — Zeitraum-Zuordnung von Reisekostenbelegen: `expense.date` ist kanonisch
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 0002](0002-reisekosten-leistungsende.md)
 - **Datum:** 2026-08-03
 - **Entscheider:** Alexander Döring (Account-Inhaber)
 - **Betrifft:** `client/src/lib/monthlyFinancials.ts`, `client/src/pages/Reports.tsx`, Dashboard, Steuerbasis
 - **Bezug:** KERN K4 (SSoT), K8 (Zeit-Invarianten), K13 (ADR), K14 (Steuer-/Berechnungslogik)
+
+> **Hinweis (2026-08-03):** Die hier festgelegte Zuordnung über `expense.date` wurde durch
+> [ADR 0002](0002-reisekosten-leistungsende.md) ersetzt — maßgeblich ist seither das Leistungsende
+> (`checkOutDate ?? date`). Der Text unten bleibt unverändert als historische Entscheidungsgrundlage
+> (append-only). Die strukturellen Festlegungen (eine Funktion `isExpenseInPeriod`, eine Filterstelle,
+> Vergleich auf `YYYY-MM-DD`-Keys, Server-Ladefilter bleibt Overlap) gelten unverändert weiter.
 
 ## Kontext
 

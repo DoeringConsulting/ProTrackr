@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { addDaysToDateKey } from "@shared/dateStichtag";
 import { invokeLLM } from "./_core/llm";
 
 export type ImportIssueSeverity = "error" | "warning";
@@ -531,8 +532,20 @@ export function toExpenseMutationPayload(candidate: ReceiptExpenseCandidate): Re
   }
 
   if (category === "hotel") {
-    payload.checkInDate = candidate.checkInDate ?? candidate.date ?? undefined;
-    payload.checkOutDate = candidate.checkOutDate ?? candidate.checkInDate ?? candidate.date ?? undefined;
+    const checkIn = candidate.checkInDate ?? candidate.date ?? undefined;
+    payload.checkInDate = checkIn;
+    // Check-out aus `nights` ableiten, wenn die Rechnung kein Abreisedatum nennt —
+    // deutsche Hotelrechnungen schreiben sehr häufig nur „2 Nächte". Der Validator
+    // (EXP-HOT-002) lässt genau diesen Fall zu, deshalb muss der Payload-Bau ihn
+    // auflösen: sonst bliebe checkOutDate == checkInDate und der Beleg klebte unter
+    // ADR 0002 (Zuordnung über das Leistungsende) am Anreisemonat.
+    // Fachlich identisch zu Import.tsx; TZ-neutrale Key-Arithmetik über den geteilten
+    // Helfer, nie toISOString (K8, sonst Vortag in Europe/Warsaw).
+    const derivedCheckOut =
+      checkIn && typeof candidate.nights === "number" && Number.isFinite(candidate.nights)
+        ? addDaysToDateKey(checkIn, Math.max(0, Math.round(candidate.nights)))
+        : undefined;
+    payload.checkOutDate = candidate.checkOutDate ?? derivedCheckOut ?? checkIn;
   }
 
   if (category === "fuel") {

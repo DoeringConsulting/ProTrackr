@@ -284,19 +284,21 @@ export default function Reports() {
 
   // ── EINE Filterstelle für den kompletten Berichts-Datenfluss ──────────
   //
-  // Kanonische Regel (lib/monthlyFinancials.isExpenseInPeriod): ein Beleg zählt in
-  // dem Zeitraum, in dem sein `expense.date` liegt — nie über checkIn/checkOut.
+  // Kanonische Regel (lib/monthlyFinancials.isExpenseInPeriod, docs/adr/0002): ein
+  // Beleg zählt komplett in dem Zeitraum, in dem die LEISTUNG ENDET —
+  // `checkOutDate ?? date`. Kein Split: Hotel → Check-out, Hin-/Rückflug auf einem
+  // Ticket → Rückflugdatum, alles Übrige → `date` (kein Enddatum vorhanden).
   // Der Server (getAllExpenses) lädt bewusst großzügiger per Overlap, damit
   // monatsübergreifende Belege am Rand nicht verloren gehen; die EINDEUTIGE
   // Zuordnung passiert hier, clientseitig.
   //
   // Ohne diesen Filter erschiene ein Hotel 30.06.–02.07. im Juni- UND im Juli-
   // Bericht in voller Höhe (Doppelzählung) und der Bericht divergierte vom
-  // Dashboard sowie von der Steuerbasis (computeMonthlyAmounts), die beide schon
-  // immer `expense.date` verwenden.
+  // Dashboard sowie von der Steuerbasis (computeMonthlyAmounts) — alle drei nutzen
+  // jetzt dieselbe eine Funktion.
   //
-  // Bewusst NICHT betroffen: `reportStichtag` oben — der Kurs-Stichtag nimmt
-  // weiterhin `checkOutDate` als effektives Ende (andere Frage: „welcher Tageskurs").
+  // Bewusst NICHT betroffen: `reportStichtag` oben — inhaltlich dasselbe Enddatum,
+  // beantwortet aber die andere Frage („welcher Tageskurs gilt").
   const expensesDetailedInPeriod = useMemo(() => {
     // Grenzen kommen aus <input type="date"> und sind bereits YYYY-MM-DD-Keys —
     // bewusst NICHT durch Date/toISOString schleifen (kippt sonst je nach
