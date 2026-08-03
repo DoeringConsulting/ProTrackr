@@ -288,10 +288,25 @@ Zuordnung hatten oder das Feld **erzeugen**:
   der Juli- auch eine **Juni-Rechnung mit denselben 150 EUR** versandt wurde; falls ja, doppelt
   berechnet (Altbestand, nicht Folge der Umstellung) → Gutschrift. Ein Beleg, ein Kunde, Grenze
   Juni/Juli 2026.
-- **Skript erweitert:** `analyze-expense-attribution.mjs` prüft jetzt zusätzlich die **Datenqualität des
-  Enddatums für Hotels UND Rundflüge** (`checkOutDate` fehlt oder = Startdatum). Bei Rundflügen ist
-  `checkOutDate` das Rückflugdatum — dieselbe Fehlerklasse, aber unauffälliger: Eine fehlende Angabe
-  erzeugt dort keine sichtbare Verschiebung, sondern hält den Beleg still im Abflugmonat.
+- **Prüfergebnis im Detail (NAS-Chat, read-only gegen Prod):** Hotels **48/48** plausibel (0× `NULL`,
+  0× `== checkIn`, 0× `< checkIn`); Flüge **32**, davon 9 Kandidaten mit fehlendem/gleichem Enddatum —
+  **alle unkritisch** (One-Way, Round-Trip im selben Monat, 0 EUR).
+- **🔑 Methodische Lesson:** Die Abweichungs-Abfrage des Skripts zeigt **nur Monatsverschiebungen**, ein
+  **kaputtes `checkOutDate` bleibt darin unsichtbar** (`checkOut == checkIn` erzeugt keine Abweichung —
+  der Defekt äußert sich als *Ausbleiben* einer Verschiebung). Deshalb waren separate
+  Datenqualitäts-Queries nötig. **Nachgezogen (v2.5.6):** fest im Skript als `DATA_QUALITY_SQL` —
+  `NULL` / `== Startdatum` / `< Startdatum`, kategorienspezifisch, mit Zählung je Kategorie und Befund.
+- **Fachregeln des Account-Inhabers** (Memory [[project_reisekosten_fachregeln]], eingearbeitet in
+  `docs/SPEC-Reisekosten-Abgrenzung.md` v1.1.0): (a) **§3.2 Flugrichtung** — nach Polen (KTW/KRK) =
+  Rückflug, aus Polen = Hinflug, bei Umstieg letzter Flughafen; kein DB-Feld kodiert das
+  (`flightRouteType` = Geografie). Praxis: Flüge als **Einzelstrecken** erfasst → `PUNKT`, kein
+  Ankermonat, `checkOutDate = NULL` **korrekt**. (b) **§8.1a verfallene Tickets** — abrechenbar bei
+  Ursache `DIENSTLICH`/`MANDANT`, **nicht** bei `KRANKHEIT`; neuer Status `VERFALLEN` +
+  Pflichtfeld `verfall_ursache`.
+- **Spec ins Repo geholt (K13/K4):** `docs/SPEC-Reisekosten-Abgrenzung.md` **v1.1.0** löst die lose
+  Datei in `Downloads/` ab — eine Wahrheitsquelle. Sie bleibt **K14-freigabepflichtig** (§16); R2/R3
+  (Split, Ankermonat) sind **Zielbild, nicht implementiert** — ADR 0002 ist der bewusst einfachere,
+  freigegebene Stand.
 - `server/expensePeriodAttribution.test.ts` erweitert: Referenzfall #596, Flug, Grenzen inklusive über
   das Leistungsende, K8 (Date-Objekte lokal), Konsistenz Chart ↔ Steuerbasis, `receiptAi`-Payload-
   Ableitung inkl. Jahresgrenze.

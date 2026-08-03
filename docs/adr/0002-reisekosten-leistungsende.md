@@ -185,10 +185,14 @@ erfasste Hotelbelege mit `nights` tragen sogar `checkOutDate == checkInDate`.
 fahren** und über einen Backfill zu entscheiden. Bei `costModel: "exclusive"` ist die Auswirkung
 geldwirksam (Kundenrechnungen); das Skript weist die betroffenen Belege und die Beträge je Monat aus.
 
-> **✅ ERLEDIGT — Prüfergebnis 2026-08-03 (Prod, read-only):**
-> - **Datenqualität `checkOutDate`: sauber** — 0 defekte von 48 Hotelbelegen. **Kein Backfill nötig.**
->   Die beiden Erfassungsfehler (Import-Vortag, KI-Pfad `checkOut == checkIn`) haben sich im
->   Bestand nicht materialisiert.
+> **✅ ERLEDIGT — Prüfung durchgeführt 2026-08-03 (Prod, read-only), KEIN Backfill nötig.**
+> Durchgeführt im NAS-Chat mit `analyze-expense-attribution.mjs` **plus ergänzenden
+> `checkOut`-Datenqualitäts-Queries** im mysql-Container.
+> - **Hotels: 48/48 mit plausiblem `checkOutDate`** — 0× `NULL`, 0× `== checkIn`, 0× `< checkIn`.
+> - **Flüge: 32 Belege**, davon 9 Kandidaten mit `checkOutDate` `NULL`/`== Hinflug` — **alle
+>   unkritisch** (One-Way, Round-Trip innerhalb desselben Monats, oder 0 EUR).
+> - Die beiden Erfassungsfehler (Import-Vortag, KI-Pfad `checkOut == checkIn`) haben sich im
+>   Bestand **nicht materialisiert**.
 > - **Geldwirksame Monatsverschiebung: genau 1 Fall** — Beleg **#596** (Fritzmeier, `exclusive`,
 >   150,00 EUR, Juni → Juli). Check-out 02.07. ist korrekt erfasst, die Verschiebung ist der
 >   **gewollte** Effekt und deckt sich mit dem Beleg-Kommentar („koszt ujęty w lipcu").
@@ -203,10 +207,24 @@ geldwirksam (Kundenrechnungen); das Skript weist die betroffenen Belege und die 
 > denselben 150 EUR** versandt wurde. Falls ja, wurden sie doppelt berechnet (Altbestand aus der
 > Doppelzählung, nicht Folge dieser Umstellung) und wären per Gutschrift zu bereinigen.
 >
-> **Nachgezogen:** Das Analyseskript prüft seit diesem Lauf zusätzlich die **Datenqualität des
-> Enddatums für Hotels UND Rundflüge** (`checkOutDate` fehlt oder = Startdatum). Bei Rundflügen ist
-> `checkOutDate` das Rückflugdatum — dieselbe Fehlerklasse, nur unauffälliger, weil eine fehlende
-> Angabe dort keine sichtbare Verschiebung erzeugt, sondern den Beleg still im Abflugmonat hält.
+> **🔑 Methodische Lesson (wichtig für jede künftige Vorprüfung):** Die Abweichungs-Abfrage des
+> Skripts findet **nur Monatsverschiebungen** — ein **kaputtes `checkOutDate` bleibt darin
+> unsichtbar**. Denn sie vergleicht `Monat(date)` gegen `Monat(checkOut ?? date)`; ist `checkOutDate`
+> gleich dem Startdatum oder `NULL`, sind beide Monate identisch und es entsteht **keine** Abweichung.
+> Ein defektes Enddatum äußert sich also gerade **nicht** als Verschiebung, sondern als deren stilles
+> Ausbleiben. Deshalb waren im Prüflauf separate Datenqualitäts-Queries nötig.
+>
+> **Nachgezogen (v2.5.6):** Diese Prüfung ist jetzt **fest im Skript** (`DATA_QUALITY_SQL`), damit die
+> Vorprüfung dauerhaft vollständig ist: `checkOutDate` `NULL` / `== Startdatum` / `< Startdatum`,
+> kategorienspezifisch (Hotels und Nicht-One-Way-Flüge dort, wo ein Enddatum fachlich erwartet wird;
+> `checkOut < Start` gilt kategorieunabhängig als defekt), mit Zählung je Kategorie und Befund. Bei
+> Taxi/Zug/Tanken ist `checkOutDate = NULL` korrekt und erzeugt bewusst keinen Befund.
+>
+> **Fachlicher Kontext zu den Flügen** (User-Regel, siehe Memory `project_reisekosten_fachregeln`):
+> Flüge werden in der Praxis meist als **getrennte Einzelstrecken** erfasst (je Beleg `date` = Flugtag)
+> — dort ist `checkOutDate = NULL` **fachlich korrekt**, kein Defekt. Round-Trip auf einem Beleg ist
+> selten. Hin-/Rückrichtung ist zudem **in keinem DB-Feld kodiert**: `flightRouteType` beschreibt
+> Geografie (`international`), nicht Hin/Rück.
 
 ### 4. Bulk-Delete/Purge filtert weiter über `expenses.date`
 

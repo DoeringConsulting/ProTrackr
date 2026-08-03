@@ -91,6 +91,14 @@ const DIVERGING_SQL = `
  *     ganzjaehrig der Vortag (client/src/pages/Import.tsx).
  * Geprueft werden Hotels UND Rundfluege (dort ist `checkOutDate` das Rueckflug-
  * datum) — bei Flugtickets ist die Fehlerklasse identisch, nur unauffaelliger.
+ *
+ * ⚠️ WARUM DIESE ZWEITE ABFRAGE NOETIG IST: Die Abweichungs-Abfrage oben
+ * (DIVERGING_SQL) findet solche Belege NICHT. Sie vergleicht Monat(date) gegen
+ * Monat(checkOut ?? date) — ist `checkOutDate` gleich dem Startdatum oder NULL,
+ * sind beide Monate identisch, es entsteht keine Abweichung und der Beleg bleibt
+ * unsichtbar. Ein kaputtes Enddatum aeussert sich also gerade NICHT als
+ * Verschiebung, sondern als deren stilles Ausbleiben. Nur diese Abfrage deckt es
+ * auf. (Lesson aus der Rollout-Vorpruefung 2026-08-03.)
  */
 const DATA_QUALITY_SQL = `
   SELECT
@@ -106,6 +114,9 @@ const DATA_QUALITY_SQL = `
     c.costModel,
     e.comment,
     CASE
+      WHEN e.checkOutDate IS NOT NULL
+       AND DATE(e.checkOutDate) < DATE(COALESCE(e.checkInDate, e.date))
+        THEN 'DEFEKT: Enddatum VOR Startdatum'
       WHEN e.checkOutDate IS NULL THEN 'kein Enddatum erfasst'
       WHEN DATE(e.checkOutDate) = DATE(COALESCE(e.checkInDate, e.date))
         THEN 'Enddatum = Startdatum (verdaechtig: 0 Naechte / KI-Pfad / Import)'
@@ -115,14 +126,19 @@ const DATA_QUALITY_SQL = `
   LEFT JOIN timeEntries te ON te.id = e.timeEntryId
   LEFT JOIN customers  c  ON c.id  = COALESCE(e.customerId, te.customerId)
   WHERE (
-          e.category = 'hotel'
-       OR (e.category = 'flight' AND (e.flightRouteType IS NULL OR e.flightRouteType <> 'one_way'))
+          -- (1) Immer defekt, unabhaengig von der Kategorie: Ende vor Beginn.
+          (e.checkOutDate IS NOT NULL
+           AND DATE(e.checkOutDate) < DATE(COALESCE(e.checkInDate, e.date)))
+          -- (2) Verdaechtig nur dort, wo ein Enddatum fachlich erwartet wird.
+          --     Bei Taxi/Zug/Tanken ist checkOutDate NULL korrekt, kein Befund.
+       OR (
+            (e.category = 'hotel'
+             OR (e.category = 'flight' AND (e.flightRouteType IS NULL OR e.flightRouteType <> 'one_way')))
+            AND (e.checkOutDate IS NULL
+                 OR DATE(e.checkOutDate) = DATE(COALESCE(e.checkInDate, e.date)))
+          )
         )
-    AND (
-          e.checkOutDate IS NULL
-       OR DATE(e.checkOutDate) = DATE(COALESCE(e.checkInDate, e.date))
-        )
-  ORDER BY e.date ASC, e.id ASC
+  ORDER BY e.category ASC, e.date ASC, e.id ASC
 `;
 
 /** Wie viele Hotelbelege gibt es insgesamt (Bezugsgroesse fuer die Quote). */
@@ -210,8 +226,19 @@ try {
         if (q.comment) console.log(`  Kommentar: ${q.comment}`);
         console.log("");
       }
+      // Kompakte Zaehlung je Kategorie und Befund — erlaubt die Schnellbewertung
+      // "unkritisch (One-Way / Round-Trip im selben Monat) vs. echt defekt".
+      const counts = new Map();
+      for (const q of quality) {
+        const key = `${q.category}${q.flightRouteType ? `/${q.flightRouteType}` : ""} | ${q.befund}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      for (const [key, n] of counts) console.log(`  ${n}x  ${key}`);
+      console.log("");
       console.log(`${quality.length} Beleg(e) mit fehlendem/verdaechtigem Enddatum — pruefen, ob das Enddatum`);
       console.log("nachgetragen werden muss (v2.5.5 fixt nur kuenftige Erfassungen, nicht den Bestand).");
+      console.log("Unkritisch sind: One-Way-Fluege, Round-Trips im selben Monat, 0-EUR-Belege und");
+      console.log("als Einzelstrecken erfasste Fluege (dort ist checkOutDate NULL fachlich korrekt).");
     }
 
     console.log("");
