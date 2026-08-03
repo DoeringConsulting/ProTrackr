@@ -33,7 +33,7 @@ import {
   provisionConfigFromCustomer,
 } from "@/lib/provision";
 import { getExpenseBillingCustomerId as attributeExpenseToCustomer } from "@/lib/expenseAttribution";
-import { computeMonthlyAmounts } from "@/lib/monthlyFinancials";
+import { computeMonthlyAmounts, isExpenseInPeriod } from "@/lib/monthlyFinancials";
 import { buildCustomerReportRows } from "@/lib/customerReportRows";
 import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
 
@@ -282,28 +282,51 @@ export default function Reports() {
     [timeEntries, customersById, reportRateMap]
   );
 
-  const expensesDetailedAll = useMemo(
-    () =>
-      expenses.map((expense) => {
-        const sourceCurrency = (expense.currency || "EUR").toUpperCase();
-        const amountEur = convertToEur(expense.amount, sourceCurrency);
-        const amountPln =
-          sourceCurrency === "PLN"
-            ? expense.amount
-            : convertAmountCents(expense.amount, sourceCurrency, "PLN", reportRateMap);
-        const relatedEntry = expense.timeEntryId ? entriesById.get(expense.timeEntryId) : undefined;
-        const relatedCustomer = relatedEntry ? customersById.get(relatedEntry.customerId) : undefined;
-        return {
-          ...expense,
-          sourceCurrency,
-          amountEur,
-          amountPln,
-          relatedEntry,
-          relatedCustomer,
-        };
-      }),
-    [expenses, reportRateMap, entriesById, customersById]
-  );
+  // ── EINE Filterstelle für den kompletten Berichts-Datenfluss ──────────
+  //
+  // Kanonische Regel (lib/monthlyFinancials.isExpenseInPeriod): ein Beleg zählt in
+  // dem Zeitraum, in dem sein `expense.date` liegt — nie über checkIn/checkOut.
+  // Der Server (getAllExpenses) lädt bewusst großzügiger per Overlap, damit
+  // monatsübergreifende Belege am Rand nicht verloren gehen; die EINDEUTIGE
+  // Zuordnung passiert hier, clientseitig.
+  //
+  // Ohne diesen Filter erschiene ein Hotel 30.06.–02.07. im Juni- UND im Juli-
+  // Bericht in voller Höhe (Doppelzählung) und der Bericht divergierte vom
+  // Dashboard sowie von der Steuerbasis (computeMonthlyAmounts), die beide schon
+  // immer `expense.date` verwenden.
+  //
+  // Bewusst NICHT betroffen: `reportStichtag` oben — der Kurs-Stichtag nimmt
+  // weiterhin `checkOutDate` als effektives Ende (andere Frage: „welcher Tageskurs").
+  const expensesDetailedInPeriod = useMemo(() => {
+    // Grenzen kommen aus <input type="date"> und sind bereits YYYY-MM-DD-Keys —
+    // bewusst NICHT durch Date/toISOString schleifen (kippt sonst je nach
+    // Browser-Zeitzone auf den Vortag). Leere/unvollständige Grenzen: nicht
+    // filtern, sonst verschwänden alle Belege, während Zeiteinträge stehen bleiben.
+    const isDateKey = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const expensesInPeriod =
+      isDateKey(startDate) && isDateKey(endDate)
+        ? expenses.filter((expense) => isExpenseInPeriod(expense, startDate, endDate))
+        : expenses;
+
+    return expensesInPeriod.map((expense) => {
+      const sourceCurrency = (expense.currency || "EUR").toUpperCase();
+      const amountEur = convertToEur(expense.amount, sourceCurrency);
+      const amountPln =
+        sourceCurrency === "PLN"
+          ? expense.amount
+          : convertAmountCents(expense.amount, sourceCurrency, "PLN", reportRateMap);
+      const relatedEntry = expense.timeEntryId ? entriesById.get(expense.timeEntryId) : undefined;
+      const relatedCustomer = relatedEntry ? customersById.get(relatedEntry.customerId) : undefined;
+      return {
+        ...expense,
+        sourceCurrency,
+        amountEur,
+        amountPln,
+        relatedEntry,
+        relatedCustomer,
+      };
+    });
+  }, [expenses, reportRateMap, entriesById, customersById, startDate, endDate]);
 
   // ── Fehler #2 (Sobrietas exclusive): abrechnungsrelevanter Kunde eines Belegs ──
   // Zentrale Zuordnungslogik (Cutover 01.07.2026 + Option-B-Override: explizite
@@ -341,7 +364,9 @@ export default function Reports() {
       };
     });
 
-    const expensesDetailed = expensesDetailedAll;
+    // Lokaler Alias auf die EINE (bereits zeitraum-gefilterte) Belegmenge — damit
+    // Buchhaltungsbericht, Kundenbericht und alle Exporte dieselbe Menge sehen.
+    const expensesDetailed = expensesDetailedInPeriod;
 
     const mappedTaxProfile = taxProfile
       ? {
@@ -578,7 +603,7 @@ export default function Reports() {
     const totalManDays = customerEntries.reduce((sum, entry) => sum + entry.manDays, 0);
 
     // Calculate expenses for this customer
-    const customerExpenses = expensesDetailedAll.filter(expense => {
+    const customerExpenses = expensesDetailedInPeriod.filter(expense => {
       return getExpenseBillingCustomerId(expense) === selectedCustomerId;
     });
     const customerExpensesDetailed = customerExpenses;
@@ -619,7 +644,7 @@ export default function Reports() {
         pairs.add("EUR/PLN");
       }
     }
-    for (const expense of expensesDetailedAll) {
+    for (const expense of expensesDetailedInPeriod) {
       const source = String(expense.sourceCurrency || "EUR").toUpperCase();
       if (source !== "PLN") pairs.add(`${source}/PLN`);
       if (source !== "EUR") pairs.add("EUR/PLN");
@@ -637,7 +662,7 @@ export default function Reports() {
         };
       })
       .sort((a, b) => a.pair.localeCompare(b.pair, "de"));
-  }, [timeEntriesDetailed, expensesDetailedAll, reportRateMap, reportRateMetaByPair]);
+  }, [timeEntriesDetailed, expensesDetailedInPeriod, reportRateMap, reportRateMetaByPair]);
 
   const handleExportPolishBookkeepingReport = async () => {
     const dateKeyOf = (value: string | Date) => {
@@ -686,7 +711,7 @@ export default function Reports() {
       };
     });
 
-    const bookkeepingExpenses = expensesDetailedAll.map((expense) => {
+    const bookkeepingExpenses = expensesDetailedInPeriod.map((expense) => {
       const dateKey = dateKeyOf(expense.date as any);
       const dateProject = projectByDate.get(dateKey);
       const endDate =
@@ -715,7 +740,7 @@ export default function Reports() {
     });
 
     const revenueEur = timeEntriesDetailed.reduce((sum, entry) => sum + (entry.amountEur ?? 0), 0);
-    const travelEur = expensesDetailedAll.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0);
+    const travelEur = expensesDetailedInPeriod.reduce((sum, expense) => sum + (expense.amountEur ?? 0), 0);
 
     const appliedRatePairs = new Set<string>();
     for (const entry of timeEntriesDetailed) {
@@ -725,7 +750,7 @@ export default function Reports() {
         appliedRatePairs.add("EUR/PLN");
       }
     }
-    for (const expense of expensesDetailedAll) {
+    for (const expense of expensesDetailedInPeriod) {
       const source = String(expense.sourceCurrency || "EUR").toUpperCase();
       if (source !== "PLN") {
         appliedRatePairs.add(`${source}/PLN`);

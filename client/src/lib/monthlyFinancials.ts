@@ -66,9 +66,36 @@ export type MonthlyCustomer = {
 /** Konvertiert einen Betrag (cents) aus `sourceCurrency` in die Ziel-Basis (cents). */
 export type CentsConverter = (amountCents: number, sourceCurrency: string) => number;
 
-function isInMonth(value: unknown, monthStart: string, monthEnd: string): boolean {
+/**
+ * Datums-Key-Vergleich (YYYY-MM-DD, Grenzen inklusive). Bewusst String-Vergleich auf
+ * lokalen Keys (`toDateKey`), nie über `toISOString` — letzteres liefert UTC und kippt
+ * im Fenster 00:00–02:00 Warschau auf den Vortag.
+ */
+function isInPeriod(value: unknown, periodStart: string, periodEnd: string): boolean {
   const key = toDateKey(value);
-  return key !== null && key >= monthStart && key <= monthEnd;
+  return key !== null && key >= periodStart && key <= periodEnd;
+}
+
+/**
+ * Kanonische Zeitraum-Zuordnung eines (Reisekosten-)Belegs: maßgeblich ist ALLEIN
+ * `expense.date`. Bewusst NICHT checkIn/checkOut — ein Hotel über den Monatswechsel
+ * (z.B. 30.06.–02.07.) zählt sonst in beiden Monatsberichten voll (Doppelzählung) und
+ * divergiert von der Steuerbasis, die schon immer `date` nutzt.
+ *
+ * EINE Implementierung für alle Verbraucher: Steuerbasis/Dashboard (unten) und der
+ * Berichts-Datenfluss in Reports.tsx. Grenzen inklusive, Vergleich auf YYYY-MM-DD-Keys
+ * (Europe/Warsaw-sicher, nie toISOString).
+ *
+ * Nicht zu verwechseln mit dem Kurs-Stichtag (`reportStichtag` in Reports.tsx), der
+ * bewusst `checkOutDate` als Ende nimmt — das ist die andere Frage („welcher Tageskurs"),
+ * nicht die Zeitraum-Zuordnung.
+ */
+export function isExpenseInPeriod(
+  expense: { date?: unknown },
+  periodStart: string,
+  periodEnd: string
+): boolean {
+  return isInPeriod(expense?.date, periodStart, periodEnd);
 }
 
 /**
@@ -132,13 +159,13 @@ export function computeMonthlyAmounts(
   let variableCostsCents = 0;
 
   for (const entry of ctx.timeEntries) {
-    if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
+    if (!isInPeriod(entry.date, monthStart, monthEnd)) continue;
     revenueCents += ctx.toPln(entry.calculatedAmount, entry.sourceCurrency);
     variableCostsCents += provisionForEntry(entry, ctx.customersById, ctx.toPln);
   }
 
   for (const expense of ctx.expenses) {
-    if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
+    if (!isExpenseInPeriod(expense, monthStart, monthEnd)) continue;
     const amountPln = ctx.toPln(expense.amount, expense.sourceCurrency);
     // Jede Reisekostenposition ist eine Betriebsausgabe (mindert die Steuerbasis) …
     variableCostsCents += amountPln;
@@ -180,11 +207,11 @@ export function computeMonthlyDisplayRevenue(
   let travelCents = 0;
 
   for (const entry of ctx.timeEntries) {
-    if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
+    if (!isInPeriod(entry.date, monthStart, monthEnd)) continue;
     timeCents += ctx.toTarget(entry.calculatedAmount, entry.sourceCurrency);
   }
   for (const expense of ctx.expenses) {
-    if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
+    if (!isExpenseInPeriod(expense, monthStart, monthEnd)) continue;
     if (isBillableExclusiveTravel(expense, ctx.customersById, ctx.attributionMaps)) {
       travelCents += ctx.toTarget(expense.amount, expense.sourceCurrency);
     }
