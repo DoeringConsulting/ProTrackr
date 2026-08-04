@@ -10,10 +10,26 @@
 // weiter in `routers.ts`, zöge der Test den kompletten Router-Graph inklusive
 // `bcrypt` (Native-Binding) nach — der schnellste Gate-Test bräche dann bei jedem
 // Node-Version-Drift im Build-Image, ohne dass sich an der Fachlogik etwas geändert
-// hat. Hier hängt nichts an DB, Session oder nativen Modulen.
+// hat. Hier hängt nichts an DB, Session oder nativen Modulen — auch der Import aus
+// `@shared/expenseServiceEnd` ist ein reines, abhängigkeitsfreies Modul.
 
 import { TRPCError } from "@trpc/server";
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import {
+  isExpenseServiceEndInRange,
+  type ExpenseServiceEndFields,
+} from "@shared/expenseServiceEnd";
+
+// Die JS-Seite der Leistungsende-Regel wird hier durchgereicht, damit SQL- und JS-Fassung
+// über dieselbe Tür erreichbar sind (und ein Leser beide nebeneinander sieht). Implementiert
+// ist sie genau einmal, in `shared/expenseServiceEnd.ts` — Client (Abrechnung) und Server
+// (Kopieren) rufen dieselbe Funktion.
+//
+// Bewusst NUR das Prädikat: `expenseServiceEndKey` (die reine Key-Ableitung) hat seine
+// Aufrufer in `shared/` (`isExpenseServiceEndInRange`, `shiftExpenseDateKeys`) und wird von
+// dort importiert. Ein zusätzlicher Durchreicher hier wäre ungenutzte Oberfläche —
+// ausgerechnet am K4-Angelpunkt eine Einladung, die Regel an zwei Türen zu betreten.
+export { isExpenseServiceEndInRange };
 
 const hhmmTimeSchema = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -71,6 +87,43 @@ export function expenseServiceEndDateSql(columns: {
   date: SQLWrapper;
 }): SQL {
   return sql`COALESCE(${columns.checkOutDate}, ${columns.date})`;
+}
+
+/**
+ * Welche der geladenen Belege darf „Zeitraum kopieren" (`copyRangeToNext`) tatsächlich
+ * kopieren?
+ *
+ * DAS PROBLEM: `db.getAllExpenses(userId, start, end)` filtert per OVERLAP
+ * (`COALESCE(checkOutDate, checkInDate, date) >= start AND COALESCE(checkInDate, date) <= end`).
+ * Als LADE-Filter ist das richtig — ein Bericht muss jeden Beleg sehen, der den Zeitraum
+ * berührt, und entscheidet die Zuordnung danach selbst über das Leistungsende. Als
+ * SELEKTIONSMENGE EINER SCHREIBOPERATION ist es falsch: Ein Beleg, der eine Bereichsgrenze
+ * überspannt (Hotel 30.06.–02.07.), wird von MEHREREN Kopierläufen erfasst. „Juni kopieren"
+ * und danach „Juli kopieren" legen dann DASSELBE Duplikat an, bei `scope: "day"` sogar drei
+ * Kopien. Bei `costModel: "exclusive"` steht der Beleg damit doppelt in der Kundenrechnung
+ * UND in der Steuerbasis.
+ *
+ * DIE REGEL: Kopiert wird, was nach ADR 0002 in den Quellzeitraum GEHÖRT — Leistungsende
+ * (`checkOutDate ?? date`) innerhalb `[rangeStart, rangeEnd]`. Dieselbe Zuordnung wie
+ * Abrechnung und Purge, also greift auch deren Invariante: über eine lückenlose
+ * Zeitraumfolge trifft sie jeden Beleg GENAU EINMAL.
+ *
+ * AUSNAHME — verknüpfte Belege (`timeEntryId` gesetzt) bleiben ungefiltert: Sie folgen
+ * ihrem Zeiteintrag, nicht dem Zeitraum. `copyRangeToNext` kopiert sie ausschließlich, wenn
+ * der Eltern-Zeiteintrag im selben Lauf kopiert wurde (`entryIdMap`), sonst zählt es sie als
+ * `skippedExpenses`. Da `db.getTimeEntries` exakt auf `timeEntries.date` filtert, wird ein
+ * Zeiteintrag von genau einem Lauf erfasst — verknüpfte Belege können also gar nicht
+ * doppeln. Sie zusätzlich nach dem Leistungsende zu filtern, würde nichts verhindern, aber
+ * den Hotelbeleg zum Zeiteintrag vom 30.06. aus BEIDEN Läufen werfen (Juni: Leistungsende
+ * liegt im Juli; Juli: Eltern-Eintrag fehlt) — er wäre nie wieder kopierbar.
+ */
+export function selectExpensesForRangeCopy<
+  T extends ExpenseServiceEndFields & { timeEntryId?: unknown }
+>(loadedExpenses: readonly T[], rangeStart: string, rangeEnd: string): T[] {
+  return loadedExpenses.filter((expense) => {
+    if (expense?.timeEntryId !== null && expense?.timeEntryId !== undefined) return true;
+    return isExpenseServiceEndInRange(expense, rangeStart, rangeEnd);
+  });
 }
 
 export type ExpenseDateRuleInput = {

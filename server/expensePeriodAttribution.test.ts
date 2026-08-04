@@ -14,7 +14,12 @@ import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { expenses as expensesTable } from "../drizzle/schema";
-import { expenseServiceEndDateSql, validateExpenseDateRules } from "./expenseRules";
+import {
+  expenseServiceEndDateSql,
+  isExpenseServiceEndInRange,
+  selectExpensesForRangeCopy,
+  validateExpenseDateRules,
+} from "./expenseRules";
 
 /**
  * Kanonische Zeitraum-Zuordnung von (Reisekosten-)Belegen. Rein, keine DB.
@@ -579,14 +584,19 @@ describe("Kategoriewechsel räumt die Datumsfelder der alten Kategorie", () => {
  * ausgewertet wird — mehr geht nicht, weniger auch nicht:
  *
  *   (1) SQL:  `expenseServiceEndDateSql` (`server/expenseRules.ts`) → der Purge
- *   (2) JS:   `isExpenseInPeriod` (`client/src/lib/monthlyFinancials.ts`) → die Abrechnung
+ *   (2) JS:   `isExpenseServiceEndInRange` (`shared/expenseServiceEnd.ts`) → die Abrechnung
+ *             (über `isExpenseInPeriod`), das Dashboard UND die Auswahl der zu kopierenden
+ *             Belege im Server (`selectExpensesForRangeCopy`). Client und Server rufen
+ *             dieselbe Implementierung; eine zweite JS-Fassung im Serverbereich wäre die
+ *             nächste Driftquelle gewesen.
  *
  * Dieser Block sichert beide Seiten ab:
  *   - Abschnitt 1 rendert (1) über den echten MySQL-Dialekt und assertiert den erzeugten
  *     SQL-String. Ohne das wäre die SQL-Seite ungetestet — ein Rückbau auf
  *     `DATE(expenses.date)` bliebe unbemerkt.
- *   - Abschnitt 3 pinnt die Semantik von (1) gegen (2). Das ist der eigentliche Zweck der
- *     Umstellung: Löschumfang == Abrechnungsumfang.
+ *   - Abschnitt 3 pinnt die Semantik von (1) gegen (2) — direkt gegen die PRODUKTIVE
+ *     JS-Funktion, nicht gegen ein zweites Test-Orakel. Das ist der eigentliche Zweck der
+ *     Umstellung: Löschumfang == Abrechnungsumfang == Kopierumfang.
  *
  * Die Werte kommen so aus der DB, wie Drizzle sie liefert: `date`, `checkInDate` und
  * `checkOutDate` sind `timestamp(..., { mode: "string" })` (`drizzle/schema.ts`), also
@@ -768,7 +778,7 @@ describe("Purge/Zurücksetzen: löscht nach Leistungsende (deckungsgleich zur Ab
    * DER EIGENTLICHE ZWECK DER UMSTELLUNG: dieselbe Menge, die für einen Monat
    * abgerechnet wird, ist die Menge, die ein Reset dieses Monats löscht.
    */
-  describe("3) Deckungsgleichheit mit isExpenseInPeriod (Abrechnung == Löschumfang)", () => {
+  describe("3) Deckungsgleichheit SQL == JS (Abrechnung == Löschumfang == Kopierumfang)", () => {
     const cases: Array<{ label: string; expense: { date?: unknown; checkOutDate?: unknown } }> = [
       { label: "Hotel #596 über den Monatswechsel", expense: hotelAcrossMonthEnd },
       { label: "Hin-/Rückflug auf einem Ticket", expense: flightAcrossMonthEnd },
@@ -799,9 +809,15 @@ describe("Purge/Zurücksetzen: löscht nach Leistungsende (deckungsgleich zur Ab
 
     for (const { label, expense } of cases) {
       for (const range of ranges) {
-        it(`${label} — ${range.label}: Purge-Filter == Abrechnungs-Filter`, () => {
+        it(`${label} — ${range.label}: SQL-Semantik == produktive JS-Regel`, () => {
+          // Links das JS-Abbild der SQL-Semantik (Test-Orakel), rechts die Funktion, die
+          // produktiv Abrechnung, Dashboard UND Kopier-Auswahl entscheidet.
           expect(purgeMatches(expense, range.start, range.end)).toBe(
-            isExpenseInPeriod(expense, range.start, range.end)
+            isExpenseServiceEndInRange(expense, range.start, range.end)
+          );
+          // … und der Client-Einstieg reicht wirklich an dieselbe Funktion durch.
+          expect(isExpenseInPeriod(expense, range.start, range.end)).toBe(
+            isExpenseServiceEndInRange(expense, range.start, range.end)
           );
         });
       }
@@ -822,7 +838,136 @@ describe("Purge/Zurücksetzen: löscht nach Leistungsende (deckungsgleich zur Ab
         if (label === "gar kein Datum") continue;
         const hits = months.filter((m) => purgeMatches(expense, m.start, m.end)).length;
         expect(hits, `${label} wurde von ${hits} Monats-Resets erfasst`).toBe(1);
+        // Dieselbe Partition muss für die produktive JS-Regel gelten — darauf stützt sich
+        // der Kopier-Fix (ein Beleg wird von genau EINEM Kopierlauf erfasst).
+        const jsHits = months.filter((m) =>
+          isExpenseServiceEndInRange(expense, m.start, m.end)
+        ).length;
+        expect(jsHits, `${label} wurde von ${jsHits} Zeiträumen erfasst`).toBe(1);
       }
     });
+  });
+});
+
+/**
+ * SCHREIBENDER PFAD — „Zeitraum kopieren" (`copyRangeToNext`, `routers.ts`).
+ *
+ * `db.getAllExpenses(userId, start, end)` filtert per OVERLAP. Als LADE-Filter ist das
+ * richtig (der Bericht muss jeden berührenden Beleg sehen und entscheidet selbst), als
+ * SELEKTIONSMENGE EINER SCHREIBOPERATION war es der Bug: Ein grenzüberspannender Beleg
+ * (Hotel 30.06.–02.07.) liegt in MEHREREN Kopierläufen. „Juni kopieren" und danach „Juli
+ * kopieren" legten dasselbe Duplikat an — bei `costModel: "exclusive"` steht der Beleg damit
+ * doppelt in Kundenrechnung UND Steuerbasis.
+ *
+ * `selectExpensesForRangeCopy` schneidet die Obermenge auf die Belege zu, die nach ADR 0002
+ * in den Quellzeitraum GEHÖREN (Leistungsende). Verknüpfte Belege bleiben bewusst
+ * ungefiltert — Begründung am Code.
+ */
+describe("copyRangeToNext: Auswahl der zu kopierenden Belege (Duplikat-Fix)", () => {
+  /** Standalone-Beleg = kein `timeEntryId`. Genau die betroffene Klasse. */
+  const standaloneHotel = { ...hotelAcrossMonthEnd, id: 1, timeEntryId: null };
+  const standaloneTaxi = { id: 2, timeEntryId: null, date: "2026-06-15" };
+  /** Verknüpfter Beleg mit demselben Datumsprofil wie das Hotel. */
+  const linkedHotel = { ...hotelAcrossMonthEnd, id: 3, timeEntryId: 77 };
+
+  /**
+   * Was `getAllExpenses` per Overlap für einen Zeitraum liefert — inklusive der Belege, die
+   * nur hineinragen. Bewusst grob nachgebildet (untere Grenze über Leistungsende, obere über
+   * Leistungsbeginn), damit der Testfall dieselbe Obermenge sieht wie der Server.
+   */
+  const loadedForRange = <T extends { date?: unknown; checkInDate?: unknown; checkOutDate?: unknown }>(
+    all: readonly T[],
+    start: string,
+    end: string
+  ): T[] => {
+    const key = (value: unknown) => (value ? String(value).slice(0, 10) : null);
+    return all.filter((expense) => {
+      const overlapEnd = key(expense.checkOutDate) ?? key(expense.checkInDate) ?? key(expense.date);
+      const overlapStart = key(expense.checkInDate) ?? key(expense.date);
+      return overlapEnd !== null && overlapStart !== null && overlapEnd >= start && overlapStart <= end;
+    });
+  };
+
+  it("die Obermenge enthält das Hotel tatsächlich in BEIDEN Monaten (das ist die Ursache)", () => {
+    expect(loadedForRange([standaloneHotel], JUNE.start, JUNE.end)).toHaveLength(1);
+    expect(loadedForRange([standaloneHotel], JULY.start, JULY.end)).toHaveLength(1);
+  });
+
+  it("REFERENZFALL: Standalone-Hotel 30.06.–02.07. wird vom JULI-Lauf kopiert, vom Juni-Lauf nicht", () => {
+    const june = selectExpensesForRangeCopy(
+      loadedForRange([standaloneHotel], JUNE.start, JUNE.end),
+      JUNE.start,
+      JUNE.end
+    );
+    const july = selectExpensesForRangeCopy(
+      loadedForRange([standaloneHotel], JULY.start, JULY.end),
+      JULY.start,
+      JULY.end
+    );
+    expect(june).toHaveLength(0);
+    expect(july).toHaveLength(1);
+  });
+
+  it("über eine lückenlose Zeitraumfolge wird JEDER Standalone-Beleg genau einmal kopiert", () => {
+    // Der eigentliche Duplikat-Schutz: nacheinander „Juni kopieren", „Juli kopieren", …
+    const all = [standaloneHotel, standaloneTaxi];
+    const months = [
+      { start: "2026-05-01", end: "2026-05-31" },
+      { start: JUNE.start, end: JUNE.end },
+      { start: JULY.start, end: JULY.end },
+      { start: "2026-08-01", end: "2026-08-31" },
+    ];
+    for (const expense of all) {
+      const hits = months.filter(
+        (m) =>
+          selectExpensesForRangeCopy(loadedForRange([expense], m.start, m.end), m.start, m.end)
+            .length === 1
+      ).length;
+      expect(hits, `Beleg ${expense.id} wurde von ${hits} Kopierläufen erfasst`).toBe(1);
+    }
+  });
+
+  it("scope 'day': drei Tagesläufe über den Aufenthalt erzeugen zusammen EINE Kopie", () => {
+    // Vorher der schlimmste Fall: 30.06., 01.07. und 02.07. hätten je eine Kopie angelegt.
+    const days = ["2026-06-30", "2026-07-01", "2026-07-02"];
+    const hits = days.filter(
+      (day) =>
+        selectExpensesForRangeCopy(loadedForRange([standaloneHotel], day, day), day, day).length === 1
+    );
+    expect(hits).toEqual(["2026-07-02"]);
+  });
+
+  it("verknüpfte Belege bleiben ungefiltert — sie folgen ihrem Zeiteintrag", () => {
+    // Ohne diese Ausnahme fiele das Hotel zum Zeiteintrag vom 30.06. durch BEIDE Läufe:
+    // im Juni wegen des Leistungsendes im Juli, im Juli wegen des fehlenden Eltern-Eintrags
+    // (der liegt im Juni). Es wäre nie wieder kopierbar. Doppeln kann es nicht, weil
+    // `getTimeEntries` exakt auf `timeEntries.date` filtert.
+    const june = selectExpensesForRangeCopy(
+      loadedForRange([linkedHotel], JUNE.start, JUNE.end),
+      JUNE.start,
+      JUNE.end
+    );
+    expect(june).toHaveLength(1);
+    expect(june[0]?.id).toBe(3);
+  });
+
+  it("timeEntryId 0 gilt als verknüpft, nicht als 'nicht gesetzt'", () => {
+    // Regressionsschutz gegen einen truthy-Check: `0` ist zwar falsy, aber ein gesetzter Wert.
+    const linkedWithZero = { ...hotelAcrossMonthEnd, id: 4, timeEntryId: 0 };
+    expect(
+      selectExpensesForRangeCopy([linkedWithZero], JUNE.start, JUNE.end)
+    ).toHaveLength(1);
+  });
+
+  it("Belege ohne verwertbares Datum werden nicht kopiert", () => {
+    expect(selectExpensesForRangeCopy([{ timeEntryId: null }], JULY.start, JULY.end)).toHaveLength(0);
+  });
+
+  it("die Kopier-Prozedur verwendet genau diesen Baustein", () => {
+    // Quelltext-Prüfung, weil `routers.ts` nicht importierbar ist (zieht `bcrypt` ins Gate).
+    // Ohne sie bliebe ein Rückbau auf `getAllExpenses(...)` als Selektionsmenge unbemerkt.
+    // Bei Umbenennung hier NACHZIEHEN, nicht löschen.
+    const routersSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+    expect(routersSource).toContain("selectExpensesForRangeCopy(");
   });
 });

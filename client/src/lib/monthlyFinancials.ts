@@ -20,6 +20,7 @@
 // Aufrufers. Kein Datenleck-Thema (Dashboard ist user-internal; Provision/Netto
 // dürfen dort).
 
+import { isExpenseServiceEndInRange } from "@shared/expenseServiceEnd";
 import {
   getExpenseBillingCustomerId,
   toDateKey,
@@ -77,21 +78,6 @@ function isInPeriod(value: unknown, periodStart: string, periodEnd: string): boo
 }
 
 /**
- * Leistungsende eines Belegs als lokaler YYYY-MM-DD-Key: `checkOutDate ?? date`.
- *
- * Bewusst über `toDateKey` verkettet statt `??` auf den Rohwerten: leere Strings und
- * unparsebare Werte in `checkOutDate` müssen ebenfalls auf `date` durchfallen — `??`
- * würde nur bei null/undefined greifen und den Beleg sonst still aus allen Zeiträumen
- * werfen.
- */
-function expenseServiceEndKey(expense: {
-  date?: unknown;
-  checkOutDate?: unknown;
-}): string | null {
-  return toDateKey(expense?.checkOutDate) ?? toDateKey(expense?.date);
-}
-
-/**
  * Kanonische Zeitraum-Zuordnung eines (Reisekosten-)Belegs: maßgeblich ist das
  * **Leistungsende** (`checkOutDate ?? date`) — siehe `docs/adr/0002`.
  *
@@ -112,14 +98,17 @@ function expenseServiceEndKey(expense: {
  * Nicht zu verwechseln mit dem Kurs-Stichtag (`reportStichtag` in Reports.tsx): der nutzt
  * dasselbe Enddatum, beantwortet aber die andere Frage („welcher Tageskurs"), nicht die
  * Zeitraum-Zuordnung.
+ *
+ * Die Mechanik liegt in `shared/expenseServiceEnd.ts` — der Server wertet dieselbe Regel
+ * beim Kopieren aus und darf sie nicht nachbauen. Diese Signatur bleibt der etablierte
+ * Einstieg für den Client-Datenfluss und ändert ihr Verhalten nicht.
  */
 export function isExpenseInPeriod(
   expense: { date?: unknown; checkOutDate?: unknown },
   periodStart: string,
   periodEnd: string
 ): boolean {
-  const endKey = expenseServiceEndKey(expense);
-  return endKey !== null && endKey >= periodStart && endKey <= periodEnd;
+  return isExpenseServiceEndInRange(expense, periodStart, periodEnd);
 }
 
 /**

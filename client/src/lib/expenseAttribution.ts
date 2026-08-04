@@ -10,22 +10,16 @@
 //   - Der datumsbasierte Fallback (genau 1 Kunde am Beleg-Tag) greift NUR ab
 //     dem Cutover — er würde sonst Alt-Belege automatisch umbuchen.
 
-export const EXPENSE_CUSTOMER_CUTOVER = "2026-07-01";
+// Lokaler Datums-Key (YYYY-MM-DD) aus einem Datumswert: Die Implementierung liegt seit dem
+// Kopier-Fix in `shared/dateStichtag.ts`, weil der SERVER sie inzwischen ebenfalls braucht
+// (Auswahl der zu kopierenden Belege). Hier bleibt bewusst ein Re-Export stehen: alle
+// bestehenden Client-Importe (`./expenseAttribution`) funktionieren unverändert weiter, und
+// es gibt trotzdem nur eine Implementierung (K4).
+import { toDateKey } from "@shared/dateStichtag";
 
-/**
- * Lokaler Datums-Key (YYYY-MM-DD) aus einem Datumswert. Nutzt bewusst die
- * lokalen Datumskomponenten (nicht toISOString), damit Warschau-Mitternacht
- * nicht auf den Vortag kippt (siehe Fehler #1).
- */
-export function toDateKey(value: unknown): string | null {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(String(value));
-  if (Number.isNaN(date.getTime())) return null;
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+export { toDateKey };
+
+export const EXPENSE_CUSTOMER_CUTOVER = "2026-07-01";
 
 type TimeEntryLike = { id: number; customerId: number | string | null; date: unknown };
 type EntryWithCustomer = { customerId: number | string | null };

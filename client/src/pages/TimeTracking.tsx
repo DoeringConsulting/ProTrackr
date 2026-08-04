@@ -29,6 +29,9 @@ import { trpc } from "@/lib/trpc";
 import { ChevronLeft, ChevronRight, Plus, Copy, Clock, Receipt, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+// Dieselbe Verschiebungsregel, die der Server beim Kopieren ANWENDET — die Vorschau darf
+// nichts anderes versprechen, als angelegt wird (K4).
+import { nextWorkdayKey, type CopyScope } from "@shared/copyRangeShift";
 
 type TimeEntryFormData = {
   customerId: number | null;
@@ -39,8 +42,6 @@ type TimeEntryFormData = {
   minutes: string;
   notes: string;
 };
-
-type CopyScope = "day" | "week" | "month";
 
 const initialFormData: TimeEntryFormData = {
   customerId: null,
@@ -153,46 +154,54 @@ function dayDiff(startDateKey: string, endDateKey: string): number {
   return Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
 }
 
-function addMonthsClamped(dateKey: string, months: number): string {
-  const source = parseDateKey(dateKey);
-  const y = source.getFullYear();
-  const m = source.getMonth();
-  const d = source.getDate();
-  const targetStart = new Date(y, m + months, 1);
-  const lastDay = new Date(targetStart.getFullYear(), targetStart.getMonth() + 1, 0).getDate();
-  return formatLocalDate(
-    new Date(targetStart.getFullYear(), targetStart.getMonth(), Math.min(d, lastDay))
-  );
-}
-
+/**
+ * Vorschau „Quelle → Ziel" im Kopier-Dialog.
+ *
+ * Der Zielbereich folgt der Server-Regel (`shared/copyRangeShift.ts`):
+ *   - Tag: nächster ARBEITSTAG (Fr → Mo), nicht der Folgetag.
+ *   - Woche: +7 Tage.
+ *   - Monat: der Folgemonat. Einzelne Einträge auf einem überzähligen Wochentag-Vorkommen
+ *     (5. Montag im Quellmonat, Zielmonat hat nur 4) landen im Monat darauf. Der Bereich
+ *     bildet bewusst den Regelfall ab, nicht jede Einzelverschiebung — auf den Überlauf
+ *     weist die DialogDescription im Klartext hin (betrifft die Monatstage 29.–31.).
+ */
 function getScopeRanges(anchorDateKey: string, scope: CopyScope) {
   const anchor = parseDateKey(anchorDateKey);
-  let sourceStart = formatLocalDate(anchor);
-  let sourceEnd = formatLocalDate(anchor);
-  let targetStart = addDays(sourceStart, 1);
-  let targetEnd = addDays(sourceEnd, 1);
+  // Unbrauchbares Referenzdatum: leere Vorschau statt Ausnahme. `nextWorkdayKey` wirft bei
+  // einem kaputten Key bewusst — aus einer Render-Funktion heraus wäre das ein weißer
+  // Bildschirm. Den fachlichen Abbruch übernimmt `handleScopeCopySubmit`.
+  if (Number.isNaN(anchor.getTime())) {
+    return { sourceStart: "", sourceEnd: "", targetStart: "", targetEnd: "" };
+  }
 
   if (scope === "week") {
-    const day = anchor.getDay();
-    const diffToMonday = (day + 6) % 7;
+    const diffToMonday = (anchor.getDay() + 6) % 7;
     const monday = new Date(anchor);
     monday.setDate(anchor.getDate() - diffToMonday);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    sourceStart = formatLocalDate(monday);
-    sourceEnd = formatLocalDate(sunday);
-    targetStart = addDays(sourceStart, 7);
-    targetEnd = addDays(sourceEnd, 7);
-  } else if (scope === "month") {
-    const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-    const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
-    sourceStart = formatLocalDate(monthStart);
-    sourceEnd = formatLocalDate(monthEnd);
-    targetStart = addMonthsClamped(sourceStart, 1);
-    targetEnd = addMonthsClamped(sourceEnd, 1);
+    const sourceStart = formatLocalDate(monday);
+    const sourceEnd = formatLocalDate(sunday);
+    return {
+      sourceStart,
+      sourceEnd,
+      targetStart: addDays(sourceStart, 7),
+      targetEnd: addDays(sourceEnd, 7),
+    };
   }
 
-  return { sourceStart, sourceEnd, targetStart, targetEnd };
+  if (scope === "month") {
+    return {
+      sourceStart: formatLocalDate(new Date(anchor.getFullYear(), anchor.getMonth(), 1)),
+      sourceEnd: formatLocalDate(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)),
+      targetStart: formatLocalDate(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1)),
+      targetEnd: formatLocalDate(new Date(anchor.getFullYear(), anchor.getMonth() + 2, 0)),
+    };
+  }
+
+  const sourceStart = formatLocalDate(anchor);
+  const target = nextWorkdayKey(sourceStart);
+  return { sourceStart, sourceEnd: sourceStart, targetStart: target, targetEnd: target };
 }
 
 type ExpenseCalendarItem = {
@@ -1105,7 +1114,10 @@ export default function TimeTracking() {
             <DialogHeader>
               <DialogTitle>Copy & Paste für Tag/Woche/Monat</DialogTitle>
               <DialogDescription>
-                Überträgt alle Zeiteinträge und Reisekosten auf den nächsten Zeitraum.
+                Überträgt alle Zeiteinträge und Reisekosten auf den nächsten Zeitraum. Der
+                Wochentag bleibt dabei erhalten (Feiertage werden nicht berücksichtigt).
+                Einträge vom Monatsende (29.–31.) können in den übernächsten Monat rutschen,
+                wenn der Zielmonat den Wochentag nicht mehr hergibt.
               </DialogDescription>
             </DialogHeader>
 
@@ -1117,9 +1129,9 @@ export default function TimeTracking() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="day">Tag → nächster Tag</SelectItem>
+                    <SelectItem value="day">Tag → nächster Arbeitstag</SelectItem>
                     <SelectItem value="week">Woche → nächste Woche</SelectItem>
-                    <SelectItem value="month">Monat → nächster Monat</SelectItem>
+                    <SelectItem value="month">Monat → nächster Monat (gleicher Wochentag)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

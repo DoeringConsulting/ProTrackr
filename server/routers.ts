@@ -24,8 +24,18 @@ import {
   type ReceiptExpenseCandidate,
 } from "./receiptAi";
 import { toScopeContext } from "./scope";
-import { expenseServiceEndDateSql, validateExpenseDateRules } from "./expenseRules";
-import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
+import {
+  expenseServiceEndDateSql,
+  selectExpensesForRangeCopy,
+  validateExpenseDateRules,
+} from "./expenseRules";
+import { capRateStichtagKey, toDateKey as toLocalDateKey, warsawDateKey } from "@shared/dateStichtag";
+import {
+  shiftDateKeyByScope,
+  shiftExpenseDateKeys,
+  weekdayIndexOfDateKey,
+  type CopyScope,
+} from "@shared/copyRangeShift";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
   if (!actorMandantId) return false;
@@ -145,8 +155,6 @@ function extractTextFromPdfBytes(buffer: Buffer): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-type CopyScope = "day" | "week" | "month";
-
 function formatDateKeyLocal(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -161,18 +169,11 @@ function parseDateKeyInput(value: string): Date {
   return new Date(value);
 }
 
-function addMonthsClamped(date: Date, months: number): Date {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const day = date.getDate();
-
-  const targetMonthDate = new Date(year, month + months, 1);
-  const targetYear = targetMonthDate.getFullYear();
-  const targetMonth = targetMonthDate.getMonth();
-  const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
-  return new Date(targetYear, targetMonth, Math.min(day, lastDayOfTargetMonth));
-}
-
+/**
+ * QUELLbereich des Kopiervorgangs — bewusst unverändert: Tag = der Anker selbst, Woche =
+ * Mo–So um den Anker, Monat = Kalendermonat. Nur der ZIELtag folgt der Wochentagsregel
+ * (`shiftDateKeyByScope`, `shared/copyRangeShift.ts`).
+ */
 function getScopeRange(anchorDate: Date, scope: CopyScope) {
   const normalizedAnchor = new Date(
     anchorDate.getFullYear(),
@@ -197,28 +198,6 @@ function getScopeRange(anchorDate: Date, scope: CopyScope) {
   const start = new Date(normalizedAnchor.getFullYear(), normalizedAnchor.getMonth(), 1);
   const end = new Date(normalizedAnchor.getFullYear(), normalizedAnchor.getMonth() + 1, 0);
   return { start, end };
-}
-
-function shiftDateByScope(sourceDate: Date, scope: CopyScope): Date {
-  const normalized = new Date(sourceDate.getFullYear(), sourceDate.getMonth(), sourceDate.getDate());
-  if (scope === "day") {
-    normalized.setDate(normalized.getDate() + 1);
-    return normalized;
-  }
-  if (scope === "week") {
-    normalized.setDate(normalized.getDate() + 7);
-    return normalized;
-  }
-  return addMonthsClamped(normalized, 1);
-}
-
-function tryShiftDateValue(value: unknown, scope: CopyScope): string | undefined {
-  if (value === null || value === undefined) return undefined;
-  const input = String(value).trim();
-  if (!input) return undefined;
-  const source = parseDateKeyInput(input.split(" ")[0] ?? input);
-  if (Number.isNaN(source.getTime())) return undefined;
-  return formatDateKeyLocal(shiftDateByScope(source, scope));
 }
 
 const expenseCategoryValues = [
@@ -1254,7 +1233,16 @@ export const appRouter = router({
       const sourceEndKey = formatDateKeyLocal(end);
 
       const sourceEntries = await getTimeEntries(ctx.user.id, start, end);
-      const sourceExpenses = await getAllExpenses(ctx.user.id, start, end);
+      // `getAllExpenses` liefert per Overlap eine OBERMENGE (jeder Beleg, der den Zeitraum
+      // berührt). Für eine Schreiboperation ist das zu viel: grenzüberspannende Belege
+      // lägen sonst in zwei Kopierläufen und würden doppelt angelegt. Die Auswahlregel
+      // steht in `selectExpensesForRangeCopy` (Leistungsende, ADR 0002).
+      const loadedExpenses = await getAllExpenses(ctx.user.id, start, end);
+      const sourceExpenses = selectExpensesForRangeCopy(
+        loadedExpenses as any[],
+        sourceStartKey,
+        sourceEndKey
+      );
 
       if (sourceEntries.length === 0 && sourceExpenses.length === 0) {
         return {
@@ -1283,11 +1271,14 @@ export const appRouter = router({
         }
         if (!customer) continue;
 
-        const sourceDate = new Date(entry.date as any);
-        if (Number.isNaN(sourceDate.getTime())) continue;
-        const shiftedDate = shiftDateByScope(sourceDate, input.scope);
-        const shiftedDateKey = formatDateKeyLocal(shiftedDate);
-        const weekday = `${weekdayDe[shiftedDate.getDay()]}/${weekdayPl[shiftedDate.getDay()]}`;
+        const sourceDateKey = toLocalDateKey(entry.date);
+        if (!sourceDateKey) continue;
+        const shiftedDateKey = shiftDateKeyByScope(sourceDateKey, input.scope);
+        // Das `weekday`-Label wird IMMER aus dem Zieldatum abgeleitet (nie aus der Quelle
+        // übernommen): Bei `month` bleibt der Wochentag zwar erhalten, bei `day` wechselt er
+        // aber (Fr → Mo). Ein übernommenes Label wäre ein stiller Datenfehler.
+        const shiftedWeekdayIndex = weekdayIndexOfDateKey(shiftedDateKey);
+        const weekday = `${weekdayDe[shiftedWeekdayIndex]}/${weekdayPl[shiftedWeekdayIndex]}`;
         const financials = calculateTimeEntryFinancials({
           hoursMinutes: entry.hours,
           entryType: entry.entryType,
@@ -1314,8 +1305,13 @@ export const appRouter = router({
       }
 
       for (const expense of sourceExpenses as any[]) {
-        const shiftedPrimaryDate = tryShiftDateValue(expense.date, input.scope);
-        if (!shiftedPrimaryDate) continue;
+        // Leistungsende nach der Scope-Regel, die übrigen Datumsfelder mit demselben
+        // Tagesabstand. Anker ist bewusst dasselbe Leistungsende, nach dem oben ausgewählt
+        // wurde — sonst könnte die Kopie eines grenzüberspannenden Belegs im QUELLzeitraum
+        // landen. Der gemeinsame Offset hält Dauer und Chronologie fest
+        // (siehe `shiftExpenseDateKeys`).
+        const shiftedDates = shiftExpenseDateKeys(expense, input.scope);
+        if (!shiftedDates) continue;
 
         const mappedTimeEntryId =
           expense.timeEntryId && entryIdMap.has(Number(expense.timeEntryId))
@@ -1330,7 +1326,7 @@ export const appRouter = router({
         const payload: Record<string, any> = {
           timeEntryId: mappedTimeEntryId ?? undefined,
           userId: mappedTimeEntryId ? undefined : expense.userId ?? ctx.user.id,
-          date: shiftedPrimaryDate,
+          date: shiftedDates.date,
           category: expense.category,
           amount: expense.amount,
           currency: expense.currency || "EUR",
@@ -1343,8 +1339,8 @@ export const appRouter = router({
           flightRouteType: expense.flightRouteType || undefined,
           departureTime: expense.departureTime || undefined,
           arrivalTime: expense.arrivalTime || undefined,
-          checkInDate: tryShiftDateValue(expense.checkInDate, input.scope) || undefined,
-          checkOutDate: tryShiftDateValue(expense.checkOutDate, input.scope) || undefined,
+          checkInDate: shiftedDates.checkInDate ?? undefined,
+          checkOutDate: shiftedDates.checkOutDate ?? undefined,
           distance: expense.distance ?? undefined,
           rate: expense.rate ?? undefined,
           liters: expense.liters ?? undefined,
