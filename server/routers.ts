@@ -24,7 +24,20 @@ import {
   type ReceiptExpenseCandidate,
 } from "./receiptAi";
 import { toScopeContext } from "./scope";
-import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
+import {
+  expenseServiceEndDateSql,
+  explicitCustomerIdForApproval,
+  explicitCustomerIdForRangeCopy,
+  selectExpensesForRangeCopy,
+  validateExpenseDateRules,
+} from "./expenseRules";
+import { capRateStichtagKey, toDateKey as toLocalDateKey, warsawDateKey } from "@shared/dateStichtag";
+import {
+  shiftDateKeyByScope,
+  shiftExpenseDateKeys,
+  weekdayIndexOfDateKey,
+  type CopyScope,
+} from "@shared/copyRangeShift";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
   if (!actorMandantId) return false;
@@ -144,8 +157,6 @@ function extractTextFromPdfBytes(buffer: Buffer): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-type CopyScope = "day" | "week" | "month";
-
 function formatDateKeyLocal(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -160,18 +171,11 @@ function parseDateKeyInput(value: string): Date {
   return new Date(value);
 }
 
-function addMonthsClamped(date: Date, months: number): Date {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const day = date.getDate();
-
-  const targetMonthDate = new Date(year, month + months, 1);
-  const targetYear = targetMonthDate.getFullYear();
-  const targetMonth = targetMonthDate.getMonth();
-  const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
-  return new Date(targetYear, targetMonth, Math.min(day, lastDayOfTargetMonth));
-}
-
+/**
+ * QUELLbereich des Kopiervorgangs — bewusst unverändert: Tag = der Anker selbst, Woche =
+ * Mo–So um den Anker, Monat = Kalendermonat. Nur der ZIELtag folgt der Wochentagsregel
+ * (`shiftDateKeyByScope`, `shared/copyRangeShift.ts`).
+ */
 function getScopeRange(anchorDate: Date, scope: CopyScope) {
   const normalizedAnchor = new Date(
     anchorDate.getFullYear(),
@@ -198,28 +202,6 @@ function getScopeRange(anchorDate: Date, scope: CopyScope) {
   return { start, end };
 }
 
-function shiftDateByScope(sourceDate: Date, scope: CopyScope): Date {
-  const normalized = new Date(sourceDate.getFullYear(), sourceDate.getMonth(), sourceDate.getDate());
-  if (scope === "day") {
-    normalized.setDate(normalized.getDate() + 1);
-    return normalized;
-  }
-  if (scope === "week") {
-    normalized.setDate(normalized.getDate() + 7);
-    return normalized;
-  }
-  return addMonthsClamped(normalized, 1);
-}
-
-function tryShiftDateValue(value: unknown, scope: CopyScope): string | undefined {
-  if (value === null || value === undefined) return undefined;
-  const input = String(value).trim();
-  if (!input) return undefined;
-  const source = parseDateKeyInput(input.split(" ")[0] ?? input);
-  if (Number.isNaN(source.getTime())) return undefined;
-  return formatDateKeyLocal(shiftDateByScope(source, scope));
-}
-
 const expenseCategoryValues = [
   "car",
   "mileage_allowance",
@@ -236,33 +218,17 @@ const expenseCategoryValues = [
 
 const expenseCategorySchema = z.enum(expenseCategoryValues);
 const flightRouteTypeSchema = z.enum(["domestic", "international"]);
-const hhmmTimeSchema = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-function toComparableDate(value: unknown): Date | null {
-  if (!value || typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-
-  if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) {
-    const [dd, mm, yyyy] = trimmed.split(".");
-    const parsed = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const parsed = new Date(`${trimmed}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
 
 function toIsoDateOnly(value: unknown): string | undefined {
   if (!value) return undefined;
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return undefined;
-    return value.toISOString().slice(0, 10);
+    // NICHT `toISOString()` — das liest UTC-Komponenten. Zeiteinträge werden mit lokaler
+    // Mitternacht gespeichert; ein Eintrag vom 01.07. liegt als Instant `2026-06-30T22:00Z`
+    // in der DB und käme hier als „2026-06-30" heraus. Dieser Wert ist das Fallback-Datum
+    // eines Belegs ohne eigenes `date` (siehe `linkedTimeEntryDate`) und entscheidet damit
+    // über die Steuerperiode — der Vormonat wäre geldwirksam falsch.
+    return toLocalDateKey(value) ?? undefined;
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -274,83 +240,13 @@ function toIsoDateOnly(value: unknown): string | undefined {
       return `${yyyy}-${mm}-${dd}`;
     }
     const parsed = new Date(trimmed);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    // Gleiche Lesart wie im Date-Zweig oben — sonst lieferte dieselbe Funktion je nach
+    // Eingabeform einen UTC- oder einen lokalen Tag. Praktisch unerreichbar (die drei Regex-
+    // Zweige darüber fangen alle vorkommenden Formate ab), aber die Inkonsistenz gehört nicht
+    // stehen gelassen.
+    if (!Number.isNaN(parsed.getTime())) return toLocalDateKey(parsed) ?? undefined;
   }
   return undefined;
-}
-
-function validateFlightAndHotelExpenseRules(input: {
-  category?: string;
-  date?: string;
-  checkInDate?: string;
-  checkOutDate?: string;
-  departureTime?: string;
-  arrivalTime?: string;
-  flightRouteType?: string;
-}) {
-  if (input.category === "flight") {
-    const routeType = input.flightRouteType ?? "domestic";
-    if (routeType !== "domestic" && routeType !== "international") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Ungueltiger Flugtyp. Erlaubt: domestic|international",
-      });
-    }
-
-    if (!input.date) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Flug erfordert ein Hinflug-Datum",
-      });
-    }
-
-    if (input.departureTime && !hhmmTimeSchema.test(input.departureTime)) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Abflugzeit muss im Format HH:MM angegeben werden",
-      });
-    }
-
-    if (input.arrivalTime && !hhmmTimeSchema.test(input.arrivalTime)) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Ankunftszeit muss im Format HH:MM angegeben werden",
-      });
-    }
-
-    if (!input.departureTime && !input.arrivalTime) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Bei Fluegen muss mindestens eine Zeit (Abflug oder Ankunft) angegeben werden",
-      });
-    }
-
-    const outboundDate = toComparableDate(input.date);
-    const returnDate = toComparableDate(input.checkOutDate);
-    if (outboundDate && returnDate && returnDate.getTime() < outboundDate.getTime()) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Rueckflug-Datum darf nicht vor dem Hinflug-Datum liegen",
-      });
-    }
-  }
-
-  if (input.category === "hotel") {
-    if (!input.checkInDate) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Hotel erfordert ein Check-in-Datum",
-      });
-    }
-    const checkIn = toComparableDate(input.checkInDate);
-    const checkOut = toComparableDate(input.checkOutDate);
-    if (checkIn && checkOut && checkOut.getTime() < checkIn.getTime()) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Check-out darf nicht vor Check-in liegen",
-      });
-    }
-  }
 }
 
 function calculateTimeEntryFinancials(input: {
@@ -842,6 +738,12 @@ async function prepareReceiptBatchItem(
   const basePayload: Record<string, unknown> = {
     ...payload,
     userId: ownerUserId,
+    // Der oben aufgelöste Ziel-Kunde wurde bisher verworfen — inklusive der bereits
+    // erfolgten Zugriffsprüfung. Ein per KI OHNE Zeiteintrag, aber MIT Kundentreffer
+    // freigegebener Beleg landete mit `customerId = NULL` in der DB und fiel auf die
+    // Datums-Heuristik zurück (an einem Tag mit zwei Kunden: gar keine Zuordnung,
+    // still). Nur für eigenständige Belege — Begründung am Helfer.
+    customerId: explicitCustomerIdForApproval(targetTimeEntryId, targetCustomerId),
   };
   if (targetTimeEntryId) {
     basePayload.timeEntryId = Number(targetTimeEntryId);
@@ -1315,7 +1217,19 @@ export const appRouter = router({
           userId: ctx.user.id,
           customerId: sourceEntry.customerId,
           date: new Date(targetDate),
-          weekday: new Date(targetDate).toLocaleDateString('de-DE', { weekday: 'long' }),
+          // `timeZone` explizit: ohne sie rendert der Wochentag in der Container-Zeitzone und
+          // wird so GESPEICHERT — ein stiller Datenfehler, sobald der Container nicht auf
+          // Europe/Warsaw läuft. (Das Schreibformat „Mittwoch" bleibt unverändert; die
+          // Schwester-Prozedur `copyRangeToNext` leitet den Wochentag bereits zeitzonenfrei
+          // aus dem Datums-Key ab und schreibt das Kurzformat „Mi/Sr".)
+          // BEWUSST NICHT MITGEZOGEN: `date: new Date(targetDate)` eine Zeile darüber bleibt auf
+          // UTC-Mitternacht. Das ist die projektweite Wandzeit-Konvention, die mit den
+          // Tagesgrenzen in `db.ts` verkoppelt ist (beide +2 h, sie heben sich auf) — ein
+          // einseitiger Fix hier zerstörte die Kompensation. Wird separat entschieden.
+          weekday: new Date(targetDate).toLocaleDateString('de-DE', {
+            timeZone: 'Europe/Warsaw',
+            weekday: 'long',
+          }),
           projectName: sourceEntry.projectName,
           entryType: sourceEntry.entryType,
           description: sourceEntry.description,
@@ -1348,7 +1262,16 @@ export const appRouter = router({
       const sourceEndKey = formatDateKeyLocal(end);
 
       const sourceEntries = await getTimeEntries(ctx.user.id, start, end);
-      const sourceExpenses = await getAllExpenses(ctx.user.id, start, end);
+      // `getAllExpenses` liefert per Overlap eine OBERMENGE (jeder Beleg, der den Zeitraum
+      // berührt). Für eine Schreiboperation ist das zu viel: grenzüberspannende Belege
+      // lägen sonst in zwei Kopierläufen und würden doppelt angelegt. Die Auswahlregel
+      // steht in `selectExpensesForRangeCopy` (Leistungsende, ADR 0002).
+      const loadedExpenses = await getAllExpenses(ctx.user.id, start, end);
+      const sourceExpenses = selectExpensesForRangeCopy(
+        loadedExpenses as any[],
+        sourceStartKey,
+        sourceEndKey
+      );
 
       if (sourceEntries.length === 0 && sourceExpenses.length === 0) {
         return {
@@ -1377,11 +1300,14 @@ export const appRouter = router({
         }
         if (!customer) continue;
 
-        const sourceDate = new Date(entry.date as any);
-        if (Number.isNaN(sourceDate.getTime())) continue;
-        const shiftedDate = shiftDateByScope(sourceDate, input.scope);
-        const shiftedDateKey = formatDateKeyLocal(shiftedDate);
-        const weekday = `${weekdayDe[shiftedDate.getDay()]}/${weekdayPl[shiftedDate.getDay()]}`;
+        const sourceDateKey = toLocalDateKey(entry.date);
+        if (!sourceDateKey) continue;
+        const shiftedDateKey = shiftDateKeyByScope(sourceDateKey, input.scope);
+        // Das `weekday`-Label wird IMMER aus dem Zieldatum abgeleitet (nie aus der Quelle
+        // übernommen): Bei `month` bleibt der Wochentag zwar erhalten, bei `day` wechselt er
+        // aber (Fr → Mo). Ein übernommenes Label wäre ein stiller Datenfehler.
+        const shiftedWeekdayIndex = weekdayIndexOfDateKey(shiftedDateKey);
+        const weekday = `${weekdayDe[shiftedWeekdayIndex]}/${weekdayPl[shiftedWeekdayIndex]}`;
         const financials = calculateTimeEntryFinancials({
           hoursMinutes: entry.hours,
           entryType: entry.entryType,
@@ -1408,8 +1334,13 @@ export const appRouter = router({
       }
 
       for (const expense of sourceExpenses as any[]) {
-        const shiftedPrimaryDate = tryShiftDateValue(expense.date, input.scope);
-        if (!shiftedPrimaryDate) continue;
+        // Leistungsende nach der Scope-Regel, die übrigen Datumsfelder mit demselben
+        // Tagesabstand. Anker ist bewusst dasselbe Leistungsende, nach dem oben ausgewählt
+        // wurde — sonst könnte die Kopie eines grenzüberspannenden Belegs im QUELLzeitraum
+        // landen. Der gemeinsame Offset hält Dauer und Chronologie fest
+        // (siehe `shiftExpenseDateKeys`).
+        const shiftedDates = shiftExpenseDateKeys(expense, input.scope);
+        if (!shiftedDates) continue;
 
         const mappedTimeEntryId =
           expense.timeEntryId && entryIdMap.has(Number(expense.timeEntryId))
@@ -1424,7 +1355,13 @@ export const appRouter = router({
         const payload: Record<string, any> = {
           timeEntryId: mappedTimeEntryId ?? undefined,
           userId: mappedTimeEntryId ? undefined : expense.userId ?? ctx.user.id,
-          date: shiftedPrimaryDate,
+          // Explizite Kundenzuordnung nur für EIGENSTÄNDIGE Belege übernehmen. Ohne sie
+          // verlöre die Kopie ihre Zuordnung und fiele auf die Datums-Heuristik zurück
+          // (an einem Tag mit zwei Kunden: gar keine Zuordnung, still). Für verknüpfte
+          // Belege wäre die Übernahme dagegen falsch — `getAllExpenses` liefert dort den
+          // Kunden des ZEITEINTRAGS unter demselben Feldnamen. Begründung am Helfer.
+          customerId: explicitCustomerIdForRangeCopy(expense),
+          date: shiftedDates.date,
           category: expense.category,
           amount: expense.amount,
           currency: expense.currency || "EUR",
@@ -1437,8 +1374,8 @@ export const appRouter = router({
           flightRouteType: expense.flightRouteType || undefined,
           departureTime: expense.departureTime || undefined,
           arrivalTime: expense.arrivalTime || undefined,
-          checkInDate: tryShiftDateValue(expense.checkInDate, input.scope) || undefined,
-          checkOutDate: tryShiftDateValue(expense.checkOutDate, input.scope) || undefined,
+          checkInDate: shiftedDates.checkInDate ?? undefined,
+          checkOutDate: shiftedDates.checkOutDate ?? undefined,
           distance: expense.distance ?? undefined,
           rate: expense.rate ?? undefined,
           liters: expense.liters ?? undefined,
@@ -1550,7 +1487,7 @@ export const appRouter = router({
           ? { flightRouteType: input.flightRouteType ?? "domestic" }
           : {}),
       };
-      validateFlightAndHotelExpenseRules(normalizedInput);
+      validateExpenseDateRules(normalizedInput);
 
       const data = {
         ...normalizedInput,
@@ -1603,7 +1540,7 @@ export const appRouter = router({
             ? { flightRouteType: expense.flightRouteType ?? "domestic" }
             : {}),
         };
-        validateFlightAndHotelExpenseRules(normalizedExpense);
+        validateExpenseDateRules(normalizedExpense);
 
         const result = await createExpense({
           timeEntryId: input.timeEntryId,
@@ -1669,7 +1606,7 @@ export const appRouter = router({
           (expense.flightRouteType ? String(expense.flightRouteType) : undefined) ??
           ((data.category ?? expense.category) === "flight" ? "domestic" : undefined),
       };
-      validateFlightAndHotelExpenseRules(mergedValidationInput);
+      validateExpenseDateRules(mergedValidationInput);
 
       const nextCategory = mergedValidationInput.category;
       const nextFlightRouteType =
@@ -2536,6 +2473,9 @@ export const appRouter = router({
       const basePayload: Record<string, unknown> = {
         ...payload,
         userId: ownerUserId,
+        // Siehe Batch-Pfad: der aufgelöste Ziel-Kunde muss in den Beleg, sonst geht die
+        // Zuordnung still verloren. Nur für eigenständige Belege.
+        customerId: explicitCustomerIdForApproval(targetTimeEntryId, targetCustomerId),
       };
       if (targetTimeEntryId) {
         basePayload.timeEntryId = Number(targetTimeEntryId);
@@ -3961,11 +3901,46 @@ export const appRouter = router({
       const dateFilter = (column: any) =>
         dateFrom && dateTo ? sql`DATE(${column}) BETWEEN ${dateFrom} AND ${dateTo}` : sql`TRUE`;
 
+      // Zeiteinträge: `date` ist hier das EINZIGE Datum — ein Zeiteintrag hat kein
+      // Leistungsende. Bewusst unverändert.
       const timeEntriesToDelete = await db
         .select({ id: timeEntries.id })
         .from(timeEntries)
         .where(and(inArray(timeEntries.userId, userIds), dateFilter(timeEntries.date)));
       const timeEntryIds = timeEntriesToDelete.map((entry) => Number(entry.id));
+
+      // Zeitraum-Zuordnung eines BELEGS = Leistungsende `COALESCE(checkOutDate, date)`.
+      //
+      // WARUM Leistungsende und nicht `date`: Es muss dasselbe gelöscht werden, was der
+      // Nutzer für diesen Zeitraum abgerechnet SIEHT. Die Abrechnung (Bericht, Dashboard,
+      // Steuerbasis) ordnet Belege seit ADR 0002 über `isExpenseInPeriod`
+      // (`checkOutDate ?? date`) zu — bei Hotels ist `date` der Check-in, bei einem
+      // Hin-/Rückflug auf einem Ticket das Hinflugdatum. Mit dem alten `DATE(expenses.date)`
+      // löschte ein Juni-Reset einen Beleg, der in der JULI-Abrechnung steht (Referenzfall
+      // #596: Hotel 30.06.→02.07.), und ein Juli-Reset ließ ihn stehen. Bei einer
+      // destruktiven Funktion ist genau diese Lücke zwischen „angezeigt" und „gelöscht"
+      // nicht hinnehmbar.
+      //
+      // Der Ausdruck wird bewusst NICHT hier gebaut: `expenseServiceEndDateSql`
+      // (`server/expenseRules.ts`) ist die einzige produktive Formulierung der Regel auf
+      // der SQL-Seite und wird im pre-commit-Gate gerendert und assertiert. Inline hier
+      // wäre sie vom Gate aus nicht erreichbar (der Router zieht `bcrypt` nach).
+      //
+      // WARUM die timeEntryId-Kaskade von der Umstellung UNBERÜHRT bleibt: Sie ist keine
+      // Zeitraum-Zuordnung. `fk_expenses_timeentry` ist ON DELETE CASCADE (Migration
+      // 0020) — MySQL räumt die Belege eines gelöschten Zeiteintrags also ohnehin ab. Das
+      // explizite Einsammeln der IDs ist trotzdem nötig, weil `fk_documents_expense` und
+      // `fk_documents_timeentry` ON DELETE SET NULL sind: ohne die vorab ermittelten
+      // `expenseIds`/`timeEntryIds` blieben die zugehörigen DOKUMENTE als Waisen mit
+      // `expenseId = NULL` zurück statt gelöscht zu werden — und der Rückgabewert
+      // `deleted.expenses` fiele zu niedrig aus. Daraus folgt auch die Löschreihenfolge
+      // documents → expenses → timeEntries.
+      //
+      // Bewusste Konsequenz der Kaskade: Ein Beleg mit Leistungsende im Juli, der an einem
+      // JUNI-Zeiteintrag hängt, wird von einem Juni-Reset trotzdem gelöscht, obwohl er in
+      // der Juli-Abrechnung steht. Integrität schlägt hier Zeitraum-Deckungsgleichheit;
+      // siehe ADR 0002, Offener Punkt 4.
+      const expenseServiceEndDate = expenseServiceEndDateSql(expensesTable);
 
       const expensesToDelete = await db
         .select({ id: expensesTable.id })
@@ -3978,7 +3953,7 @@ export const appRouter = router({
             ),
             dateFrom && dateTo
               ? or(
-                  dateFilter(expensesTable.date),
+                  dateFilter(expenseServiceEndDate),
                   timeEntryIds.length > 0 ? inArray(expensesTable.timeEntryId, timeEntryIds) : sql`FALSE`
                 )
               : sql`TRUE`
@@ -4003,15 +3978,22 @@ export const appRouter = router({
           : [];
       const documentIds = documentsToDelete.map((entry) => Number(entry.id));
 
-      if (documentIds.length > 0) {
-        await db.delete(documents).where(inArray(documents.id, documentIds));
-      }
-      if (expenseIds.length > 0) {
-        await db.delete(expensesTable).where(inArray(expensesTable.id, expenseIds));
-      }
-      if (timeEntryIds.length > 0) {
-        await db.delete(timeEntries).where(inArray(timeEntries.id, timeEntryIds));
-      }
+      // Alle drei Löschungen in EINER Transaktion. Ohne sie hinterlässt ein Abbruch
+      // zwischen den Statements einen inkonsistenten Bestand — nach Delete 1 wären die
+      // Dokumente weg, die zugehörigen Belege und Zeiteinträge aber noch da: Datensätze
+      // ohne ihren Beleg-Scan, nicht wiederherstellbar. Reihenfolge (documents →
+      // expenses → timeEntries) und Rückgabewerte bleiben unverändert.
+      await db.transaction(async (tx) => {
+        if (documentIds.length > 0) {
+          await tx.delete(documents).where(inArray(documents.id, documentIds));
+        }
+        if (expenseIds.length > 0) {
+          await tx.delete(expensesTable).where(inArray(expensesTable.id, expenseIds));
+        }
+        if (timeEntryIds.length > 0) {
+          await tx.delete(timeEntries).where(inArray(timeEntries.id, timeEntryIds));
+        }
+      });
 
       return {
         success: true,

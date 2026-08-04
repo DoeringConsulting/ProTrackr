@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 // Version is managed by scripts/increment-version.mjs
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.7.9';
 
 function compareSemver(a: string, b: string): number {
   const parse = (value: string) => value.split('.').map((part) => Number.parseInt(part, 10));
@@ -19,7 +19,10 @@ function compareSemver(a: string, b: string): number {
 
 export function VersionFooter() {
   const [currentVersion, setCurrentVersion] = useState(APP_VERSION);
-  const [buildTime, setBuildTime] = useState(() => new Date().toISOString());
+  // Bewusst `null` statt „jetzt": schlägt der version.json-Fetch fehl (offline,
+  // Service-Worker-Cache-Miss), zeigte der Footer sonst die AUFRUFZEIT als Build-Zeit —
+  // ein plausibel aussehender Falschwert ist schlechter als ein sichtbares „—".
+  const [buildTime, setBuildTime] = useState<string | null>(null);
 
   useEffect(() => {
     // Try to fetch version info from a generated file
@@ -50,13 +53,23 @@ export function VersionFooter() {
             Version: <span className="font-semibold text-foreground">{currentVersion}</span>
           </span>
           <span className="hidden sm:inline">
-            Build: {new Date(buildTime).toLocaleString('de-DE', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
+            Build: {buildTime
+              ? new Date(buildTime).toLocaleString('de-DE', {
+                  // `buildTime` wird als UTC erzeugt (scripts/generate-version.js:
+                  // `new Date().toISOString()`). Ohne `timeZone` rendert der Footer in der
+                  // Zone des BETRACHTERS — dieselbe Instanz zeigte dann unterwegs eine andere
+                  // Build-Zeit als zu Hause. Warschau ist die Standardzeit der App, also wird
+                  // sie hier festgenagelt. (Diese Abweichung hat am 2026-08-04 real den
+                  // Fehlverdacht ausgelöst, Dev und Prod liefen auf verschiedenen Builds:
+                  // 19:41 UTC gegen 21:41 CEST war derselbe Zeitpunkt.)
+                  timeZone: 'Europe/Warsaw',
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })
+              : '—'}
           </span>
         </div>
         <div className="text-right">

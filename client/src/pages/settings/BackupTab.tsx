@@ -8,14 +8,22 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { warsawDateKey } from "@shared/dateStichtag";
 
 type DeleteScope = "all" | "year" | "month" | "custom";
 
 export default function BackupTab() {
   const [isExporting, setIsExporting] = useState(false);
   const [deleteScope, setDeleteScope] = useState<DeleteScope>("month");
-  const [deleteYear, setDeleteYear] = useState(String(new Date().getFullYear()));
-  const [deleteMonth, setDeleteMonth] = useState(new Date().toISOString().slice(0, 7));
+  // Voreinstellungen des LÖSCH-Dialogs auf den Warschauer Kalendertag (Projekt-Zeitzone,
+  // CLAUDE.md §4 / K8). `toISOString()` lieferte hier das UTC-Datum: am Monatsersten
+  // zwischen 00:00 und 02:00 Warschauer Zeit stand damit der VORMONAT vorausgewählt — in
+  // einem Dialog, der endgültig löscht, und ausgerechnet der volle Monat statt des fast
+  // leeren. `deleteYear` lief über lokale Komponenten und war dadurch zusätzlich
+  // inkonsistent zu `deleteMonth`; beide laufen jetzt über dieselbe Quelle.
+  const today = warsawDateKey();
+  const [deleteYear, setDeleteYear] = useState(today.slice(0, 4));
+  const [deleteMonth, setDeleteMonth] = useState(today.slice(0, 7));
   const [deleteStartDate, setDeleteStartDate] = useState("");
   const [deleteEndDate, setDeleteEndDate] = useState("");
   const [latestDeleteResult, setLatestDeleteResult] = useState<any>(null);
@@ -27,7 +35,10 @@ export default function BackupTab() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `doering-consulting-backup-${new Date().toISOString().split("T")[0]}.json`;
+      // Gleiche Ursache wie oben: der Dateiname trug zwischen 00:00 und 02:00 Warschauer
+      // Zeit das Datum des Vortags — zwei Backups desselben Abends kollidieren dann im
+      // Namen bzw. sind falsch datiert.
+      a.download = `doering-consulting-backup-${warsawDateKey()}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

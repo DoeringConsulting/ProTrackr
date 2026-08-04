@@ -23,6 +23,7 @@ import { aggregateMonthlyTaxResults, computeMonthlyTaxSeries } from "@/lib/taxEn
 import {
   computeMonthlyAmounts,
   computeMonthlyDisplayRevenue,
+  isExpenseInPeriod,
   type MonthlyAmountsContext,
 } from "@/lib/monthlyFinancials";
 import { computeVariableRunRateCents } from "@/lib/revenueForecast";
@@ -808,7 +809,12 @@ export default function Dashboard() {
     }
 
     for (const expense of expensesDetailed) {
-      if (!isWithinDateRange(expense.date, rangeStart, rangeEnd)) continue;
+      // Kanonische Zeitraum-Zuordnung (Leistungsende, ADR 0002) — NICHT expense.date.
+      // Muss dieselbe Regel sein wie im computeMonthlyAmounts-Aufruf weiter unten:
+      // beide speisen DASSELBE Kosten-Diagramm (Reisekosten-Slice hier, ZUS/Zdrowotna/
+      // Steuer-Slices aus der Steuerbasis). Zwei Regeln = am Fensterrand widersprüchliche
+      // Slices im selben Chart.
+      if (!isExpenseInPeriod(expense, rangeStart, rangeEnd)) continue;
       variableByCurrencyOriginal.set(
         expense.sourceCurrency,
         (variableByCurrencyOriginal.get(expense.sourceCurrency) ?? 0) + expense.amount
@@ -1014,15 +1020,24 @@ export default function Dashboard() {
     return `${entry.name}: ${formatMoney(originalCents, originalCurrency)}`;
   };
 
+  // Reisekosten-Kachel: dieselbe Zeitraum-Zuordnung wie Kosten-Pie und Steuerbasis
+  // (Leistungsende, ADR 0002). Ohne diesen Filter zählte die Kachel die komplette
+  // Server-Ladung (Overlap) — konkret den laufenden Hotelaufenthalt, der erst im
+  // Folgemonat endet (rangeEnd ist immer das Ende des aktuellen Monats). Die Kachel
+  // behauptet aber „Im Zeitraum (N Monate)" und stünde damit im Widerspruch zum Pie.
+  const expensesInRange = expensesDetailed.filter((expense) =>
+    isExpenseInPeriod(expense, rangeStart, rangeEnd)
+  );
+
   const expenseByCurrency = aggregateByCurrency(
-    expensesDetailed.map((expense) => ({
+    expensesInRange.map((expense) => ({
       amount: expense.amount,
       currency: expense.sourceCurrency,
     }))
   );
 
   const unifiedExpenseTotal = showUnifiedCurrency
-    ? expensesDetailed.reduce((sum, expense) => {
+    ? expensesInRange.reduce((sum, expense) => {
         const converted = convertAmountCents(
           expense.amount,
           expense.sourceCurrency,

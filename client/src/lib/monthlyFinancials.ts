@@ -20,6 +20,7 @@
 // Aufrufers. Kein Datenleck-Thema (Dashboard ist user-internal; Provision/Netto
 // dürfen dort).
 
+import { isExpenseServiceEndInRange } from "@shared/expenseServiceEnd";
 import {
   getExpenseBillingCustomerId,
   toDateKey,
@@ -66,9 +67,48 @@ export type MonthlyCustomer = {
 /** Konvertiert einen Betrag (cents) aus `sourceCurrency` in die Ziel-Basis (cents). */
 export type CentsConverter = (amountCents: number, sourceCurrency: string) => number;
 
-function isInMonth(value: unknown, monthStart: string, monthEnd: string): boolean {
+/**
+ * Datums-Key-Vergleich (YYYY-MM-DD, Grenzen inklusive). Bewusst String-Vergleich auf
+ * lokalen Keys (`toDateKey`), nie über `toISOString` — letzteres liefert UTC und kippt
+ * im Fenster 00:00–02:00 Warschau auf den Vortag.
+ */
+function isInPeriod(value: unknown, periodStart: string, periodEnd: string): boolean {
   const key = toDateKey(value);
-  return key !== null && key >= monthStart && key <= monthEnd;
+  return key !== null && key >= periodStart && key <= periodEnd;
+}
+
+/**
+ * Kanonische Zeitraum-Zuordnung eines (Reisekosten-)Belegs: maßgeblich ist das
+ * **Leistungsende** (`checkOutDate ?? date`) — siehe `docs/adr/0002`.
+ *
+ * WARUM Leistungsende: Ein Beleg wird NIE gesplittet, sondern zählt komplett in dem
+ * Monat, in dem die Leistung endet. Bei Hotels ist `date` der Check-in
+ * (`TimeTracking.tsx` setzt `payloadBase.date = hotelCheckIn`), bei Hin-/Rückflug auf
+ * einem Ticket das Hinflugdatum; beide enden bei einem Aufenthalt über den
+ * Monatswechsel erst im Folgemonat — abgerechnet (und verbraucht) wird die Leistung
+ * dort. `date` ist damit nur noch der Fallback für Belege OHNE Enddatum (Taxi, Zug,
+ * Kraftstoff, Kilometerpauschale …), bei denen Leistung und Beleg auf denselben Tag
+ * fallen. Ein Beleg zählt weiterhin in GENAU einem Zeitraum (keine Doppelzählung).
+ *
+ * EINE Implementierung für alle Verbraucher (K4): Steuerbasis/Dashboard (unten) und der
+ * Berichts-Datenfluss in Reports.tsx. Die Regel gilt einheitlich für Kundenabrechnung,
+ * Report-Anzeige, Dashboard UND Steuerbasis — eine Zahl überall. Grenzen inklusive,
+ * Vergleich auf YYYY-MM-DD-Keys (Europe/Warsaw-sicher, nie toISOString).
+ *
+ * Nicht zu verwechseln mit dem Kurs-Stichtag (`reportStichtag` in Reports.tsx): der nutzt
+ * dasselbe Enddatum, beantwortet aber die andere Frage („welcher Tageskurs"), nicht die
+ * Zeitraum-Zuordnung.
+ *
+ * Die Mechanik liegt in `shared/expenseServiceEnd.ts` — der Server wertet dieselbe Regel
+ * beim Kopieren aus und darf sie nicht nachbauen. Diese Signatur bleibt der etablierte
+ * Einstieg für den Client-Datenfluss und ändert ihr Verhalten nicht.
+ */
+export function isExpenseInPeriod(
+  expense: { date?: unknown; checkOutDate?: unknown },
+  periodStart: string,
+  periodEnd: string
+): boolean {
+  return isExpenseServiceEndInRange(expense, periodStart, periodEnd);
 }
 
 /**
@@ -132,13 +172,13 @@ export function computeMonthlyAmounts(
   let variableCostsCents = 0;
 
   for (const entry of ctx.timeEntries) {
-    if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
+    if (!isInPeriod(entry.date, monthStart, monthEnd)) continue;
     revenueCents += ctx.toPln(entry.calculatedAmount, entry.sourceCurrency);
     variableCostsCents += provisionForEntry(entry, ctx.customersById, ctx.toPln);
   }
 
   for (const expense of ctx.expenses) {
-    if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
+    if (!isExpenseInPeriod(expense, monthStart, monthEnd)) continue;
     const amountPln = ctx.toPln(expense.amount, expense.sourceCurrency);
     // Jede Reisekostenposition ist eine Betriebsausgabe (mindert die Steuerbasis) …
     variableCostsCents += amountPln;
@@ -180,11 +220,11 @@ export function computeMonthlyDisplayRevenue(
   let travelCents = 0;
 
   for (const entry of ctx.timeEntries) {
-    if (!isInMonth(entry.date, monthStart, monthEnd)) continue;
+    if (!isInPeriod(entry.date, monthStart, monthEnd)) continue;
     timeCents += ctx.toTarget(entry.calculatedAmount, entry.sourceCurrency);
   }
   for (const expense of ctx.expenses) {
-    if (!isInMonth(expense.date, monthStart, monthEnd)) continue;
+    if (!isExpenseInPeriod(expense, monthStart, monthEnd)) continue;
     if (isBillableExclusiveTravel(expense, ctx.customersById, ctx.attributionMaps)) {
       travelCents += ctx.toTarget(expense.amount, expense.sourceCurrency);
     }

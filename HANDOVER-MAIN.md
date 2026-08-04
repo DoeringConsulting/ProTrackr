@@ -2,8 +2,55 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-07-06 · App-Release v2.4.0 (komplett live auf Prod) · origin/main synchron.**
+> **Stand: 2026-08-04 · App-Release v2.7.4 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
+> **Working Tree sauber, Manifest `2.7.4.json` + Tag `v2.7.4` gesetzt.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
+
+---
+
+## 0.1 SOFORT ZU TUN (Stand 2026-08-04, Abschluss der Sitzung)
+
+**Nichts Halbfertiges offen.** Working Tree sauber, `origin/main` synchron (Drift `0 0`), HEAD auf
+**v2.7.4**, Manifest `.claude/rollouts/2.7.4.json` + Tag `v2.7.4` gesetzt. Der in der Vorsitzung
+offene `customerId`-Fix ist reviewt, committet (`b3625d0`, v2.7.3) und gepusht; die Fallgrube wurde
+dabei **nicht** getreten (belegt: `routers.ts` nutzt `explicitCustomerIdForRangeCopy(expense)`, null
+Vorkommen von `customerId: expense.customerId`).
+
+**Zwei Punkte fällig, beide NICHT im Code offen:**
+
+1. **NAS-Prod-Rollout** (NAS-Chat, `/nas-rollout`). PROD steht auf **v2.5.0** (Screenshot
+   Account-Inhaber, 2026-08-04 — die frühere Angabe „v2.4.0" war eine unbestätigte Annahme, siehe
+   Korrektur in §0), main auf v2.7.4 — dazwischen liegen 2.5.2, 2.5.5, 2.6.0, 2.6.2, 2.6.4, 2.7.0,
+   2.7.3, 2.7.4. Maßgeblich ist Manifest `2.7.4.json` (löst `2.7.3.json` und `2.7.2.json` ab).
+   **Prod-Stand vor der Planung frisch verifizieren**, nicht aus Dokumenten übernehmen. **Vorbedingung unverändert:** vor dem
+   Rollout `node scripts/analyze-expense-attribution.mjs` (read-only) **erneut** fahren — ADR 0002,
+   offener Punkt 5 (kategoriefremde Enddaten aus früheren Kategoriewechseln; die Prüfung vom
+   2026-08-03 deckt sie nicht ab). **Zusätzlich auf Dev abzunehmen:** der neue Betrags-Hinweis in der
+   Reisekosten-Maske wurde **nie visuell geprüft** (lokal läuft seit A5 weder Server noch MySQL) —
+   Kilometerpauschale-Beleg öffnen, nur den Kommentar ändern, es darf kein stiller Betragswechsel
+   passieren.
+2. **Offene Entscheidung des Account-Inhabers** (klein, UX): Bei der **Neuanlage** eines
+   Kilometerpauschale-Belegs wird ein eingetippter Betrag weiterhin **ohne Rückmeldung** durch
+   km × Pauschale ersetzt — der Speicherpfad ignoriert das Betrag-Feld für diese Kategorie. Das ist
+   Alt-Verhalten, aber dieselbe Klasse stiller Überschreibung, gegen die v2.7.4 antritt. Sauberster
+   Fix wäre, das Betrag-Feld für `mileage_allowance` auf `readOnly` zu setzen (der berechnete Wert
+   steht ohnehin darunter). Beim Bearbeiten ist das Problem seit v2.7.4 gelöst (Hinweis mit altem
+   und neuem Betrag).
+
+3. **Legacy-Kommentare im Kategorie-Enum — Entscheidung offen (K14, siehe §6.9).**
+   `drizzle/schema.ts` markiert `transport` als „legacy, wird zu taxi migriert" und `food` als
+   „legacy, wird zu meal migriert". Beide sind aktiv auswählbar, und `transport` darf seit v2.6.0 ein
+   `checkOutDate` tragen — eine Migration nach `taxi` (punktuell, kein Enddatum) erzeugte genau den
+   Befundtyp 3, den `analyze-expense-attribution.mjs` sucht. **Nichts tun ohne Entscheidung.**
+
+> **🪤 FALLGRUBE, die weiterhin gilt (nicht wegoptimieren!):** `getAllExpenses` hat **zwei** Zweige,
+> die Felder unter **demselben Namen** aus **verschiedenen Quellen** liefern. `customerId`:
+> `server/db.ts` verknüpfter Zweig = `timeEntries.customerId` (Kunde des **Eltern-Zeiteintrags**),
+> Standalone-Zweig = `expenses.customerId` (die **explizite** Zuordnung). Diskriminator
+> `timeEntryId == null` (`isLinkedExpense`). Seit v2.7.4 gilt dasselbe für **`rate`**: der verknüpfte
+> Zweig joint `expenses` UND `timeEntries`, **beide** haben eine Spalte `rate` — selektiert wird
+> `expenses.rate` (Kilometerpauschale), **nicht** `timeEntries.rate` (Tagessatz). Beide Fallgruben
+> sind im Gate per Quelltext-Wächter gepinnt; ein Rückbau wird rot.
 
 ---
 
@@ -11,20 +58,59 @@
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich). NIE in
   `ProTrackr_developing_path` (= `nas-setup`, NAS-Welt).
-- **Stand:** main-HEAD **v2.4.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
-  App-Release **v2.4.0** — **komplett LIVE AUF PROD (2026-07-06)**. Baum sauber, Drift `0 0`. Alle Workstreams dieser Sitzungsreihe sind
-  **live**:
+- **Stand:** main-HEAD **v2.7.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
+  App-Release **v2.7.4** (2026-08-04), `origin/main` synchron (Drift `0 0`), **Working Tree sauber**.
+  Manifest `2.7.4.json` + Tag `v2.7.4` gesetzt.
+- **Versionsstände auseinander:** **PROD läuft auf `v2.5.0`** — belegt durch Screenshot des
+  Account-Inhabers vom 2026-08-04 (:9443, Footer „Version: 2.5.0 · Build 15.07.2026, 21:41").
+  Zwischen Prod und main liegen damit **v2.5.2, v2.5.5, v2.6.0, v2.6.2, v2.6.4, v2.7.0, v2.7.3,
+  v2.7.4**. Ein Rollout bringt alles auf einmal; Details §0.1 + §6.7 + §6.8.
+  > ⚠️ **Korrektur 2026-08-04:** Bis hierher stand in dieser Handover (und im Memory) „PROD = v2.4.0,
+  > v2.5.0-Promotion nie abgeschlossen". Das war eine **unbestätigte Annahme**, die als Fakt
+  > weitergetragen wurde — Grundlage war eine Prüfung am Sessionanfang der NAS-Sitzung plus das
+  > Ausbleiben eines sichtbaren Deploy-Outputs. Die Promotion fand statt (außerhalb des sichtbaren
+  > Austauschs bzw. in einer Parallelsession). **Lehre: den Prod-Stand vor jeder Rollout-Planung frisch
+  > abfragen, nicht aus dem Chatverlauf ableiten.**
+  Die Workstreams **bis v2.5.0** sind live auf Prod:
   1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — live auf Prod (Prod-Tab-„(DEV)"-Bug behoben).
   2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — live auf Prod.
   3. **Zeitumsatz-Tooltip** (v2.3.3) — **live auf Prod** (im v2.4.0-Rollout).
   4. **§6.2-Aufräumaufgaben — live auf Prod (v2.4.0):** (a) **TZ-Kohärenz** (v2.3.5, `warsawDateKey`);
      (b) **persistenter MySQL-Session-Store** (v2.4.0, `express-mysql-session` + Migration
      `0025_sessions`) — Abnahme bestanden (Login überlebt Container-Restart).
-- **Nichts offen, nichts blockiert.** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
+  5. **Dashboard-Backlog** (v2.5.0, §6.4) — „Rechnungen"-Kachel + Umsatz-Prognose-Toggle: **live auf
+     Prod** (Promotion nachträglich bestätigt, siehe Korrektur oben).
+  > **Offene Beobachtung (NAS-Chat, nicht dringend):** Der Prod-Footer nennt Build **15.07.2026 21:41**,
+  > der abgenommene Dev-Build lief auf **19:41**. Bei strikt **bit-identischer** Image-Promotion müssten
+  > beide Zeitstempel übereinstimmen. Mögliche Ursachen: separater Prod-Build oder ein Dev-Rebuild vor
+  > der Promotion. Berührt die Governance-Regel „nur bit-identische Promotion" — **im NAS-Chat zu
+  > klären**, kein Handlungsbedarf in der main-Welt.
+- **Offen (Kurzliste, Details §0.1):** (1) **NAS-Prod-Rollout** (Prod = **v2.5.0**, NAS-Chat, Manifest
+  `2.7.4.json`; vorher Analyse-Skript erneut fahren — ADR 0002 offene Punkte 3+5; **visuelle Abnahme
+  des Betrags-Hinweises auf Dev nachholen**); (2) **664,17 EUR** aus den verfallenen Tickets
+  #605/#492 sind **abrechenbar, aber noch nicht nachberechnet** (§6.5, kaufmännisch); (3) kleine
+  offene UX-Entscheidung: Betrag-Feld bei **Neuanlage** einer Kilometerpauschale wird still
+  überschrieben (§0.1 Punkt 2). — **Erledigt in dieser Sitzung:** `customerId`-Fix reviewt +
+  released (v2.7.3), Manifest + Tag für 2.6.4/2.7.0 nachgeholt, Berechnungsgrundlage und
+  KI-Freigabe-Zuordnung gefixt (v2.7.4).
+- **Historie:** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
   (Prod v2.3.0 → v2.4.0, Image `91e956650dd9`); Migration `0025` auf Dev+Prod angewandt. **Erster
   NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
-- **Offen auf main:** **Dashboard-Backlog (§6.4, User-Auftrag 2026-07-07, noch nicht begonnen — erst planen +
-  Freigabe):** (1) „Berichte"-Kachel zeigt statisch `0`; (2) Umsatzentwicklung-Prognose-Schalter. — Sonst nur
+- **Zuletzt erledigt auf main:** (a) **v2.5.0** Dashboard-Backlog (§6.4) — „Rechnungen"-Kachel +
+  Umsatzentwicklung-**Prognose-Toggle**; (b) **v2.5.2** (§6.5) **Reisekosten-Zeitraum-Zuordnung vereinheitlicht**
+  (Divergenz Report/Dashboard + Doppelzählung behoben, ADR `docs/adr/0001`).
+  **Direkt danach fachlich nachgeschärft (§6.5, ✅ v2.5.5):** maßgeblich ist das
+  **Leistungsende `checkOutDate ?? date`** statt `expense.date` — ADR `docs/adr/0002` **supersedes 0001**;
+  (c) **v2.6.0** (§6.6) **Phase 2** — Leistungsende auch für **mehrtägige Belege** erfassbar
+  (`car`/`train`/`transport`/`other`), ohne Schema-Change; dabei zwei Defekte gefixt (Kategoriewechsel
+  räumte Datumsfelder nie; Rückflugdatum nicht löschbar) und die Validierung „Ende ≥ Start"
+  kategorienunabhängig gemacht.
+  (d) **v2.6.2** Cleanup (tote Erfassungsmasken entfernt, separate Session); (e) **v2.6.4 + v2.7.0**
+  (§6.7) **Purge- und Kopier-Konsistenz** — Zurücksetzen folgt dem Leistungsende, „Zeitraum kopieren"
+  wird wochentagstreu und legt keine Duplikate mehr an.
+  **NAS-Prod-Rollout offen. ⚠️ Manifest + Tag fehlen für 2.6.4/2.7.0** (bewusst aufgeschoben, siehe
+  §0.1) — letztes Manifest `2.6.2.json`. **Vor dem Rollout Analyse-Skript ERNEUT fahren** (ADR 0002,
+  offene Punkte 3 + 5). — Sonst nur
   der TZ-Restpunkt (Scheduler-Monatstrigger +
   db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
   bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
@@ -39,7 +125,7 @@
 
 1. **Branch/Worktree prüfen:** `cd C:\Projects\ProTrackr_main` → `git branch --show-current`
    == `main`; `git fetch origin`; Drift `git rev-list --left-right --count origin/main...HEAD`
-   == `0 0`; HEAD-Version == 2.4.0 oder neuer.
+   == `0 0`; HEAD-Version == 2.7.4 oder neuer.
 2. **Memory lesen:** `MEMORY.md` + verlinkte Einträge, v.a. [[feedback_deploy_workflow]]
    (nach A5!), [[feedback_worktree_separation]], [[feedback_3agent_workflow]],
    [[feedback_prod_only_via_dev_promotion]], [[project_umsatzchart_task]],
@@ -89,7 +175,10 @@ git commit …`** (client-only/Nicht-DB-Fixes; Tests laufen normal) ODER `Start-
 (Admin-PowerShell) vor Commits mit DB-Fixtures. Nach Push ggf. `git checkout -- client/public/sw.js`
 (Build-Artefakt-Drift). Drift danach `0 0` prüfen.
 
-## 4. AKTUELLER STAND (v2.4.0, komplett live auf Prod)
+## 4. STAND DER WORKSTREAMS BIS v2.4.0 (alle live auf Prod)
+
+> Historischer Abschnitt: beschreibt die bis v2.4.0 abgeschlossenen Workstreams. Der **aktuelle**
+> Stand steht in §0/§0.1 (main = v2.7.4, PROD = v2.5.0); die neueren Arbeiten in §6.4–§6.9.
 
 **Frühere Basis:** task_bba37780 (Reisekosten-Berichte) komplett + LIVE auf Prod (v2.1.22).
 Fehler #1/#2/#3, Backlog P1/P2/P4/P5, A5-localhost-Shutdown, NAS-Rollout-Tooling + Blueprint —
@@ -132,10 +221,14 @@ Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Dat
 - Referenz [[project_umsatzchart_task]] (inkl. recharts-Fragment-Lesson).
 
 ### 4.3 Version/Prod-Stand
-- **origin/main-HEAD = v2.4.x** (laufende Doku-Bumps); letzter **App-Release = v2.4.0**. Manifeste: `2.1.28`,
-  `2.2.0`, `2.2.2`, `2.2.3`, `2.3.0`, `2.3.3`, `2.3.5`, `2.4.0`.
-- **PROD (NAS :9443) = v2.4.0** (2026-07-06, Image `91e956650dd9`) — Tooltip + TZ-Fix + Session-Store
-  live; Migration `0025` angewandt; APP_ENV_LABEL-Titel-Garantie intakt. **Prod + Dev beide v2.4.0, healthy.**
+- **origin/main-HEAD = v2.7.x** (laufende Doku-Bumps); letzter **App-Release = v2.7.4**
+  (Commit `be5a1eb`). Manifest-Reihe zuletzt: `2.6.2` → `2.7.2` → `2.7.3` → **`2.7.4`** (maßgeblich).
+- **PROD (NAS :9443) = v2.5.0** — Screenshot Account-Inhaber 2026-08-04, Footer „Version: 2.5.0 ·
+  Build 15.07.2026, 21:41". Enthält alles bis v2.4.0 (APP_ENV_LABEL, Umsatzchart, Tooltip, TZ-Fix,
+  Session-Store, Migration `0025`) **plus v2.5.0** (Dashboard-Backlog, §6.4).
+  ⚠️ Die frühere Angabe „PROD = v2.4.0, Promotion offen" war eine **unbestätigte Annahme** und ist
+  seit dieser Korrektur hinfällig — Details und Lehre in §0. Build-Zeitstempel-Abweichung
+  (Prod 21:41 vs. Dev 19:41) ist im NAS-Chat offen.
 
 ## 5. VERHÄLTNIS ZUR NAS-WELT
 
@@ -195,19 +288,367 @@ zeigen, nie `UTC`.
 - (optional, offen) Y-Achsen-Symbol bei CHF ist „250kCHF" (ohne Leerzeichen, wie spezifiziert);
   Label-Überlappung auf schmalen Viewports ggf. `angle={-45} textAnchor="end"`.
 
-### 6.4 Dashboard-Backlog — 🔲 OFFEN (User-Auftrag 2026-07-07)
-**Noch nicht begonnen. Erst planen (Konzept + Rückfragen), dann nach User-Freigabe im 3-Agenten-Workflow.**
-Detail-Notiz: Memory [[project_dashboard_backlog]].
-1. **Dashboard-Kachel „Berichte" zeigt nur `0`.** In `client/src/pages/Dashboard.tsx` (`stats`-Array) ist
-   `value: "0"` **hartkodiert** (`description: "Ausstehend"`, `isLoading:false // statisch`). Ziel: (a) echter
-   Wert statt statisch 0; (b) **klären + beschriften, WELCHE Berichte** gemeint sind (Buchhaltungs-/Kunden-
-   bericht / ausstehende Rechnungen?) — Semantik vorher mit User präzisieren.
-2. **Umsatzentwicklung — Prognose-Schalter.** Button/Toggle im `buildRevenueChart`, der **prognostizierte
-   Umsätze** aus **bereits in der Zukunft hinterlegten Zeiteinträgen** zeigt (die `timeEntries.list`-Query
-   nutzt heute nur `rangeStart..rangeEnd` = Vergangenheit → Zukunftsfenster ergänzen). **Optional:** Kosten-
-   entwicklungs-Prognose aus **historischen Daten** hochgerechnet (Methodik im Konzept festlegen). Beachten:
-   recharts-Fragment-Lesson, `monthlyFinancials.ts` (eine Wahrheitsquelle), kein Datenleck; Prognose optisch
-   abheben (gestrichelt/eigene Farbe).
+### 6.4 Dashboard-Backlog — ✅ ERLEDIGT (v2.5.0, 2026-07-15), live auf main
+**Umgesetzt im 3-Agenten-Workflow (Junior→Senior→QA). Rein clientseitig, KEIN Schema-Change. Detail:
+Memory [[project_dashboard_backlog]].**
+1. **Kachel „Berichte" → „Rechnungen".** `client/src/pages/Dashboard.tsx`: statische `0` ersetzt durch
+   Anzahl der im laufenden Jahr vergebenen Rechnungsnummern (`invoiceNumbers.list({ year })`, existierte
+   bereits), `isLoading` gekoppelt. User-Entscheidung: „Rechnungen dieses Jahr" (Alternative „unbezahlt"
+   hätte Zahlungsstatus-Migration gebraucht — nicht im Datenmodell).
+2. **Umsatzentwicklung — Prognose-Toggle** (nur Einheitliche-Währung-Modus). Umsatz aus real erfassten
+   Zukunfts-Zeiteinträgen (separater konditionaler Query); Kosten-**Run-Rate** (Ø letzte 3 abgeschl. Monate
+   variable + Fixkosten) als eigene Linie UND Netto-Input; Netto via `computeMonthlyTaxSeries` (geteilte
+   Wahrheitsquelle). Neue reine lib `client/src/lib/revenueForecast.ts` + Unit-Test
+   `server/revenueForecast.test.ts` (**ins pre-commit-Gate aufgenommen**, jetzt 3 Suites). Gestrichelt/
+   gedämpft, „heute"-Marker, Methodik-Disclaimer; Serien als Array (Fragment-Lesson), Warschau-Strings,
+   kein Datenleck.
+   - **K1-Lesson (Senior-Blocker, gefixt):** Run-Rate/gleitender Ø braucht ein Query-Fenster, das das
+     Berechnungsfenster VOLL abdeckt. IST-ctx (`rangeStart..rangeEnd`) ließ im 3M-View Monat −3 fehlen →
+     stille `0` → Ø ~1/3 zu niedrig (Verstoß gegen globale Regel §6, Missing-Data-Penalty). Fix: dedizierter
+     Run-Rate-Query über die letzten 3 abgeschlossenen Monate, entkoppelt vom Anzeigezeitraum.
+**Offen:** NAS-Prod-Rollout im **NAS-Chat** via `/nas-rollout` (Manifest `.claude/rollouts/2.5.0.json`,
+`breaking:false`, keine neue Migration). Visuelle e2e-Abnahme in NAS-Dev — Prognose zeigt Zukunftsmonate
+nur, wenn Zeiteinträge in der Zukunft erfasst sind.
+
+### 6.5 Reisekosten-Zeitraum-Zuordnung — Schritt 1 ✅ (v2.5.2, live auf main), Schritt 2 ⏳ (implementiert, QA/Commit offen)
+
+#### Schritt 1 — Vereinheitlichung (v2.5.2, 2026-08-03; ADR 0001, inzwischen superseded)
+**Auslöser (User-Beobachtung):** Buchhaltungsbericht Juli 2026 zeigte **38.090 €** Bruttoumsatz, das
+Dashboard **37.940 €** — Differenz 150 € = ein Hotelbeleg über den Monatswechsel (30.06.–02.07.).
+
+**Ursache — zwei konkurrierende Datums-Konventionen:** Der Server-Ladefilter `getAllExpenses`
+(`server/db.ts:746-755`) lädt per **Overlap** (`COALESCE(checkOutDate, checkInDate, date)`), und
+`Reports.tsx` übernahm diese Ladung **ungefiltert**; `monthlyFinancials.ts` (Dashboard **und
+Steuerbasis**) ordnete dagegen nach `expense.date` zu. Folgen: Divergenz Report/Dashboard, der
+**angezeigte Bruttoumsatz wich von der Steuerbasis desselben Berichts ab** (Nettogewinn basierte auf
+37.940 €), und ein monatsübergreifender Beleg zählte im Juni- **und** Juli-Bericht voll
+(Doppelzählung; bei exclusive-Kunden Doppelfakturierung).
+
+**Umsetzung:** Eine exportierte reine Funktion `isExpenseInPeriod()` in `monthlyFinancials.ts`
+(K4 SSoT); `Reports.tsx` filtert an **genau einer** Stelle, bevor die Belegmenge in irgendeinen
+Konsumenten fließt. Zuordnungsfeld war in diesem Schritt `expense.date` (ADR
+`docs/adr/0001-reisekosten-zeitraum-zuordnung.md`, **Status jetzt `superseded by ADR 0002`**).
+Bewusst unverändert: Server-Ladefilter (ist ein *Lade*-, kein *Zuordnungs*filter — die Kalenderansicht
+spannt Hotelnächte über checkIn..checkOut auf, `TimeTracking.tsx:538-582`) und `reportStichtag`
+(Kursfrage, nicht Monatsfrage). Die Struktur (eine Funktion, eine Filterstelle) gilt unverändert weiter.
+
+- Neu: `server/expensePeriodAttribution.test.ts` (Regressionsfall + Invarianz-Beweis).
+  **pre-commit-Gate seither 5 Suites** (+ `monthlyFinancials`, + `expensePeriodAttribution`).
+
+#### Schritt 2 — Leistungsende statt Belegdatum (⏳ implementiert, QA/Commit offen; ADR 0002)
+**Auslöser:** Prod-Beleg **#596** (Hotel Fritzmeier, 150,00 EUR, `exclusive`): `date`/`checkInDate`
+30.06.2026, `checkOutDate` 02.07.2026 → nach Schritt 1 in **Juni**, gelebte Abrechnungspraxis ist
+**Juli**. Grund: `date` ist bei Hotels der **Check-in** (`TimeTracking.tsx:1258` setzt
+`payloadBase.date = hotelCheckIn`), bei Hin-/Rückflug auf einem Ticket das **Hinflugdatum**.
+
+**Entscheidung (User, K14):** Ein Beleg wird **niemals gesplittet** (Spec-Entwurf v1.0.0 mit
+Nacht-Split bewusst verworfen), sondern zählt komplett in dem Monat, in dem die **Leistung endet**:
+`leistungsende = checkOutDate ?? date`. Hotel → Check-out · Hin-/Rückflug auf einem Ticket →
+Rückflugdatum · alles Übrige (Taxi, Zug, Kraftstoff, km-Pauschale) → `date`. Gilt **einheitlich** für
+Kundenabrechnung, Report-Anzeige, Dashboard **und Steuerbasis** — eine Zahl überall.
+**Vollständige Begründung + Alternativen: ADR `docs/adr/0002-reisekosten-leistungsende.md`
+(supersedes 0001).**
+
+Geändert an der **einen** Regelstelle (`isExpenseInPeriod`) — plus die Stellen, die eine **zweite**
+Zuordnung hatten oder das Feld **erzeugen**:
+- `Dashboard.tsx:812` Kosten-Pie (war eine zweite Zuordnungsregel im selben useMemo wie die
+  Steuer-Slices) und `Dashboard.tsx:1023-1046` Reisekosten-Kachel → beide auf `isExpenseInPeriod`.
+- `Import.tsx:661-664`: Check-out aus `nights` über lokale Datumskomponenten statt `toISOString`
+  (lieferte in Warschau konsequent den **Vortag**).
+- `receiptAi.ts:533-548`: leitete `nights` bislang **gar nicht** ab → `checkOutDate == checkInDate`.
+  Jetzt über den neuen geteilten Helfer `addDaysToDateKey` (`shared/dateStichtag.ts`, TZ-neutral).
+
+- **⚠️ Steuerbasis verschiebt sich bewusst** (monatsübergreifende Belege wandern vom Anreise- in den
+  Abreisemonat) — gewollte K14-Entscheidung, keine stille Nebenwirkung.
+- **⚠️ Außenwirkung:** Kundenberichte/-exporte (`costModel: exclusive`) ändern sich; Beleg #596 =
+  150,00 EUR jetzt in **Juli**. Wurden bereits Rechnungen versandt, weicht eine Neuerstellung ab.
+  **Vor NAS-Prod-Rollout beachten.**
+- **Invariante hält:** Die Server-Ladung (Overlap) bleibt Obermenge — für Belege mit `checkOutDate` ist
+  die untere Ladegrenze **exakt** das Leistungsende; die obere nutzt den Beleg-*Beginn*, der per
+  Validierung (`routers.ts:328-352`: Check-out ≥ Check-in, Rückflug ≥ Hinflug) ≤ Leistungsende ist.
+- **✅ Bestandsdaten-Prüfung ERLEDIGT (2026-08-03, Prod, read-only):** Datenqualität `checkOutDate`
+  **sauber** (0 defekte von 48 Hotels) → **kein Backfill**. Genau **1** geldwirksame Verschiebung:
+  Beleg **#596** (Fritzmeier `exclusive`, 150,00 EUR, Juni → Juli) — korrektes Check-out 02.07., also
+  der **gewollte** Effekt (Beleg-Kommentar „koszt ujęty w lipcu"). Beleg #368 (273,00 EUR, März → April)
+  ist keinem Kunden zugeordnet → nur interne Steuerbasis. **Datenqualitätsseitig grünes Licht für
+  v2.5.5.** Details im ADR 0002, offener Punkt 3.
+- **✅ Kaufmännischer Abgleich erledigt (2026-08-04):** Für Fritzmeier gab es **keine** Juni-Rechnung mit
+  den 150 EUR — nur die Juli-Rechnung. **Keine Doppelfakturierung, keine Gutschrift nötig**; ADR 0002
+  bestätigt die gelebte Praxis. Punkt geschlossen.
+- **✅ Verfallene Tickets geklärt (2026-08-04):** #605 (425,97 EUR, Fritzmeier) und #492 (238,20 EUR)
+  beide **dienstlich/kundenverursacht** → nach Spec §8.1a **weiterberechenbar**, zusammen **664,17 EUR**.
+  **Offener kaufmännischer Schritt:** Die Nachberechnung ist möglich, aber noch nicht erfolgt — und sie
+  läuft nicht automatisch, weil `status='VERFALLEN'` + `verfall_ursache` erst mit der Spec-Umsetzung
+  existieren. Manuell anzustoßen.
+- **Prüfergebnis im Detail (NAS-Chat, read-only gegen Prod):** Hotels **48/48** plausibel (0× `NULL`,
+  0× `== checkIn`, 0× `< checkIn`); Flüge **32**, davon 9 Kandidaten mit fehlendem/gleichem Enddatum —
+  **alle unkritisch** (One-Way, Round-Trip im selben Monat, 0 EUR).
+- **🔑 Methodische Lesson:** Die Abweichungs-Abfrage des Skripts zeigt **nur Monatsverschiebungen**, ein
+  **kaputtes `checkOutDate` bleibt darin unsichtbar** (`checkOut == checkIn` erzeugt keine Abweichung —
+  der Defekt äußert sich als *Ausbleiben* einer Verschiebung). Deshalb waren separate
+  Datenqualitäts-Queries nötig. **Nachgezogen (v2.5.6):** fest im Skript als `DATA_QUALITY_SQL` —
+  `NULL` / `== Startdatum` / `< Startdatum`, kategorienspezifisch, mit Zählung je Kategorie und Befund.
+- **Fachregeln des Account-Inhabers** (Memory [[project_reisekosten_fachregeln]], eingearbeitet in
+  `docs/SPEC-Reisekosten-Abgrenzung.md` v1.1.0): (a) **§3.2 Flugrichtung** — nach Polen (KTW/KRK) =
+  Rückflug, aus Polen = Hinflug, bei Umstieg letzter Flughafen; kein DB-Feld kodiert das
+  (`flightRouteType` = Geografie). Praxis: Flüge als **Einzelstrecken** erfasst → `PUNKT`, kein
+  Ankermonat, `checkOutDate = NULL` **korrekt**. (b) **§8.1a verfallene Tickets** — abrechenbar bei
+  Ursache `DIENSTLICH`/`MANDANT`, **nicht** bei `KRANKHEIT`; neuer Status `VERFALLEN` +
+  Pflichtfeld `verfall_ursache`.
+- **Spec ins Repo geholt (K13/K4):** `docs/SPEC-Reisekosten-Abgrenzung.md` **v1.1.0** löst die lose
+  Datei in `Downloads/` ab — eine Wahrheitsquelle. Sie bleibt **K14-freigabepflichtig** (§16); R2/R3
+  (Split, Ankermonat) sind **Zielbild, nicht implementiert** — ADR 0002 ist der bewusst einfachere,
+  freigegebene Stand.
+- `server/expensePeriodAttribution.test.ts` erweitert: Referenzfall #596, Flug, Grenzen inklusive über
+  das Leistungsende, K8 (Date-Objekte lokal), Konsistenz Chart ↔ Steuerbasis, `receiptAi`-Payload-
+  Ableitung inkl. Jahresgrenze.
+
+**🔑 Lessons:**
+1. Ein *Lade*-Filter (welche Daten kommen aus der DB) ist **nicht** dieselbe Frage wie eine
+   *Zuordnungs*-Regel (in welchen Zeitraum zählt ein Datensatz). Wer beides vermischt, bekommt Divergenz
+   **und** Doppelzählung. Zuordnung gehört in **eine** geteilte, getestete Funktion.
+2. **Wird eine Zuordnungsregel auf ein anderes Feld umgestellt, müssen ALLE Pfade geprüft werden, die
+   dieses Feld ERZEUGEN — nicht nur die, die es lesen.** Hier: `Import.tsx` (Check-out aus `nights` mit
+   `toISOString`-Vortagsfehler) und `receiptAi.ts` (leitete `nights` überhaupt nicht ab). Ein Feld, das
+   vorher nur Anzeige/Stichtag war, wird durch die Regeländerung **geldwirksam** — seine Erzeuger
+   brauchen dieselbe Sorgfalt wie die Rechenlogik.
+
+### 6.6 Leistungsende für mehrtägige Belege (ADR 0002 Phase 2) — ✅ ERLEDIGT (v2.6.0, 2026-08-04)
+**Lücke:** Das Leistungsende war nur bei **Hotel** (Check-out) und **Flug** (Rückflug) erfassbar. Ein
+**Mietwagen** 30.06.–02.07. landete daher weiter im Juni — die ADR-0002-Regel griff dort nicht.
+
+**Kernerkenntnis (korrigiert die ursprüngliche Phase-2-Annahme):** Es brauchte **kein neues Feld und
+keine Migration**. `checkOutDate` ist bereits ein **generisches Leistungsende** (bei Flügen trägt es das
+Rückflugdatum, nicht ein „Check-out"), die Spalte ist nullable und kategorienunabhängig. Ein zweites Feld
+`usageEndDate` wäre **K4-Redundanz** gewesen. Freigegeben für `car`/`train`/`transport`/`other`
+(User-Entscheidung K14); punktuelle Arten (`taxi`, `fuel`, `meal`, `food`, `mileage_allowance`) bleiben
+bewusst ohne Enddatum.
+
+**Zwei Defekte im selben Zug gefixt (Senior-Review):**
+- **Kategoriewechsel räumte die Datumsfelder der alten Kategorie NIE.** (a) Ein von Mietwagen auf Taxi
+  gewechselter Beleg behielt sein `checkOutDate` — **unsichtbar** in der Maske, aber weiterhin maßgeblich
+  für die Monatszuordnung (Steuerbasis + Kundenrechnung). (b) **Neue Sackgasse durch die generische
+  Validierung:** Ein Flug mit Rückflug, auf Taxi mit späterem Datum gewechselt, war über die UI **nicht
+  mehr speicherbar**. Jetzt setzt jeder Zweig die nicht zuständigen Datumsfelder explizit auf `""` → NULL.
+- **Rückflugdatum war nie löschbar** (`|| undefined` verwarf den Key statt `""` → NULL zu schreiben).
+
+**Validierung** „Ende ≥ Start" gilt jetzt **kategorienunabhängig** — vorher wurde `checkOutDate`
+außerhalb von hotel/flight **gar nicht** geprüft, ein invertiertes Datum war speicherbar.
+
+**Gate-Härtung:** Validierung nach `server/expenseRules.ts` extrahiert und in `validateExpenseDateRules`
+umbenannt (der alte Name `validateFlightAndHotelExpenseRules` stimmte nicht mehr). Grund: Der Test zog
+sonst den kompletten Router-Graph inkl. **bcrypt** (Native-Binding) in das pre-commit-Gate.
+**Gate-Laufzeit 5,8s → 2,8s.**
+
+**🔑 Lessons:**
+1. **Prüfe, ob ein Feld schon existiert, bevor du eins hinzufügst.** Der Feldname (`checkOutDate`) war
+   hotel-klingend, die Semantik längst generisch — ein zweites Feld hätte zwei Wahrheiten erzeugt.
+2. **Wer eine Validierung verschärft, muss die Zustände prüfen, die schon in der DB liegen.** Die neue
+   Regel war korrekt, machte aber einen bestehenden (falschen) Datenzustand plötzlich *unspeicherbar*
+   statt nur falsch — aus einem stillen Fehler wurde eine Sackgasse.
+3. **Ein Gate-Test darf nicht am halben Server hängen.** Native Bindings im schnellsten Test blockieren
+   im Zweifel jeden Commit.
+
+**⚠️ Offen (ADR 0002, Punkt 5):** Kategoriefremde Enddaten im **Bestand** (Altfälle aus früheren
+Kategoriewechseln) sind **heute schon still fehlzugeordnet**. Die Vorprüfung vom 2026-08-03 deckte diese
+Klasse **nicht** ab. Das Skript hat dafür jetzt einen dritten Befund-Typ — **vor dem Prod-Rollout erneut
+fahren**.
+
+### 6.7 Purge- und Kopier-Konsistenz (v2.6.4 + v2.7.0) — ✅ ERLEDIGT, 2026-08-04
+Beide Änderungen ziehen die letzten Stellen nach, die Belege noch nach `expense.date` statt nach dem
+**Leistungsende** (ADR 0002) einem Zeitraum zuordneten. Je 3-Agenten-Loop mit Senior-PASS.
+
+**v2.6.4 — Zurücksetzen/Purge** (`server/routers.ts`, Aufrufer `BackupTab.tsx`)
+- Belegfilter jetzt `DATE(COALESCE(checkOutDate, date))`. Vorher löschte ein **Juni**-Reset Beleg #596,
+  der in der **Juli**-Abrechnung steht — und ein Juli-Reset erfasste ihn nicht.
+- **Bewusste Einschränkung:** Ein Beleg mit Leistungsende Juli an einem **Juni**-Zeiteintrag wird vom
+  Juni-Reset trotzdem mitgelöscht (die Kaskade). Integrität schlägt Deckungsgleichheit.
+- **Kaskaden-Begründung korrigiert:** `fk_expenses_timeentry` ist `ON DELETE CASCADE` — MySQL räumt die
+  Belege ohnehin ab. Das explizite Einsammeln ist nötig, weil `fk_documents_expense`
+  `ON DELETE SET NULL` ist (sonst **Waisen-Dokumente**) und `deleted.expenses` sonst zu niedrig wäre.
+- **Transaktion** um die drei Deletes ergänzt (vorher: Abbruch nach Delete 1 = Dokumente weg, Rest da).
+- `BackupTab.tsx` nutzt `warsawDateKey()`; vorher lieferte `toISOString().slice(0,7)` am Monatsersten
+  zwischen 00:00–02:00 den **Vormonat** als vorausgewählten Löschmonat (K8, destruktiver Dialog).
+
+**v2.7.0 — „Zeitraum kopieren"**
+- **Doppelanlage behoben:** Die Overlap-Ladung wurde als Selektionsmenge einer *Schreib*operation
+  genutzt → ein grenzüberspannender **eigenständiger** Beleg wurde von mehreren Läufen kopiert
+  („Juni kopieren" + „Juli kopieren" = dasselbe Duplikat; `scope:"day"` sogar dreifach), bei
+  `exclusive` doppelt in Kundenrechnung **und** Steuerbasis. Jetzt Auswahl nach Leistungsende.
+  **Verknüpfte Belege bleiben bewusst ungefiltert** — sie können ohnehin nicht doppeln, mit Filter
+  wären sie *nie wieder* kopierbar.
+- **Wochentagstreue (User-Entscheidung):** `day` → nächster Arbeitstag (Fr→Mo); `week` → +7 (war schon
+  korrekt); `month` → n-tes Wochentag-Vorkommen bleibt erhalten (3. Montag → 3. Montag); Überzählige
+  (nur das **5.** Vorkommen, also Quelltage 29.–31.) → 1. Vorkommen im Folgemonat. **Kein
+  Feiertagskalender.**
+- **Anker ist das Leistungsende, nicht `date`** — sonst fielen Auswahl- und Verschiebungsanker
+  auseinander und die **Kopie landete im Quellzeitraum** (Sweep 2024–2028, ~12.800 Fälle: vorher
+  **214** Rückfälle, jetzt **0**). Für eintägige Belege ist der Ankerwechsel ein **exakter No-op**.
+  `date`/`checkInDate` folgen per **Tagesoffset** → Dauer und Chronologie konstruktiv erhalten.
+- **K4:** Die Zuordnungsregel liegt jetzt **einmal** in `shared/expenseServiceEnd.ts`;
+  `isExpenseInPeriod` delegiert dorthin (im Review als **byte-identisch verschoben** nachgewiesen),
+  `toDateKey` wanderte nach `shared/dateStichtag.ts` (Client-Importe über Re-Export). Damit hat die
+  Regel erstmals einen echten Produktionsaufrufer im Serverbereich.
+- Gate um `server/copyRangeShift.test.ts` erweitert (bleibt abhängigkeitsarm).
+
+**🔑 Lessons:**
+1. **Ein Ladefilter ist keine Zuordnungsregel.** Wird eine großzügige Ladung (Overlap) als
+   Selektionsmenge einer Schreib- oder Löschoperation verwendet, entstehen Duplikate bzw.
+   Fehllöschungen. Beides trat hier real auf.
+2. **Wer eine Validierung verschärft, muss die Zustände prüfen, die schon in der DB liegen** — die
+   neue Chronologie-Regel machte einen bestehenden falschen Zustand von „still falsch" zu
+   „unspeicherbar" (Kategoriewechsel, §6.6).
+3. **Auswahl- und Verschiebungsanker müssen dasselbe Datum sein.** Diese Inkonsistenz stand zuerst in
+   der *Spezifikation*, nicht im Code — der Review hat sie gefunden.
+4. **Ein Test, der die Spiegelung prüft, prüft nicht das Original.** Die Matrix pinnte die JS-Fassung
+   gegen die kanonische Regel, während das **produktive SQL** ungetestet blieb: ein Rückbau auf
+   `expenses.date` wäre grün geblieben. Jetzt wird der SQL-Baustein über `MySqlDialect` gerendert und
+   assertiert.
+
+### 6.8 Kundenzuordnung + Berechnungsgrundfeld-Verlust (v2.7.3 + v2.7.4) — ✅ ERLEDIGT, 2026-08-04
+
+Drei Stellen, an denen beim Schreiben eines Belegs Information **still** verlorenging. Je
+3-Agenten-Loop mit Senior-PASS; Manifest `2.7.4.json`, Tag `v2.7.4`.
+
+**v2.7.3 — „Zeitraum kopieren" verlor die explizite Kundenzuordnung** (`b3625d0`)
+- Der Kopier-Payload trug `expenses.customerId` nicht mit. Eine kopierte **eigenständige** Position
+  landete mit `customerId = NULL` und fiel auf die Datums-Heuristik zurück — an einem Tag mit zwei
+  Kunden (oder ohne Zeiteintrag) **still raus aus der Kundenabrechnung**, bei `exclusive` kein
+  weiterberechneter Umsatz. Betrag blieb korrekt, Zuordnung nicht.
+- Übernahme über `explicitCustomerIdForRangeCopy`, **nur für eigenständige Belege**.
+
+**v2.7.4 — Berechnungsgrundlage + KI-Freigabe** (`be5a1eb`)
+- `getAllExpenses` selektierte `distance`/`rate`/`liters`/`pricePerLiter` in **keinem** Zweig,
+  obwohl der Kopier-Payload sie liest → immer `undefined` → die Kopie eines Tank-, Mietwagen- oder
+  Kilometerpauschale-Belegs hatte einen korrekten `amount`, aber **keinen Nachweis** mehr. Dieselbe
+  Lücke machte die Bearbeiten-Maske für `mileage_allowance` **de facto unbenutzbar**: Felder leer,
+  Wächter brach jeden Speichervorgang ab.
+- Beide **KI-Freigabepfade** lösten einen Ziel-Kunden auf, prüften sogar den **Zugriff** darauf, und
+  verwarfen ihn dann — `toExpenseMutationPayload` kennt `customerId` gar nicht. Ergebnis: dasselbe
+  Fehlerbild wie beim Kopieren. Neu: `explicitCustomerIdForApproval`, in beiden Pfaden.
+- **K4:** Das Prädikat „ist verknüpft" stand zweimal wortgleich → jetzt einmal als `isLinkedExpense`;
+  Zahl-Normalisierung als `toCustomerIdOrNull` (fordert `> 0`, damit Zugriffs-Guard und Schreibpfad
+  dieselbe Menge akzeptieren — eine `0` lief sonst am truthy-Guard vorbei in einen rohen FK-Fehler).
+- **Folgeänderung in der Maske:** Da sie jetzt durchläuft statt abzubrechen, hätte eine reine
+  Kommentaränderung den Betrag still auf km × Pauschale korrigiert (Import und KI-Freigabe setzen
+  Betrag und Grundlage unabhängig). Auf Entscheidung des Account-Inhabers zeigt sie einen **Hinweis
+  mit altem und neuem Betrag**, sobald beide auseinanderliegen — Bedingung deckungsgleich mit dem
+  Speicherpfad (`Math.round(x * 100)`) **und** dessen Guard (`> 0`).
+
+**🔑 Lessons:**
+1. **Ein Feldname ist keine Quellenangabe.** `getAllExpenses` liefert `customerId` und `rate` je nach
+   Zweig aus **verschiedenen Tabellen**. Wer ein solches Objekt in eine *Schreib*operation
+   weiterreicht, muss den Zweig kennen — sonst wird der Kunde des Zeiteintrags zur „expliziten"
+   Belegzuweisung oder der Tagessatz zur Kilometerpauschale. Beide Fallen sind jetzt per
+   Quelltext-Wächter gepinnt.
+2. **Ein Ladefehler kann sich als Validierungsfehler tarnen.** Die Maske war für Kilometerpauschale
+   unbenutzbar — sichtbar aber nur als Toast „Bitte Kilometer eingeben", nicht als fehlendes Feld.
+   Die Ursache lag zwei Schichten tiefer im SELECT.
+3. **Wer einen Ladefehler behebt, schaltet Schreibpfade frei, die vorher nie liefen.** Der
+   Betrags-Hinweis existiert nur, weil das Beheben von (1) einen bis dahin toten Pfad aktiviert hat.
+   Bei jedem „wir laden jetzt zusätzlich X" prüfen, wer X **schreibt**.
+4. **Prüf-Guard und Schreibpfad müssen dieselbe Menge akzeptieren.** `else if (targetCustomerId)`
+   (truthy) und `Number.isFinite` (lässt `0` durch) ergaben zusammen einen Wert, der die
+   Zugriffsprüfung übersprang.
+5. **⚠️ Release-Artefakte gegen den FRISCHEN Remote-Stand prüfen, nicht gegen den Sessionstart.**
+   Während dieser Sitzung hat eine **Parallelsession** im selben Worktree (21:53) Manifest
+   `2.7.2.json` erzeugt und die Tags `v2.6.4` + `v2.7.0` gesetzt — genau die Artefakte, die laut
+   Auftrag „fehlten". Der Sessionstart-Befund (`git tag --list` zeigte nur bis `v2.6.2`) war beim
+   Setzen der Tags längst veraltet. Entstandener Schaden: keiner (die Manifest-Reihe
+   `2.7.2 → 2.7.3 → 2.7.4` ist konsistent, jedes pinnt einen eigenen Commit), aber die Begründung im
+   Tag `v2.7.3` („holt 2.6.4/2.7.0 nach") ist unzutreffend. **Vor `git tag` und vor dem Manifest
+   immer erneut `git fetch` + `git tag --list` + `ls .claude/rollouts/`.** Siehe
+   [[feedback_parallel_sessions_one_worktree]].
+
+### 6.9 „Legacy"-Kategorien `transport` und `food` — ⚠️ OFFEN, Entscheidung Account-Inhaber (K14)
+
+Nebenbefund aus der Doku-Session, hier festgehalten. **Kein Auftrag, keine Code-Änderung erfolgt** —
+die Lage ist am 2026-08-04 gegen den Code verifiziert und gilt unverändert.
+
+**Der Befund:** `drizzle/schema.ts` kommentiert zwei Enum-Werte als Übergangszustand —
+`"transport", // Transport (legacy, wird zu taxi migriert)` und
+`"food", // Food (legacy, wird zu meal migriert)`. Beide sind jedoch **aktiv auswählbar**
+(`client/src/pages/TimeTracking.tsx`, Select + `EXPENSE_CATEGORY_LABELS`).
+
+**Warum das geldwirksam ist:** `transport` gehört seit v2.6.0 zu
+`SERVICE_END_DATE_CATEGORIES` (`car`/`train`/`transport`/`other`), darf also ein **Leistungsende**
+(`checkOutDate`) tragen. `taxi` gehört bewusst **nicht** dazu (punktuelles Ereignis). Eine
+Migration `transport → taxi` würde Bestandsbelege mit **kategoriefremdem Enddatum** erzeugen —
+exakt **Befundtyp 3** aus `scripts/analyze-expense-attribution.mjs` (dessen Positivliste
+`('hotel','flight','car','train','transport','other')` lautet, ohne `taxi`). Wirkung: das Enddatum
+bleibt für die Monatszuordnung nach ADR 0002 maßgeblich, ist in der Maske aber **unsichtbar** →
+stille Fehlzuordnung, geldwirksam bei `costModel: "exclusive"`.
+
+**Beobachtung, die gegen die Legacy-Annahme spricht (2026-08-04):** Die Labels beschreiben
+**fachlich verschiedene Sachverhalte**, keine Dubletten:
+- `transport` = **„ÖPNV"**, `taxi` = „Taxi". Eine ÖPNV-Wochen-/Monatskarte ist genau der mehrtägige
+  Fall, für den `transport` zu Recht ein Leistungsende führt; eine Taxifahrt ist punktuell.
+- `food` = **„Lebensmittel"**, `meal` = **„Verpflegungspauschale"**. Ein Einkaufsbeleg ist kein
+  Pauschbetrag — die Zusammenlegung hätte eine steuerliche Dimension (Polish JDG), nicht nur eine
+  technische.
+
+Damit sieht der Kommentar eher nach einer **nie ausgeführten und fachlich überholten Absicht** aus
+als nach einem echten Migrationsplan.
+
+**Zu entscheiden (nur der Account-Inhaber):**
+- **(a) `transport` ist NICHT legacy** → Kommentar in `drizzle/schema.ts` streichen, Kategorie bleibt
+  eigenständig. *(Nach heutiger Beleglage die naheliegende Variante; kein Datenänderungsbedarf.)*
+- **(b) Migration wird doch gewollt** → sie **muss** vorhandene `checkOutDate`-Werte mitbehandeln
+  (räumen oder Belege vorher trennen) und das Analyse-Skript **vorher und nachher** laufen.
+- **`food`/`meal`** ist bezüglich des Enddatums **harmlos** (beide punktuell, keins von beiden steht
+  in `SERVICE_END_DATE_CATEGORIES`) — die fachliche Frage oben bleibt davon unberührt.
+
+### 6.10 Zeitzonen-Audit Europe/Warsaw (v2.7.x) — teils erledigt, drei Punkte OFFEN
+
+Vollaudit auf Anweisung des Account-Inhabers: Alle Zeitstempel und Zeitmessungen sollen auf
+**Europe/Warsaw** basieren (Haupt- und Standardzeit; Polish JDG, Monatsgrenzen sind geldwirksam).
+Der geldwirksame Kern (Zeitraum-Zuordnung, Monatssteuer-Serie, Kurs-Stichtag) ist **sauber** — er
+rechnet auf `YYYY-MM-DD`-Strings und meidet `toISOString` bewusst.
+
+**✅ Behoben:**
+- **Kurs-Stichtag** (`ExchangeRates.tsx`): Datumsfeld war zwischen 00:00–02:00 mit *gestern*
+  vorbelegt und sperrte *heute* → Kurs landete unter falschem `effectiveDate`. Jetzt `warsawDateKey()`.
+  Dazu der Nachbar: „Aktueller Kurs" verglich zwei unterschiedlich geparste Werte (date-only = UTC
+  gegen MySQL-Timestamp = lokal) — jetzt Vergleich über Datums-Keys.
+- **Build-Zeitstempel** (`VersionFooter.tsx`): wurde in der *Betrachter*-Zeitzone gerendert. Jetzt auf
+  Warschau gepinnt. **Diese Abweichung hat real einen Fehlverdacht ausgelöst** (Prod 21:41 gegen Dev
+  19:41 war derselbe Build, nur UTC gegen CEST). Fallback zeigte außerdem die *Aufrufzeit* als
+  Build-Zeit → jetzt „—".
+- **`toIsoDateOnly`** (`routers.ts`): Fallback-Belegdatum aus einem Zeiteintrag zog UTC-Komponenten →
+  behebt einen Off-by-one in den Vormonat.
+- **Wochentag-Label** bei `timeEntries.bulkCreate`: wurde in Container-Zeitzone gerendert und
+  **gespeichert**.
+- **Scheduler**: Auslöser für Monatsende und Rechnungsfrist folgen Warschau statt der Container-TZ;
+  Helfer `monthLastDay`/`isLastDayOfMonth` nach `shared/dateStichtag.ts` gezogen und getestet.
+- **Backup-Dateiname**: trug nachts das Vortagsdatum.
+
+**⚠️ OFFEN — Entscheidung des Account-Inhabers, bewusst NICHT angefasst:**
+1. **Verkoppelte Wandzeit-Konvention (geldwirksam, Teilfix gefährlich).** `timeEntries.date` wird mit
+   ZWEI Konventionen geschrieben: `new Date(input.date)` (UTC-Mitternacht → DB-Wandzeit 02:00) bei
+   create/update, `new Date(\`${key}T00:00:00\`)` (00:00) bei `copyRangeToNext`. Gleichzeitig liegen
+   die Tagesgrenzen aus `db.ts` (`localDayStartUtc`/`localNextDayStartUtc`) 2 h zu früh, weil MySQL
+   den `...Z`-String in der Session-TZ interpretiert. **Beide Fehler sind +2 h und heben sich auf.**
+   Ein einseitiger Fix zerstört die Kompensation und erzeugt echte Fehlzuordnungen über
+   Monatsgrenzen. Nur als Paket angehen, mit Analyse der Bestandsdaten (beide Konventionen liegen
+   gemischt in der DB).
+2. **Zeiteinträge hängen an der Browser-Zeitzone (geldwirksam beim Reisen).** `timeEntries.date`
+   reist per superjson als echtes `Date` zum Client; `toDateKey` liest dort **browser-lokale**
+   Komponenten. **Belege sind immun** (`mode: "string"` im Schema, kommen als String an). Folge: Wird
+   ein Bericht außerhalb CET/CEST geöffnet, können Zeiteinträge des Monatsersten in den Vormonat
+   kippen — und zwar **selektiv nur die per „Zeitraum kopieren" erzeugten** (00:00-Konvention), was
+   es schwer bemerkbar macht. Sauberster Fix: `timeEntries.date` serverseitig als Datums-String
+   ausliefern, dann verschwindet die Fehlerklasse strukturell.
+3. **Die Projekt-Zeitzone ist im Repo nirgends gesetzt.** Kein `TZ` in `.env`, kein `process.env.TZ`,
+   keine `timezone`-Option beim mysql2-Connect (Default `'local'`). Die Korrektheit hängt allein an
+   der Container-Einstellung. `vitest.config.ts` pinnt `Europe/Warsaw` — **das Gate ist damit
+   strenger als die Produktion** und würde echte Drift durchlassen. Empfehlung: `TZ=Europe/Warsaw`
+   und `timezone` explizit setzen, plus Startup-Assert gegen `@@session.time_zone`. Berührt den
+   Serverstart — deshalb nicht unmittelbar vor einem Rollout gemacht.
+
+**Nebenbefund, kein TZ-Thema (offen):** `Import.tsx` vergleicht `String(dateObjekt).slice(0,10)` gegen
+`"YYYY-MM-DD"` — das trifft **nie** (`String(Date)` liefert „Tue Jul 01 2026 …"). Folge: die
+Duplikatserkennung beim Import greift nie, und Belege werden nie an Zeiteinträge gehängt. Fix ist
+klein, ändert aber spürbar das Import-Verhalten — deshalb eigene Entscheidung.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
@@ -242,16 +683,25 @@ Detail-Notiz: Memory [[project_dashboard_backlog]].
 
 ## 9. ROLLBACK-/SICHERHEITSPUNKTE
 
-- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main-HEAD` = v2.4.x (App-Release v2.4.0).
-  Tags: `v2.1.28`, `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `v2.3.5`, `v2.4.0`; NAS-Prod-Rollout-
-  Tags `nas-rollout/2.4.0` (2026-07-06), `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
+- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main-HEAD` = **v2.7.x**
+  (App-Release **v2.7.4**, Commit `be5a1eb`).
+  Tags (Stand 2026-08-04, `git ls-remote --tags origin`): `v2.1.21`, `v2.1.22`, `v2.1.28`, `v2.2.0`,
+  `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `v2.3.5`, `v2.4.0`, `v2.5.0`, `v2.5.2`, `v2.5.5`, `v2.6.0`,
+  `v2.6.2`, `v2.6.4`, `v2.7.0`, **`v2.7.3`**, **`v2.7.4`**; NAS-Prod-Rollout-Tags
+  `nas-rollout/2.4.0` (2026-07-06), `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
+  Manifest-Reihe zuletzt: `2.6.2` → `2.7.2` → `2.7.3` → **`2.7.4`** (maßgeblich).
 - **v2.4.0 war der ERSTE NAS-Rollout mit Schema-Change seit 0024** (live auf Prod): `sessions`-Tabelle
   (Migration `0025`) + neue Runtime-Dependency `express-mysql-session`. **Rollback (falls je nötig):**
   Migration `0025` ist additiv (`CREATE TABLE IF NOT EXISTS`, keine bestehende Tabelle berührt) →
   Roll-back = altes Image (NAS hält 2 Generationen vor: v2.4.0 + v2.3.0); die Tabelle kann bleiben
   (alter Code ignoriert sie). `sessions` ist NICHT im Backup.
-- **PROD (NAS :9443) = v2.4.0** (2026-07-06, Image `91e956650dd9`) — alles live: APP_ENV_LABEL,
-  Umsatzchart, Tooltip, TZ-Fix, Session-Store. Dev + Prod beide v2.4.0, healthy.
+- **PROD (NAS :9443) = v2.5.0** (Screenshot Account-Inhaber 2026-08-04, Build 15.07.2026 21:41).
+  Live: APP_ENV_LABEL, Umsatzchart, Tooltip, TZ-Fix, Session-Store (alles bis v2.4.0, Image
+  `91e956650dd9`, 2026-07-06) **plus v2.5.0** (Dashboard-Backlog). Rollback-Ziel für einen
+  fehlgeschlagenen Rollout ist damit **v2.5.0**, nicht v2.4.0.
+  ⚠️ Die frühere Angabe „v2.4.0" war eine unbestätigte Annahme (§0). Offen im NAS-Chat: der
+  Build-Zeitstempel weicht vom abgenommenen Dev-Build ab (21:41 vs. 19:41) — bei bit-identischer
+  Promotion müssten beide gleich sein.
 
 ---
 

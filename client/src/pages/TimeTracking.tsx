@@ -1,5 +1,4 @@
 import DashboardLayout from "@/components/DashboardLayout";
-import { ExpenseFormInline } from "@/components/ExpenseFormInline";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +29,9 @@ import { trpc } from "@/lib/trpc";
 import { ChevronLeft, ChevronRight, Plus, Copy, Clock, Receipt, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+// Dieselbe Verschiebungsregel, die der Server beim Kopieren ANWENDET — die Vorschau darf
+// nichts anderes versprechen, als angelegt wird (K4).
+import { nextWorkdayKey, type CopyScope } from "@shared/copyRangeShift";
 
 type TimeEntryFormData = {
   customerId: number | null;
@@ -40,8 +42,6 @@ type TimeEntryFormData = {
   minutes: string;
   notes: string;
 };
-
-type CopyScope = "day" | "week" | "month";
 
 const initialFormData: TimeEntryFormData = {
   customerId: null,
@@ -80,6 +80,23 @@ const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   fuel: "Kraftstoff",
   other: "Sonstiges",
 };
+
+/**
+ * Belegarten, bei denen die Leistung über mehrere Tage laufen KANN und deshalb ein
+ * optionales Leistungsende erfassbar ist. Das Feld schreibt auf `checkOutDate` — das
+ * ist seit ADR 0002 kein Hotel-Feld mehr, sondern das generische Leistungsende und
+ * damit maßgeblich für die Monatszuordnung (`leistungsende = checkOutDate ?? date`,
+ * `isExpenseInPeriod` in `lib/monthlyFinancials.ts`).
+ *
+ * WARUM diese Auswahl: Mietwagen, Zug-/ÖPNV-Zeitkarten und Sonstiges (z.B. Dauerparken)
+ * laufen regelmäßig über den Monatswechsel; ohne Enddatum landet ein Mietwagen
+ * 30.06.–02.07. im Juni statt im Juli. Punktuelle Ereignisse (Taxi, Tanken,
+ * Verpflegung, Kilometerpauschale) sind bewusst NICHT dabei — dort fallen Leistung und
+ * Beleg auf denselben Tag, ein Enddatum wäre fachlich sinnlos. `hotel` und `flight`
+ * fehlen ebenfalls bewusst: sie haben mit Check-in/Check-out bzw. Hin-/Rückflug ihre
+ * eigenen, spezifischeren Felder auf demselben DB-Feld.
+ */
+const SERVICE_END_DATE_CATEGORIES = new Set(["car", "train", "transport", "other"]);
 
 // Tages-Nuancen: 1. Eintrag Basisfarbe, 2./3. Eintrag dunkler (max. 2 Nuancen).
 const PROJECT_ENTRY_TONE_CLASSES = [
@@ -137,46 +154,54 @@ function dayDiff(startDateKey: string, endDateKey: string): number {
   return Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
 }
 
-function addMonthsClamped(dateKey: string, months: number): string {
-  const source = parseDateKey(dateKey);
-  const y = source.getFullYear();
-  const m = source.getMonth();
-  const d = source.getDate();
-  const targetStart = new Date(y, m + months, 1);
-  const lastDay = new Date(targetStart.getFullYear(), targetStart.getMonth() + 1, 0).getDate();
-  return formatLocalDate(
-    new Date(targetStart.getFullYear(), targetStart.getMonth(), Math.min(d, lastDay))
-  );
-}
-
+/**
+ * Vorschau „Quelle → Ziel" im Kopier-Dialog.
+ *
+ * Der Zielbereich folgt der Server-Regel (`shared/copyRangeShift.ts`):
+ *   - Tag: nächster ARBEITSTAG (Fr → Mo), nicht der Folgetag.
+ *   - Woche: +7 Tage.
+ *   - Monat: der Folgemonat. Einzelne Einträge auf einem überzähligen Wochentag-Vorkommen
+ *     (5. Montag im Quellmonat, Zielmonat hat nur 4) landen im Monat darauf. Der Bereich
+ *     bildet bewusst den Regelfall ab, nicht jede Einzelverschiebung — auf den Überlauf
+ *     weist die DialogDescription im Klartext hin (betrifft die Monatstage 29.–31.).
+ */
 function getScopeRanges(anchorDateKey: string, scope: CopyScope) {
   const anchor = parseDateKey(anchorDateKey);
-  let sourceStart = formatLocalDate(anchor);
-  let sourceEnd = formatLocalDate(anchor);
-  let targetStart = addDays(sourceStart, 1);
-  let targetEnd = addDays(sourceEnd, 1);
+  // Unbrauchbares Referenzdatum: leere Vorschau statt Ausnahme. `nextWorkdayKey` wirft bei
+  // einem kaputten Key bewusst — aus einer Render-Funktion heraus wäre das ein weißer
+  // Bildschirm. Den fachlichen Abbruch übernimmt `handleScopeCopySubmit`.
+  if (Number.isNaN(anchor.getTime())) {
+    return { sourceStart: "", sourceEnd: "", targetStart: "", targetEnd: "" };
+  }
 
   if (scope === "week") {
-    const day = anchor.getDay();
-    const diffToMonday = (day + 6) % 7;
+    const diffToMonday = (anchor.getDay() + 6) % 7;
     const monday = new Date(anchor);
     monday.setDate(anchor.getDate() - diffToMonday);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    sourceStart = formatLocalDate(monday);
-    sourceEnd = formatLocalDate(sunday);
-    targetStart = addDays(sourceStart, 7);
-    targetEnd = addDays(sourceEnd, 7);
-  } else if (scope === "month") {
-    const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-    const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
-    sourceStart = formatLocalDate(monthStart);
-    sourceEnd = formatLocalDate(monthEnd);
-    targetStart = addMonthsClamped(sourceStart, 1);
-    targetEnd = addMonthsClamped(sourceEnd, 1);
+    const sourceStart = formatLocalDate(monday);
+    const sourceEnd = formatLocalDate(sunday);
+    return {
+      sourceStart,
+      sourceEnd,
+      targetStart: addDays(sourceStart, 7),
+      targetEnd: addDays(sourceEnd, 7),
+    };
   }
 
-  return { sourceStart, sourceEnd, targetStart, targetEnd };
+  if (scope === "month") {
+    return {
+      sourceStart: formatLocalDate(new Date(anchor.getFullYear(), anchor.getMonth(), 1)),
+      sourceEnd: formatLocalDate(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)),
+      targetStart: formatLocalDate(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1)),
+      targetEnd: formatLocalDate(new Date(anchor.getFullYear(), anchor.getMonth() + 2, 0)),
+    };
+  }
+
+  const sourceStart = formatLocalDate(anchor);
+  const target = nextWorkdayKey(sourceStart);
+  return { sourceStart, sourceEnd: sourceStart, targetStart: target, targetEnd: target };
 }
 
 type ExpenseCalendarItem = {
@@ -211,6 +236,14 @@ export default function TimeTracking() {
   const [selectedExpenseDate, setSelectedExpenseDate] = useState<Date | null>(null);
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
   const [tempExpenseAmount, setTempExpenseAmount] = useState('');
+  // Gespeicherter Betrag (cents) des gerade BEARBEITETEN Belegs. Eigener State, weil
+  // `tempExpenseAmount` das Eingabefeld ist und vom User verändert werden kann — für den
+  // Abweichungs-Hinweis unten braucht es den unveränderten Ausgangswert.
+  const [editingExpenseAmountCents, setEditingExpenseAmountCents] = useState<number | null>(null);
+  // Zugehörige Währung des Snapshots. Die Währungs-Auswahl gilt für alle Kategorien und ist
+  // im Dialog editierbar — ohne eigenen Snapshot trüge der GESPEICHERTE Betrag im Hinweis
+  // die gerade neu gewählte Währung als Etikett und behauptete damit etwas Falsches.
+  const [editingExpenseCurrency, setEditingExpenseCurrency] = useState('EUR');
   const [tempExpenseCategory, setTempExpenseCategory] = useState('car');
   const [tempExpenseCurrency, setTempExpenseCurrency] = useState('EUR');
   const [tempExpenseComment, setTempExpenseComment] = useState('');
@@ -223,6 +256,8 @@ export default function TimeTracking() {
   const [tempFlightTravelEnd, setTempFlightTravelEnd] = useState('');
   const [tempHotelCheckInDate, setTempHotelCheckInDate] = useState('');
   const [tempHotelNights, setTempHotelNights] = useState('1');
+  // Optionales Leistungsende für mehrtägige Belege (→ checkOutDate, ADR 0002).
+  const [tempServiceEndDate, setTempServiceEndDate] = useState('');
   const [tempFullDay, setTempFullDay] = useState(false);
   const [editingExpense, setEditingExpense] = useState<number | null>(null);
   const [tempExpenseCustomerId, setTempExpenseCustomerId] = useState<string>("");
@@ -336,6 +371,8 @@ export default function TimeTracking() {
     const defaultDate = date ? formatLocalDate(date) : "";
     setEditingExpense(null);
     setTempExpenseAmount("");
+    setEditingExpenseAmountCents(null);
+    setEditingExpenseCurrency("EUR");
     setTempExpenseCategory("car");
     setTempExpenseCurrency("EUR");
     setTempExpenseComment("");
@@ -348,6 +385,7 @@ export default function TimeTracking() {
     setTempFlightTravelEnd("");
     setTempHotelCheckInDate(defaultDate);
     setTempHotelNights("1");
+    setTempServiceEndDate("");
     setTempFullDay(false);
     setTempExpenseCustomerId("");
   };
@@ -634,6 +672,27 @@ export default function TimeTracking() {
       ? Math.round(Number(tempDistanceKm || "0") * Number(tempRatePerKm || "0") * 100) / 100
       : null;
 
+  // Würde das Speichern den gespeicherten Betrag verändern, ohne dass der User ihn angefasst
+  // hat? Für `mileage_allowance` setzt der Speicherpfad `amount` IMMER auf km × Pauschale und
+  // ignoriert das Betrag-Feld. Solange die Maske die Berechnungsgrundlage gar nicht laden
+  // konnte, war das folgenlos — sie brach vorher mit einer Fehlermeldung ab. Jetzt läuft sie
+  // durch, und eine reine Kommentaränderung würde den Betrag still korrigieren. Import und
+  // KI-Freigabe setzen Betrag und Berechnungsgrundlage unabhängig voneinander, die beiden
+  // können also legitim auseinanderliegen (K1: sichtbar machen, nicht stillschweigend tun).
+  // `editingExpense !== null` ist streng genommen redundant (beide Öffnungspfade setzen den
+  // Snapshot deterministisch), macht den Hinweis aber unabhängig davon, ob ein künftiger
+  // dritter Öffnungspfad das Zurücksetzen vergisst — ein Altwert dürfte in einer NEUANLAGE
+  // nie einen Hinweis erzeugen.
+  // `> 0` statt `!== null`, damit die Bedingung deckungsgleich mit dem Speicher-Guard unten
+  // ist: der lehnt `<= 0` ab. Sonst meldete der Hinweis bei km = 0 eine Neuberechnung auf
+  // 0.00, die gar nicht stattfindet (das Speichern bricht ab, der Betrag bleibt stehen).
+  const mileageAmountWouldChange =
+    editingExpense !== null &&
+    tempExpenseCategory === "mileage_allowance" &&
+    editingExpenseAmountCents !== null &&
+    (computedMileageAmount ?? 0) > 0 &&
+    Math.round((computedMileageAmount ?? 0) * 100) !== editingExpenseAmountCents;
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -886,6 +945,8 @@ export default function TimeTracking() {
                                   // Open edit dialog for expense
                                   setEditingExpense(expense.id);
                                   setTempExpenseAmount((expense.amount / 100).toString());
+                                  setEditingExpenseAmountCents(expense.amount);
+                                  setEditingExpenseCurrency(expense.currency || 'EUR');
                                   setTempExpenseCategory(expense.category);
                                   setTempExpenseCurrency(expense.currency || 'EUR');
                                   setTempExpenseComment(expense.comment || '');
@@ -917,6 +978,11 @@ export default function TimeTracking() {
                                     : hotelCheckIn;
                                   setTempHotelCheckInDate(hotelCheckIn);
                                   setTempHotelNights(String(dayDiff(hotelCheckIn, hotelCheckOut)));
+                                  // Dasselbe DB-Feld, andere Maske: bei mehrtägigen Belegen
+                                  // trägt checkOutDate das Leistungsende (ADR 0002).
+                                  setTempServiceEndDate(
+                                    expense.checkOutDate ? getDateKey(expense.checkOutDate as string | Date) : ""
+                                  );
                                   setTempFullDay(Boolean(expense.fullDay));
                                   setTempExpenseCustomerId(
                                     expense.customerId != null ? String(expense.customerId) : ""
@@ -1081,7 +1147,10 @@ export default function TimeTracking() {
             <DialogHeader>
               <DialogTitle>Copy & Paste für Tag/Woche/Monat</DialogTitle>
               <DialogDescription>
-                Überträgt alle Zeiteinträge und Reisekosten auf den nächsten Zeitraum.
+                Überträgt alle Zeiteinträge und Reisekosten auf den nächsten Zeitraum. Der
+                Wochentag bleibt dabei erhalten (Feiertage werden nicht berücksichtigt).
+                Einträge vom Monatsende (29.–31.) können in den übernächsten Monat rutschen,
+                wenn der Zielmonat den Wochentag nicht mehr hergibt.
               </DialogDescription>
             </DialogHeader>
 
@@ -1093,9 +1162,9 @@ export default function TimeTracking() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="day">Tag → nächster Tag</SelectItem>
+                    <SelectItem value="day">Tag → nächster Arbeitstag</SelectItem>
                     <SelectItem value="week">Woche → nächste Woche</SelectItem>
-                    <SelectItem value="month">Monat → nächster Monat</SelectItem>
+                    <SelectItem value="month">Monat → nächster Monat (gleicher Wochentag)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1242,6 +1311,24 @@ export default function TimeTracking() {
                     customerId: tempExpenseCustomerId ? Number(tempExpenseCustomerId) : null,
                   };
 
+                  // INVARIANTE für alle Zweige: jede Kategorie setzt `checkInDate` UND
+                  // `checkOutDate` EXPLIZIT — auch (gerade!) wenn sie das Feld fachlich
+                  // nicht besitzt, dann auf "".
+                  //
+                  // WARUM: Beim Bearbeiten wird die Kategorie geändert, die Datumsfelder der
+                  // alten Kategorie sind danach aber unsichtbar. Ein weggelassener Schlüssel
+                  // bedeutet in `db.normalizeExpenseMutationPayload` „unverändert lassen",
+                  // der alte Wert bliebe also in der DB stehen. Zwei Folgen:
+                  //  (a) Stille Fehlzuordnung: Mietwagen 30.06.–02.07. → Wechsel auf Taxi →
+                  //      `checkOutDate` bliebe 02.07. und der Beleg zählte weiter im Juli,
+                  //      ohne dass das irgendwo sichtbar wäre (ADR 0002: das Leistungsende
+                  //      entscheidet allein).
+                  //  (b) Nicht mehr speicherbar: Flug 10.06./Rückflug 12.06. → Wechsel auf
+                  //      Taxi am 20.07. → der Server sähe {date: 20.07., checkOutDate: 12.06.}
+                  //      und wiese den Beleg per Chronologie-Regel ab — eine Sackgasse, aus
+                  //      der nur Löschen und Neuanlegen führt.
+                  // Der leere String löst beides: `normalizeExpenseMutationPayload` mappt
+                  // "" → NULL, das Feld wird also aktiv geräumt.
                   if (tempExpenseCategory === "flight") {
                     if (!tempFlightTravelStart && !tempFlightTravelEnd) {
                       toast.error(
@@ -1253,7 +1340,12 @@ export default function TimeTracking() {
                     payloadBase.flightRouteType = tempFlightRouteType;
                     payloadBase.departureTime = tempFlightTravelStart || undefined;
                     payloadBase.arrivalTime = tempFlightTravelEnd || undefined;
-                    payloadBase.checkOutDate = tempFlightReturnDate || undefined;
+                    // Flüge kennen keinen Leistungsbeginn getrennt vom Hinflugdatum.
+                    payloadBase.checkInDate = "";
+                    // Ohne `|| undefined`, damit ein geleertes Rückflug-Feld das Datum auch
+                    // wirklich entfernt — die Maske hat ein eigenes Eingabefeld dafür,
+                    // Leeren ist eine legitime Nutzeraktion (aus Round-Trip wird One-Way).
+                    payloadBase.checkOutDate = tempFlightReturnDate;
                   } else if (tempExpenseCategory === "hotel") {
                     payloadBase.date = hotelCheckIn;
                     payloadBase.checkInDate = hotelCheckIn;
@@ -1266,8 +1358,26 @@ export default function TimeTracking() {
                     payloadBase.date = normalizedPrimaryDate;
                     payloadBase.distance = Math.round(Number(tempDistanceKm));
                     payloadBase.rate = Math.round(Number(tempRatePerKm) * 100);
+                    // Punktuelles Ereignis: weder Beginn noch Ende.
+                    payloadBase.checkInDate = "";
+                    payloadBase.checkOutDate = "";
                   } else {
                     payloadBase.date = normalizedPrimaryDate;
+                    // Außerhalb von Hotel gibt es kein getrenntes Beginn-Datum.
+                    payloadBase.checkInDate = "";
+                    if (SERVICE_END_DATE_CATEGORIES.has(tempExpenseCategory)) {
+                      // Vergleich auf YYYY-MM-DD-Strings statt Date-Objekten: keine
+                      // Zeitzonen-Roundtrips (K8, Europe/Warsaw), lexikografisch =
+                      // chronologisch. Der Server prüft dasselbe noch einmal.
+                      if (tempServiceEndDate && tempServiceEndDate < normalizedPrimaryDate) {
+                        toast.error("Das Enddatum darf nicht vor dem Datum liegen");
+                        return;
+                      }
+                      payloadBase.checkOutDate = tempServiceEndDate;
+                    } else {
+                      // Taxi, Kraftstoff, Verpflegung, Lebensmittel: kein Enddatum.
+                      payloadBase.checkOutDate = "";
+                    }
                   }
 
                   try {
@@ -1381,6 +1491,20 @@ export default function TimeTracking() {
                         {computedMileageAmount !== null ? computedMileageAmount.toFixed(2) : "0.00"} {tempExpenseCurrency}
                       </strong>
                     </div>
+                    {mileageAmountWouldChange && (
+                      <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+                        Achtung: Der gespeicherte Betrag{" "}
+                        <strong>
+                          {((editingExpenseAmountCents ?? 0) / 100).toFixed(2)} {editingExpenseCurrency}
+                        </strong>{" "}
+                        wird beim Speichern auf{" "}
+                        <strong>
+                          {(computedMileageAmount ?? 0).toFixed(2)} {tempExpenseCurrency}
+                        </strong>{" "}
+                        neu berechnet (Kilometer × Pauschale). Korrigieren Sie Kilometer oder
+                        Pauschale, wenn der gespeicherte Betrag stehenbleiben soll.
+                      </div>
+                    )}
                   </>
                 )}
                 {tempExpenseCategory === "flight" && (
@@ -1480,14 +1604,39 @@ export default function TimeTracking() {
                   </>
                 )}
                 {tempExpenseCategory !== "flight" && tempExpenseCategory !== "hotel" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="expense-date">Datum</Label>
-                    <Input
-                      id="expense-date"
-                      type="date"
-                      value={tempExpenseDate}
-                      onChange={(e) => setTempExpenseDate(e.target.value)}
-                    />
+                  <div
+                    className={
+                      SERVICE_END_DATE_CATEGORIES.has(tempExpenseCategory)
+                        ? "grid grid-cols-2 gap-4"
+                        : "space-y-2"
+                    }
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="expense-date">Datum</Label>
+                      <Input
+                        id="expense-date"
+                        type="date"
+                        value={tempExpenseDate}
+                        onChange={(e) => setTempExpenseDate(e.target.value)}
+                      />
+                    </div>
+                    {SERVICE_END_DATE_CATEGORIES.has(tempExpenseCategory) && (
+                      <div className="space-y-2">
+                        <Label htmlFor="expense-service-end-date">Ende (bei mehrtägiger Nutzung)</Label>
+                        <Input
+                          id="expense-service-end-date"
+                          type="date"
+                          value={tempServiceEndDate}
+                          min={tempExpenseDate || undefined}
+                          onChange={(e) => setTempServiceEndDate(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Optional. Gesetzt zählt der Beleg im Monat des Enddatums (Mietwagen
+                          30.06.–02.07. → Juli). Leer lassen, wenn Leistung und Beleg auf denselben
+                          Tag fallen.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="flex items-center gap-2 rounded-md border p-3">

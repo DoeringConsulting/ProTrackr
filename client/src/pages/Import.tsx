@@ -22,6 +22,7 @@ import {
 } from "@/lib/expenseImportV1";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatLocalDate } from "@/lib/uiCalculations";
 
 type ImportResult = {
   customersCreated: number;
@@ -650,10 +651,17 @@ export default function Import() {
             payload.checkInDate = row.checkInDate || row.date;
             if (row.checkOutDate) payload.checkOutDate = row.checkOutDate;
             else if (typeof row.nights === "number") {
+              // Check-out = Check-in + Nächte, formatiert über die LOKALEN Datums-
+              // komponenten (formatLocalDate, K4/K8). Vorher `toISOString().slice(0,10)`:
+              // das lokal konstruierte Mitternachts-Date kippt in Europe/Warsaw (UTC+1/+2)
+              // auf den Vortag, der abgeleitete Check-out war konsequent einen Tag zu früh.
+              // Seit ADR 0002 steuert dieser Wert die Zeitraum-Zuordnung UND den
+              // abgerechneten Betrag: Check-in 30.06. + 1 Nacht ergab 30.06. statt 01.07.
+              // → der Beleg wäre fälschlich im Juni geblieben.
               const checkIn = new Date(`${(row.checkInDate || row.date)}T00:00:00`);
               const checkOut = new Date(checkIn);
               checkOut.setDate(checkOut.getDate() + Math.max(0, row.nights));
-              payload.checkOutDate = checkOut.toISOString().slice(0, 10);
+              payload.checkOutDate = formatLocalDate(checkOut);
             }
           }
 

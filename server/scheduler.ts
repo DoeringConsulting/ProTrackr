@@ -7,18 +7,30 @@ import {
 import { getDb, listAllActiveUsers } from "./db";
 import { customers, expenses, timeEntries } from "../drizzle/schema";
 import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
-import { warsawDateKey } from "@shared/dateStichtag";
+import { isLastDayOfMonth, monthLastDay, warsawDateKey } from "@shared/dateStichtag";
 
 /**
  * Scheduler service for automatic notifications
  * This service should be called periodically (e.g., via cron job or scheduled task)
  */
 
+
 export async function checkMonthEnd(userId: number) {
   const now = new Date();
-  const isLastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() === now.getDate();
-  
-  if (!isLastDayOfMonth) {
+  // Die AUSLÖSEBEDINGUNG folgt Europe/Warsaw, nicht der Container-Zeitzone: sonst entscheidet
+  // die Container-Einstellung darüber, an welchem Kalendertag die Monatsend-Meldung feuert
+  // (die SQL-Grenzen unten waren mit v2.3.5 bereits umgestellt, die Bedingung nicht).
+  const isMonthEnd = isLastDayOfMonth(warsawDateKey());
+
+  // Das Auswertungsfenster unten (`firstDay`/`lastDay`, `monthName`) leitet sich weiterhin aus
+  // dem container-lokalen `now` ab. Divergenz zur Warschauer Auslösebedingung ist für die real
+  // eingesetzten Container-Zeitzonen ausgeschlossen: der früheste Warschauer Monatsletzte
+  // (00:00) ist UTC 22:00 des Vortags, also derselbe Monat. Erst ein Container ÖSTLICH von
+  // Warschau (z.B. Asia/Tokyo) könnte „Monatsende Juli" mit August-Zahlen melden. Bewusst nicht
+  // umgestellt, weil `firstDay`/`lastDay` zugleich als Date-Objekte in die SQL-Query gehen und
+  // damit an der Grenzen-Konvention aus `db.ts` hängen — die wird separat entschieden.
+
+  if (!isMonthEnd) {
     return { executed: false, reason: "Not last day of month" };
   }
 
@@ -133,15 +145,16 @@ export async function checkMissingTimeEntries(userId: number) {
 }
 
 export async function checkUpcomingInvoiceDeadlines(userId: number) {
-  const now = new Date();
   const db = await getDb();
   if (!db) {
     return { executed: false, reason: "Database not available" };
   }
 
-  // Check if we're within 5 days of month end
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysUntilMonthEnd = lastDayOfMonth - now.getDate();
+  // Check if we're within 5 days of month end — Fenster und Restlaufzeit folgen Europe/Warsaw,
+  // nicht der Container-Zeitzone (sonst verschiebt sich der Versandtag der Erinnerung).
+  const todayKey = warsawDateKey();
+  const lastDayOfMonth = monthLastDay(todayKey);
+  const daysUntilMonthEnd = lastDayOfMonth - Number(todayKey.split("-")[2]);
 
   if (daysUntilMonthEnd <= 5 && daysUntilMonthEnd > 0) {
     const allCustomers = await db
@@ -150,7 +163,14 @@ export async function checkUpcomingInvoiceDeadlines(userId: number) {
       .where(eq(customers.userId, userId));
     
     for (const customer of allCustomers) {
-      const deadline = new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString("de-DE");
+      // Aus demselben Warschauer Key wie das Fenster oben abgeleitet, damit angezeigtes
+      // Fristdatum und berechnete Restlaufzeit nicht auseinanderlaufen können.
+      // FORMAT bewusst DD.MM.YYYY mit Nullstellen ("31.07.2026"): `toLocaleDateString("de-DE")`
+      // lieferte vorher das Kurzformat ohne Monats-Null ("31.7.2026"). Die Vereinheitlichung ist
+      // gewollt (Projektstandard, globale CLAUDE.md §4) und wirkt nur kosmetisch — der Wert wird
+      // ausschließlich in einen Meldungstext interpoliert, nichts parst ihn.
+      const [dlYear, dlMonth] = todayKey.split("-").map(Number);
+      const deadline = `${String(lastDayOfMonth).padStart(2, "0")}.${String(dlMonth).padStart(2, "0")}.${dlYear}`;
       await notifyUpcomingInvoiceDeadline(
         `${customer.provider} - ${customer.projectName}`,
         deadline,
