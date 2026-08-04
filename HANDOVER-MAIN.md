@@ -18,6 +18,23 @@ Vorkommen von `customerId: expense.customerId`).
 
 **Zwei Punkte fällig, beide NICHT im Code offen:**
 
+0. **🔴 MIGRATION `0021` FEHLT AUF DER PROD-DB — vor dem Prod-Deploy nachziehen.**
+   Verifiziert am 2026-08-05 gegen die Dev-DB (exakter Prod-Klon): `SHOW COLUMNS FROM expenses
+   LIKE 'category'` lieferte `enum('car','train','flight','taxi','transport','hotel','fuel',
+   'meal','food','other')` — **`mileage_allowance` fehlt**. Folge: **Jede Erfassung einer
+   Kilometerpauschale scheitert auf PROD**, seit jeher. Bestandsproblem, keine Folge eines
+   Releases; auf DEV am 2026-08-05 nachgezogen, PROD steht aus. Nachziehen mit dem Inhalt von
+   `drizzle/0021_expenses_add_mileage_allowance.sql` (additiv, alle zehn bestehenden Werte
+   bleiben, vorher Backup). Datenseitig unkritisch — der Wert war nie speicherbar, es kann keine
+   Bestandszeile damit geben.
+   > **⚠️ Der systemische Teil ist der wichtigere:** `0024` lag auf der DB, `0021` nicht. Der
+   > Migrationsstand folgt **keiner durchgehenden Reihenfolge**, und weil Migrationen von Hand
+   > über `mysql2` angewandt werden, gibt es **keine Tracking-Tabelle** — er ist nicht ablesbar.
+   > Die Lücke blieb jahrelang unentdeckt, weil die Kategorie selten benutzt wird. Weitere
+   > Lücken sind möglich. **Vor dem Deploy Schema-Ist gegen `drizzle/schema.ts` abgleichen**,
+   > nicht einzeln raten. Die Manifest-Aussage „keine neue Migration" bezieht sich auf den
+   > *Versionssprung* und sagt nichts über die Vollständigkeit des Altbestands.
+
 1. **NAS-Prod-Rollout** (NAS-Chat, `/nas-rollout`). PROD steht auf **v2.5.0** (Screenshot
    Account-Inhaber, 2026-08-04 — die frühere Angabe „v2.4.0" war eine unbestätigte Annahme, siehe
    Korrektur in §0), main auf v2.7.4 — dazwischen liegen 2.5.2, 2.5.5, 2.6.0, 2.6.2, 2.6.4, 2.7.0,
