@@ -316,7 +316,6 @@ project-billing-app/
 │   │   ├── components/      # Wiederverwendbare UI-Komponenten
 │   │   │   ├── ui/         # shadcn/ui Komponenten
 │   │   │   ├── DashboardLayout.tsx
-│   │   │   ├── ExpenseForm.tsx
 │   │   │   └── ...
 │   │   ├── contexts/        # React Contexts
 │   │   ├── hooks/           # Custom Hooks
@@ -357,9 +356,9 @@ project-billing-app/
 **Frontend-Komponenten:**
 
 - **DashboardLayout:** Haupt-Layout mit Sidebar-Navigation, Header mit Omnibox-Suche, Benutzer-Profil und Theme-Toggle
-- **ExpenseForm:** Formular für tagesbasierte Reisekostenerfassung mit dynamischen Feldern je nach Kostenart
 - **NavigationButtons:** Zurück- und Startseite-Buttons mit Tooltips
 - **Omnibox:** Zentrale Suchleiste mit Live-Ergebnisvorschau und Tastaturnavigation
+- **Reisekostenerfassung:** ausschließlich in `pages/TimeTracking.tsx` — inklusive Leistungsende (`checkOutDate`) gemäß ADR 0002. Keine separate Formular-Komponente.
 - **shadcn/ui Komponenten:** Button, Card, Dialog, Input, Select, Table, Tooltip, etc.
 
 **Backend-Module:**
@@ -899,13 +898,6 @@ export async function deleteCustomer(id: number) {
 - Header mit Omnibox-Suche, Benutzer-Profil, Theme-Toggle
 - Responsive Design mit Hamburger-Menü für Mobile
 - Navigation-Buttons (Zurück, Startseite)
-
-**ExpenseForm (components/ExpenseForm.tsx):**
-- Dynamisches Formular für Reisekosten
-- Kategoriespezifische Felder (Auto, Zug, Flug, Hotel, Tanken, etc.)
-- Plus-Button zum Hinzufügen weiterer Kostenarten
-- Währungsauswahl pro Kostenart
-- Mobile-Optimierung mit Card-Layout
 
 **Omnibox (components/Omnibox.tsx):**
 - Zentrale Suchleiste mit Tastenkürzel (Strg+K / Cmd+K)
