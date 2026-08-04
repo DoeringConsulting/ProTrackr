@@ -99,6 +99,16 @@ const DIVERGING_SQL = `
  * unsichtbar. Ein kaputtes Enddatum aeussert sich also gerade NICHT als
  * Verschiebung, sondern als deren stilles Ausbleiben. Nur diese Abfrage deckt es
  * auf. (Lesson aus der Rollout-Vorpruefung 2026-08-03.)
+ *
+ * DRITTER BEFUND-TYP (kategoriefremdes Enddatum): Ein `checkOutDate` bei einer
+ * Kategorie, die gar keins haben darf (Taxi, Kraftstoff, Verpflegung, Lebensmittel,
+ * Kilometerpauschale). Typischer Altfall aus einem Kategoriewechsel: bis v2.5.6 hat
+ * die Erfassungsmaske die Datumsfelder der alten Kategorie beim Wechsel nicht
+ * geraeumt, der Altwert blieb in der DB stehen. Er ist unsichtbar (die Maske zeigt
+ * fuer diese Kategorien kein Datumsfeld), steuert aber weiter die Monatszuordnung —
+ * also eine stille Fehlzuordnung. Weder Zweig (1) noch (2) finden ihn: er ist nicht
+ * invertiert, und die Kategorie gehoert nicht zu denen, wo ein Enddatum erwartet
+ * wird.
  */
 const DATA_QUALITY_SQL = `
   SELECT
@@ -117,6 +127,11 @@ const DATA_QUALITY_SQL = `
       WHEN e.checkOutDate IS NOT NULL
        AND DATE(e.checkOutDate) < DATE(COALESCE(e.checkInDate, e.date))
         THEN 'DEFEKT: Enddatum VOR Startdatum'
+      -- Vor den NULL-/Gleichheits-Zweigen, sonst bekaeme ein kategoriefremdes
+      -- Enddatum den irrefuehrenden Text "0 Naechte / KI-Pfad / Import".
+      WHEN e.checkOutDate IS NOT NULL
+       AND e.category NOT IN ('hotel', 'flight', 'car', 'train', 'transport', 'other')
+        THEN 'Enddatum bei Kategorie ohne Enddatum (Altfall Kategoriewechsel) - steuert die Monatszuordnung'
       WHEN e.checkOutDate IS NULL THEN 'kein Enddatum erfasst'
       WHEN DATE(e.checkOutDate) = DATE(COALESCE(e.checkInDate, e.date))
         THEN 'Enddatum = Startdatum (verdaechtig: 0 Naechte / KI-Pfad / Import)'
@@ -130,13 +145,21 @@ const DATA_QUALITY_SQL = `
           (e.checkOutDate IS NOT NULL
            AND DATE(e.checkOutDate) < DATE(COALESCE(e.checkInDate, e.date)))
           -- (2) Verdaechtig nur dort, wo ein Enddatum fachlich erwartet wird.
-          --     Bei Taxi/Zug/Tanken ist checkOutDate NULL korrekt, kein Befund.
+          --     Bei Taxi/Tanken ist checkOutDate NULL korrekt, kein Befund.
        OR (
             (e.category = 'hotel'
              OR (e.category = 'flight' AND (e.flightRouteType IS NULL OR e.flightRouteType <> 'one_way')))
             AND (e.checkOutDate IS NULL
                  OR DATE(e.checkOutDate) = DATE(COALESCE(e.checkInDate, e.date)))
           )
+          -- (3) Kategoriefremdes Enddatum: nicht invertiert und nicht fehlend, aber
+          --     die Kategorie darf ueberhaupt keins tragen. Altfall aus einem
+          --     Kategoriewechsel vor v2.5.6 — unsichtbar in der Maske, aber weiterhin
+          --     maßgeblich fuer die Monatszuordnung (ADR 0002). Die Positivliste
+          --     entspricht hotel + flight + SERVICE_END_DATE_CATEGORIES aus
+          --     client/src/pages/TimeTracking.tsx.
+       OR (e.checkOutDate IS NOT NULL
+           AND e.category NOT IN ('hotel', 'flight', 'car', 'train', 'transport', 'other'))
         )
   ORDER BY e.category ASC, e.date ASC, e.id ASC
 `;
@@ -211,10 +234,11 @@ try {
     // greifen KANN, weil das Enddatum fehlt oder gleich dem Startdatum ist.
     console.log("");
     console.log("-".repeat(100));
-    console.log("DATENQUALITAET ENDDATUM (Hotels + Rundfluege — Voraussetzung dafuer, dass ADR 0002 greift)");
+    console.log("DATENQUALITAET ENDDATUM (invertiert | fehlend bei Hotel/Rundflug | kategoriefremd — Voraussetzung fuer ADR 0002)");
     console.log("-".repeat(100));
     if (quality.length === 0) {
-      console.log("\nAlle Hotels und Rundfluege tragen ein verwertbares Enddatum — keine stillen Fehlzuordnungen moeglich.\n");
+      console.log("\nKein Befund: kein invertiertes Enddatum, Hotels und Rundfluege tragen ein verwertbares Enddatum,\n" +
+                  "und keine Kategorie ohne Enddatum traegt einen Altwert — keine stillen Fehlzuordnungen moeglich.\n");
     } else {
       console.log("");
       for (const q of quality) {

@@ -40,8 +40,10 @@ leistungsende = checkOutDate ?? date
 
 - **Hotel** → `checkOutDate` (Check-out)
 - **Hin-/Rückflug auf einem Ticket** → `checkOutDate` (Rückflugdatum)
-- **alle übrigen Belege** (Taxi, Zug, Kraftstoff, Kilometerpauschale, Bewirtung, Sonstiges) → `date`
-  (kein Enddatum vorhanden)
+- **mehrtägige Belege** (Mietwagen, Zug, ÖPNV, Sonstiges) → `checkOutDate` (Nutzungsende, optional
+  erfassbar — siehe Offener Punkt 1, erledigt)
+- **punktuelle Ereignisse** (Taxi, Kraftstoff, Kilometerpauschale, Bewirtung) → `date`
+  (kein Enddatum, fachlich auch keins nötig)
 
 Ein Beleg wird **niemals gesplittet** und zählt in **genau einem** Zeitraum.
 
@@ -139,8 +141,26 @@ COALESCE(checkOutDate, checkInDate, date) >= start   AND   COALESCE(checkInDate,
   Leistungsende → erfüllt. Ohne `checkOutDate` ist das Leistungsende `date`; der Ausdruck fällt auf
   `checkInDate` zurück, das per Erfassungs-Invariante gleich `date` ist.
 - **Obere Grenze:** `COALESCE(checkInDate, date)` ist der **Beginn** der Leistung und damit ≤
-  Leistungsende. Erzwungen durch `validateFlightAndHotelExpenseRules`
-  (`server/routers.ts:328-352`: Rückflug ≥ Hinflug, Check-out ≥ Check-in).
+  Leistungsende. Erzwungen durch `validateExpenseDateRules` (`server/expenseRules.ts`):
+  Rückflug ≥ Hinflug, Check-out ≥ Check-in **und** — seit Erledigung von Offener Punkt 1 —
+  kategorienunabhängig `checkOutDate ≥ COALESCE(checkInDate, date)`. Damit gilt die Invariante
+  jetzt für **alle** Kategorien, nicht nur für flight/hotel. Die generische Regel nutzt **genau
+  diesen** `COALESCE(checkInDate, date)`-Ausdruck, also die **obere** Ladegrenze; die untere
+  Ladegrenze ist bewusst ein anderes COALESCE (`checkOutDate, checkInDate, date`).
+
+**Schreibpfade ohne diese Validierung** (`createExpense` direkt, ohne `validateExpenseDateRules`) —
+alle drei sind geprüft und unkritisch:
+
+1. **KI-Beleg-Freigabe** (`server/routers.ts`, Einzel- und Batch-Freigabe): eigene, gleichwertige
+   Prüfungen `EXP-FLT-004` / `EXP-HOT-004` in `server/receiptAi.ts`; `checkOutDate` wird dort
+   ausschließlich für `flight`/`hotel` gesetzt.
+2. **Zeitraum-Kopie** („Tag/Woche/Monat kopieren", `server/routers.ts`): verschiebt `date`,
+   `checkInDate` und `checkOutDate` über denselben Helfer. Bei Monatskopien ist der Versatz wegen
+   `addMonthsClamped` **nicht** für alle Felder identisch (der Tag wird auf die Monatslänge
+   geklemmt, 31.01. → 28.02.), die Abbildung ist aber **monoton** — aus `Ende ≥ Beginn` folgt
+   `Ende' ≥ Beginn'`. Die Invariante überlebt die Kopie also auch im Klemmfall.
+3. **Workbook-Import** (`client/src/pages/Import.tsx`): läuft über `expenses.create`, ist damit
+   **nicht** ohne Validierung — hier nur der Vollständigkeit halber genannt.
 
 Die neue Regel liegt damit **näher** am Ladefilter als die alte: die untere Ladegrenze ist für Belege
 mit Enddatum identisch mit der Zuordnungsregel.
@@ -153,18 +173,76 @@ aus allen Berichten. Eine DB-Constraint existiert nicht.
 
 ### 1. Mietwagen / Dauerparken ohne Enddatum (Phase 2)
 
-**Mietwagen (`category: "car"`) und Dauerparken haben heute kein Enddatum.** `travelStart`/`travelEnd`
-sind `varchar(5)` im Format `HH:MM` (`drizzle/schema.ts:189-190`) — reine Uhrzeiten, keine Daten.
-`checkOutDate` wird für diese Kategorien nicht befüllt. Ein Mietwagen über den Monatswechsel wird
-deshalb weiterhin dem Anmietmonat (`date`) zugeordnet.
+**Mietwagen (`category: "car"`) und Dauerparken hatten kein Enddatum.** `travelStart`/`travelEnd`
+sind `varchar(5)` im Format `HH:MM` (`drizzle/schema.ts`) — reine Uhrzeiten, keine Daten.
+`checkOutDate` wurde für diese Kategorien nicht befüllt. Ein Mietwagen über den Monatswechsel
+(30.06.–02.07.) landete deshalb im Anmietmonat Juni statt im Rückgabemonat Juli.
 
-Behebung in einer Folgephase:
-
-1. Migration: neue Spalte `usageEndDate` (timestamp, nullable),
-2. UI-Erfassung in `ExpenseForm` / `TimeTracking` für die betroffenen Kategorien,
-3. Backfill bestehender Belege,
-4. Formel erweitern zu `leistungsende = checkOutDate ?? usageEndDate ?? date` — an der **einen**
-   Stelle in `monthlyFinancials.ts`.
+> **✅ ERLEDIGT — umgesetzt als reine Erfassungs-Erweiterung, OHNE neues Feld und OHNE Migration.**
+>
+> **🔑 Korrigierte Erkenntnis gegenüber dem ursprünglich skizzierten Plan:** Die oben vorgeschlagene
+> Spalte `usageEndDate` war **nicht nötig und wäre ein K4-Verstoß gewesen** (zwei Felder für
+> dieselbe fachliche Größe). `checkOutDate` ist bereits das **generische Leistungsende** und nicht
+> hotel-spezifisch — bei Flügen trägt es das Rückflugdatum, nicht einen „Check-out". Die Spalte ist
+> nullable und kategorienunabhängig; die kanonische Formel `leistungsende = checkOutDate ?? date`
+> bleibt damit **unverändert**, ebenso `isExpenseInPeriod`, der Ladefilter `getAllExpenses` und die
+> Invariante oben. Gefehlt hat allein die **Erfassung**. Ein Backfill entfällt: Bestandsbelege ohne
+> Enddatum sind unter der unveränderten Formel weiterhin korrekt über `date` zugeordnet.
+>
+> **Freigegebene Kategorien (Entscheidung Account-Inhaber):** `car` (Mietwagen), `train` (Zug),
+> `transport` (ÖPNV), `other` (Sonstiges, z. B. Dauerparken). Das Feld ist **optional**; leer =
+> bisheriges Verhalten (`date` entscheidet).
+> **Bewusst NICHT freigegeben:** `taxi`, `fuel`, `meal`, `food`, `mileage_allowance` — punktuelle
+> Ereignisse, bei denen Leistung und Beleg auf denselben Tag fallen und ein Enddatum fachlich
+> sinnlos wäre. `hotel` und `flight` behalten ihre spezifischeren Masken (Check-in/Nächte bzw.
+> Hin-/Rückflug) auf demselben DB-Feld.
+>
+> **Umgesetzt:**
+> - **Erfassung:** `client/src/pages/TimeTracking.tsx` — optionales Feld „Ende (bei mehrtägiger
+>   Nutzung)" im `else`-Zweig des Kategorie-Switch, gesteuert über die Konstante
+>   `SERVICE_END_DATE_CATEGORIES`. Schreibt auf `checkOutDate`; der leere String löscht das Enddatum
+>   beim Bearbeiten wieder (`normalizeExpenseMutationPayload` mappt `"" → NULL`).
+> - **Kategoriewechsel — Datumsfelder werden aktiv geräumt:** Jeder Zweig des Kategorie-Switch
+>   setzt `checkInDate` und `checkOutDate` **explizit**, bei Kategorien ohne das jeweilige Feld auf
+>   `""` (→ `NULL`). Vorher fehlte der Schlüssel, was in `normalizeExpenseMutationPayload`
+>   „unverändert lassen" bedeutet — der Altwert blieb also in der DB stehen. Zwei Folgen, beide
+>   damit erledigt: **(a)** stille Fehlzuordnung (Mietwagen 30.06.–02.07. → Wechsel auf Taxi → der
+>   Beleg zählte weiter im Juli, ohne sichtbares Feld) und **(b)** eine Sackgasse, die erst durch
+>   die neue Chronologie-Regel entstanden wäre (Flug 10.06./Rückflug 12.06. → Wechsel auf Taxi am
+>   20.07. → Merge `{date: 20.07., checkOutDate: 12.06.}` → dauerhaft nicht mehr speicherbar).
+>   Gleiche Mechanik beim Rückflugdatum: auch dort ersetzt der leere String das frühere
+>   `|| undefined`, sodass sich ein Round-Trip wieder zu One-Way korrigieren lässt.
+> - **Validierung (Korrektheits-Lücke, unabhängig von der UI):** Die Regelfunktion prüfte
+>   „Ende ≥ Start" **nur** für `flight` und `hotel`. Für alle anderen Kategorien war ein Enddatum
+>   **vor** dem Startdatum speicherbar — der Beleg wäre einem Monat vor seinem eigenen Beginn
+>   zugeordnet worden. Sie hat jetzt zusätzlich eine **kategorienunabhängige** Chronologie-Prüfung
+>   `checkOutDate >= COALESCE(checkInDate, date)`; die spezifischen flight/hotel-Meldungen laufen
+>   zuerst und bleiben erhalten. Startdatum-Ableitung identisch zur Vorprüfung
+>   `scripts/analyze-expense-attribution.mjs` („DEFEKT: Enddatum VOR Startdatum").
+> - **Regeln aus dem Router extrahiert:** Die Funktion heißt jetzt `validateExpenseDateRules`
+>   (der alte Name `validateFlightAndHotelExpenseRules` war irreführend, seit sie eine
+>   kategorienunabhängige Regel trägt) und liegt mitsamt `toComparableDate` im neuen,
+>   abhängigkeitsarmen Modul **`server/expenseRules.ts`**. Grund: der Test gehört ins schnelle
+>   pre-commit-Gate, dürfte dafür aber nicht den kompletten Router-Graph inklusive `bcrypt`
+>   (Native-Binding, bricht bei Node-Version-Drift im Build-Image) nachziehen. Verhalten und
+>   Signatur unverändert, alle drei Call-Sites (`create`, `createBatch`, `update`) mitgezogen.
+> - **Schema-Kommentar** über `checkInDate`/`checkOutDate` in `drizzle/schema.ts` korrigiert
+>   („Hotel specific" → generisches Leistungsende, Verweis auf dieses ADR).
+> - **Tests** in `server/expensePeriodAttribution.test.ts` (pre-commit-Gate): Mietwagen
+>   30.06.→02.07. fällt in den Juli, Mietwagen ohne Enddatum bleibt bei `date`, die generische
+>   Chronologie-Prüfung lehnt ein Enddatum vor dem Startdatum für Nicht-Hotel-/Nicht-Flug-Kategorien
+>   ab, und der Kategoriewechsel räumt die Felder der alten Kategorie (`""` und `NULL` liefern
+>   dieselbe Zuordnung).
+>
+> **Bewusst nicht mitgeändert:** Der Workbook-Import (`client/src/pages/Import.tsx`) und der
+> KI-Beleg-Pfad (`server/receiptAi.ts`) leiten `checkOutDate` weiterhin nur für `flight`/`hotel` in
+> den Payload. Beide haben eigene, gleichwertige Chronologie-Prüfungen (`EXP-FLT-004`,
+> `EXP-HOT-004`) und erzeugen für die neu freigegebenen Kategorien gar kein Enddatum — es entsteht
+> dort also **keine Korrektheits-Lücke**, nur eine noch fehlende Erfassungs-Möglichkeit.
+> Der Workbook-Import wäre billig nachzuziehen: die Spalte `check_out_date` wird in
+> `client/src/lib/expenseImportV1.ts` bereits für **jede** Zeile eingelesen (`row.checkOutDate`),
+> `Import.tsx` reicht sie nur im `hotel`-Zweig weiter. Kein Schema-Change nötig — eigene
+> Entscheidung, deshalb hier nicht mitgenommen.
 
 ### 2. Zeilendatum im Kundenbericht (kosmetisch, Phase-2-UX-Entscheidung)
 
@@ -216,10 +294,16 @@ geldwirksam (Kundenrechnungen); das Skript weist die betroffenen Belege und die 
 > Ausbleiben. Deshalb waren im Prüflauf separate Datenqualitäts-Queries nötig.
 >
 > **Nachgezogen (v2.5.6):** Diese Prüfung ist jetzt **fest im Skript** (`DATA_QUALITY_SQL`), damit die
-> Vorprüfung dauerhaft vollständig ist: `checkOutDate` `NULL` / `== Startdatum` / `< Startdatum`,
-> kategorienspezifisch (Hotels und Nicht-One-Way-Flüge dort, wo ein Enddatum fachlich erwartet wird;
-> `checkOut < Start` gilt kategorieunabhängig als defekt), mit Zählung je Kategorie und Befund. Bei
-> Taxi/Zug/Tanken ist `checkOutDate = NULL` korrekt und erzeugt bewusst keinen Befund.
+> Vorprüfung dauerhaft vollständig ist — drei Befund-Typen, mit Zählung je Kategorie und Befund:
+> 1. `checkOutDate < Startdatum` — **kategorieunabhängig** defekt (invertierte Daten);
+> 2. `checkOutDate` `NULL` oder `== Startdatum` — verdächtig **nur dort, wo ein Enddatum fachlich
+>    erwartet wird** (Hotels, Nicht-One-Way-Flüge);
+> 3. `checkOutDate IS NOT NULL` bei einer Kategorie, die **keins tragen darf** (nicht in
+>    `hotel`, `flight`, `car`, `train`, `transport`, `other`) — der Altfall aus einem
+>    Kategoriewechsel, siehe Offener Punkt 5.
+>
+> Bei Taxi, Kraftstoff und Verpflegung ist `checkOutDate = NULL` korrekt und erzeugt bewusst keinen
+> Befund.
 >
 > **Fachlicher Kontext zu den Flügen** (User-Regel, siehe Memory `project_reisekosten_fachregeln`):
 > Flüge werden in der Praxis meist als **getrennte Einzelstrecken** erfasst (je Beleg `date` = Flugtag)
@@ -229,10 +313,27 @@ geldwirksam (Kundenrechnungen); das Skript weist die betroffenen Belege und die 
 
 ### 4. Bulk-Delete/Purge filtert weiter über `expenses.date`
 
-`server/routers.ts:3961-3986` löscht per `DATE(expenses.date) BETWEEN dateFrom AND dateTo`. Ein Beleg,
+`server/routers.ts` löscht per `DATE(expenses.date) BETWEEN dateFrom AND dateTo`. Ein Beleg,
 der nach neuer Regel im Juli ausgewiesen wird, kann damit von einem „Juni"-Purge erfasst werden.
 **Bewusst nicht geändert:** destruktive Admin-Funktion mit eigener Semantik („welche Datensätze wurden
 in diesem Zeitraum erfasst"), eigene Entscheidung erforderlich.
+
+### 5. Bestandsdaten: kategoriefremde Enddaten (Rollout-Vorbehalt, OFFEN)
+
+Der Fix aus Offener Punkt 1 (Kategoriewechsel räumt die Datumsfelder) wirkt **nur nach vorn**. Belege,
+bei denen die Kategorie **vor** v2.5.6 gewechselt wurde, können ein `checkOutDate` tragen, das ihre
+heutige Kategorie gar nicht kennt — z. B. ein Taxi mit dem Check-out des ehemaligen Hotels. Das Feld
+ist in der Maske unsichtbar, steuert aber weiterhin die Monatszuordnung: **stille Fehlzuordnung, bei
+`costModel: "exclusive"` geldwirksam.**
+
+Die Vorprüfung 2026-08-03 hat diese Klasse **nicht** abgedeckt — die damalige Abfrage kannte nur die
+Befund-Typen 1 und 2, ein kategoriefremdes, aber nicht invertiertes Enddatum fällt durch beide
+Raster. Befund-Typ 3 ist deshalb ins Skript nachgezogen worden (siehe Punkt 3).
+
+**Vor dem Prod-Rollout ist `scripts/analyze-expense-attribution.mjs` (strikt read-only) erneut zu
+fahren** und über die gefundenen Altfälle zu entscheiden. Erwartung nach heutigem Kenntnisstand:
+keine oder sehr wenige Treffer (der Bestand war 2026-08-03 sauber, und Kategoriewechsel sind selten) —
+verifiziert ist das aber nicht.
 
 ## Alternativen
 

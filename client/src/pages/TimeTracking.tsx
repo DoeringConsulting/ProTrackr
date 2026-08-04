@@ -81,6 +81,23 @@ const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
   other: "Sonstiges",
 };
 
+/**
+ * Belegarten, bei denen die Leistung über mehrere Tage laufen KANN und deshalb ein
+ * optionales Leistungsende erfassbar ist. Das Feld schreibt auf `checkOutDate` — das
+ * ist seit ADR 0002 kein Hotel-Feld mehr, sondern das generische Leistungsende und
+ * damit maßgeblich für die Monatszuordnung (`leistungsende = checkOutDate ?? date`,
+ * `isExpenseInPeriod` in `lib/monthlyFinancials.ts`).
+ *
+ * WARUM diese Auswahl: Mietwagen, Zug-/ÖPNV-Zeitkarten und Sonstiges (z.B. Dauerparken)
+ * laufen regelmäßig über den Monatswechsel; ohne Enddatum landet ein Mietwagen
+ * 30.06.–02.07. im Juni statt im Juli. Punktuelle Ereignisse (Taxi, Tanken,
+ * Verpflegung, Kilometerpauschale) sind bewusst NICHT dabei — dort fallen Leistung und
+ * Beleg auf denselben Tag, ein Enddatum wäre fachlich sinnlos. `hotel` und `flight`
+ * fehlen ebenfalls bewusst: sie haben mit Check-in/Check-out bzw. Hin-/Rückflug ihre
+ * eigenen, spezifischeren Felder auf demselben DB-Feld.
+ */
+const SERVICE_END_DATE_CATEGORIES = new Set(["car", "train", "transport", "other"]);
+
 // Tages-Nuancen: 1. Eintrag Basisfarbe, 2./3. Eintrag dunkler (max. 2 Nuancen).
 const PROJECT_ENTRY_TONE_CLASSES = [
   "bg-[#e0f2f4] text-[#1a4a50] border-[#b8dfe4]",
@@ -223,6 +240,8 @@ export default function TimeTracking() {
   const [tempFlightTravelEnd, setTempFlightTravelEnd] = useState('');
   const [tempHotelCheckInDate, setTempHotelCheckInDate] = useState('');
   const [tempHotelNights, setTempHotelNights] = useState('1');
+  // Optionales Leistungsende für mehrtägige Belege (→ checkOutDate, ADR 0002).
+  const [tempServiceEndDate, setTempServiceEndDate] = useState('');
   const [tempFullDay, setTempFullDay] = useState(false);
   const [editingExpense, setEditingExpense] = useState<number | null>(null);
   const [tempExpenseCustomerId, setTempExpenseCustomerId] = useState<string>("");
@@ -348,6 +367,7 @@ export default function TimeTracking() {
     setTempFlightTravelEnd("");
     setTempHotelCheckInDate(defaultDate);
     setTempHotelNights("1");
+    setTempServiceEndDate("");
     setTempFullDay(false);
     setTempExpenseCustomerId("");
   };
@@ -917,6 +937,11 @@ export default function TimeTracking() {
                                     : hotelCheckIn;
                                   setTempHotelCheckInDate(hotelCheckIn);
                                   setTempHotelNights(String(dayDiff(hotelCheckIn, hotelCheckOut)));
+                                  // Dasselbe DB-Feld, andere Maske: bei mehrtägigen Belegen
+                                  // trägt checkOutDate das Leistungsende (ADR 0002).
+                                  setTempServiceEndDate(
+                                    expense.checkOutDate ? getDateKey(expense.checkOutDate as string | Date) : ""
+                                  );
                                   setTempFullDay(Boolean(expense.fullDay));
                                   setTempExpenseCustomerId(
                                     expense.customerId != null ? String(expense.customerId) : ""
@@ -1242,6 +1267,24 @@ export default function TimeTracking() {
                     customerId: tempExpenseCustomerId ? Number(tempExpenseCustomerId) : null,
                   };
 
+                  // INVARIANTE für alle Zweige: jede Kategorie setzt `checkInDate` UND
+                  // `checkOutDate` EXPLIZIT — auch (gerade!) wenn sie das Feld fachlich
+                  // nicht besitzt, dann auf "".
+                  //
+                  // WARUM: Beim Bearbeiten wird die Kategorie geändert, die Datumsfelder der
+                  // alten Kategorie sind danach aber unsichtbar. Ein weggelassener Schlüssel
+                  // bedeutet in `db.normalizeExpenseMutationPayload` „unverändert lassen",
+                  // der alte Wert bliebe also in der DB stehen. Zwei Folgen:
+                  //  (a) Stille Fehlzuordnung: Mietwagen 30.06.–02.07. → Wechsel auf Taxi →
+                  //      `checkOutDate` bliebe 02.07. und der Beleg zählte weiter im Juli,
+                  //      ohne dass das irgendwo sichtbar wäre (ADR 0002: das Leistungsende
+                  //      entscheidet allein).
+                  //  (b) Nicht mehr speicherbar: Flug 10.06./Rückflug 12.06. → Wechsel auf
+                  //      Taxi am 20.07. → der Server sähe {date: 20.07., checkOutDate: 12.06.}
+                  //      und wiese den Beleg per Chronologie-Regel ab — eine Sackgasse, aus
+                  //      der nur Löschen und Neuanlegen führt.
+                  // Der leere String löst beides: `normalizeExpenseMutationPayload` mappt
+                  // "" → NULL, das Feld wird also aktiv geräumt.
                   if (tempExpenseCategory === "flight") {
                     if (!tempFlightTravelStart && !tempFlightTravelEnd) {
                       toast.error(
@@ -1253,7 +1296,12 @@ export default function TimeTracking() {
                     payloadBase.flightRouteType = tempFlightRouteType;
                     payloadBase.departureTime = tempFlightTravelStart || undefined;
                     payloadBase.arrivalTime = tempFlightTravelEnd || undefined;
-                    payloadBase.checkOutDate = tempFlightReturnDate || undefined;
+                    // Flüge kennen keinen Leistungsbeginn getrennt vom Hinflugdatum.
+                    payloadBase.checkInDate = "";
+                    // Ohne `|| undefined`, damit ein geleertes Rückflug-Feld das Datum auch
+                    // wirklich entfernt — die Maske hat ein eigenes Eingabefeld dafür,
+                    // Leeren ist eine legitime Nutzeraktion (aus Round-Trip wird One-Way).
+                    payloadBase.checkOutDate = tempFlightReturnDate;
                   } else if (tempExpenseCategory === "hotel") {
                     payloadBase.date = hotelCheckIn;
                     payloadBase.checkInDate = hotelCheckIn;
@@ -1266,8 +1314,26 @@ export default function TimeTracking() {
                     payloadBase.date = normalizedPrimaryDate;
                     payloadBase.distance = Math.round(Number(tempDistanceKm));
                     payloadBase.rate = Math.round(Number(tempRatePerKm) * 100);
+                    // Punktuelles Ereignis: weder Beginn noch Ende.
+                    payloadBase.checkInDate = "";
+                    payloadBase.checkOutDate = "";
                   } else {
                     payloadBase.date = normalizedPrimaryDate;
+                    // Außerhalb von Hotel gibt es kein getrenntes Beginn-Datum.
+                    payloadBase.checkInDate = "";
+                    if (SERVICE_END_DATE_CATEGORIES.has(tempExpenseCategory)) {
+                      // Vergleich auf YYYY-MM-DD-Strings statt Date-Objekten: keine
+                      // Zeitzonen-Roundtrips (K8, Europe/Warsaw), lexikografisch =
+                      // chronologisch. Der Server prüft dasselbe noch einmal.
+                      if (tempServiceEndDate && tempServiceEndDate < normalizedPrimaryDate) {
+                        toast.error("Das Enddatum darf nicht vor dem Datum liegen");
+                        return;
+                      }
+                      payloadBase.checkOutDate = tempServiceEndDate;
+                    } else {
+                      // Taxi, Kraftstoff, Verpflegung, Lebensmittel: kein Enddatum.
+                      payloadBase.checkOutDate = "";
+                    }
                   }
 
                   try {
@@ -1480,14 +1546,39 @@ export default function TimeTracking() {
                   </>
                 )}
                 {tempExpenseCategory !== "flight" && tempExpenseCategory !== "hotel" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="expense-date">Datum</Label>
-                    <Input
-                      id="expense-date"
-                      type="date"
-                      value={tempExpenseDate}
-                      onChange={(e) => setTempExpenseDate(e.target.value)}
-                    />
+                  <div
+                    className={
+                      SERVICE_END_DATE_CATEGORIES.has(tempExpenseCategory)
+                        ? "grid grid-cols-2 gap-4"
+                        : "space-y-2"
+                    }
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="expense-date">Datum</Label>
+                      <Input
+                        id="expense-date"
+                        type="date"
+                        value={tempExpenseDate}
+                        onChange={(e) => setTempExpenseDate(e.target.value)}
+                      />
+                    </div>
+                    {SERVICE_END_DATE_CATEGORIES.has(tempExpenseCategory) && (
+                      <div className="space-y-2">
+                        <Label htmlFor="expense-service-end-date">Ende (bei mehrtägiger Nutzung)</Label>
+                        <Input
+                          id="expense-service-end-date"
+                          type="date"
+                          value={tempServiceEndDate}
+                          min={tempExpenseDate || undefined}
+                          onChange={(e) => setTempServiceEndDate(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Optional. Gesetzt zählt der Beleg im Monat des Enddatums (Mietwagen
+                          30.06.–02.07. → Juli). Leer lassen, wenn Leistung und Beleg auf denselben
+                          Tag fallen.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="flex items-center gap-2 rounded-md border p-3">

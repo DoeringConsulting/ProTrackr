@@ -24,6 +24,7 @@ import {
   type ReceiptExpenseCandidate,
 } from "./receiptAi";
 import { toScopeContext } from "./scope";
+import { validateExpenseDateRules } from "./expenseRules";
 import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
@@ -236,27 +237,6 @@ const expenseCategoryValues = [
 
 const expenseCategorySchema = z.enum(expenseCategoryValues);
 const flightRouteTypeSchema = z.enum(["domestic", "international"]);
-const hhmmTimeSchema = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-function toComparableDate(value: unknown): Date | null {
-  if (!value || typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-
-  if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) {
-    const [dd, mm, yyyy] = trimmed.split(".");
-    const parsed = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const parsed = new Date(`${trimmed}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
 
 function toIsoDateOnly(value: unknown): string | undefined {
   if (!value) return undefined;
@@ -277,80 +257,6 @@ function toIsoDateOnly(value: unknown): string | undefined {
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
   }
   return undefined;
-}
-
-function validateFlightAndHotelExpenseRules(input: {
-  category?: string;
-  date?: string;
-  checkInDate?: string;
-  checkOutDate?: string;
-  departureTime?: string;
-  arrivalTime?: string;
-  flightRouteType?: string;
-}) {
-  if (input.category === "flight") {
-    const routeType = input.flightRouteType ?? "domestic";
-    if (routeType !== "domestic" && routeType !== "international") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Ungueltiger Flugtyp. Erlaubt: domestic|international",
-      });
-    }
-
-    if (!input.date) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Flug erfordert ein Hinflug-Datum",
-      });
-    }
-
-    if (input.departureTime && !hhmmTimeSchema.test(input.departureTime)) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Abflugzeit muss im Format HH:MM angegeben werden",
-      });
-    }
-
-    if (input.arrivalTime && !hhmmTimeSchema.test(input.arrivalTime)) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Ankunftszeit muss im Format HH:MM angegeben werden",
-      });
-    }
-
-    if (!input.departureTime && !input.arrivalTime) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Bei Fluegen muss mindestens eine Zeit (Abflug oder Ankunft) angegeben werden",
-      });
-    }
-
-    const outboundDate = toComparableDate(input.date);
-    const returnDate = toComparableDate(input.checkOutDate);
-    if (outboundDate && returnDate && returnDate.getTime() < outboundDate.getTime()) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Rueckflug-Datum darf nicht vor dem Hinflug-Datum liegen",
-      });
-    }
-  }
-
-  if (input.category === "hotel") {
-    if (!input.checkInDate) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Hotel erfordert ein Check-in-Datum",
-      });
-    }
-    const checkIn = toComparableDate(input.checkInDate);
-    const checkOut = toComparableDate(input.checkOutDate);
-    if (checkIn && checkOut && checkOut.getTime() < checkIn.getTime()) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Check-out darf nicht vor Check-in liegen",
-      });
-    }
-  }
 }
 
 function calculateTimeEntryFinancials(input: {
@@ -1550,7 +1456,7 @@ export const appRouter = router({
           ? { flightRouteType: input.flightRouteType ?? "domestic" }
           : {}),
       };
-      validateFlightAndHotelExpenseRules(normalizedInput);
+      validateExpenseDateRules(normalizedInput);
 
       const data = {
         ...normalizedInput,
@@ -1603,7 +1509,7 @@ export const appRouter = router({
             ? { flightRouteType: expense.flightRouteType ?? "domestic" }
             : {}),
         };
-        validateFlightAndHotelExpenseRules(normalizedExpense);
+        validateExpenseDateRules(normalizedExpense);
 
         const result = await createExpense({
           timeEntryId: input.timeEntryId,
@@ -1669,7 +1575,7 @@ export const appRouter = router({
           (expense.flightRouteType ? String(expense.flightRouteType) : undefined) ??
           ((data.category ?? expense.category) === "flight" ? "domestic" : undefined),
       };
-      validateFlightAndHotelExpenseRules(mergedValidationInput);
+      validateExpenseDateRules(mergedValidationInput);
 
       const nextCategory = mergedValidationInput.category;
       const nextFlightRouteType =

@@ -8,6 +8,9 @@ import {
   type MonthlyExpense,
 } from "../client/src/lib/monthlyFinancials";
 import { toExpenseMutationPayload, type ReceiptExpenseCandidate } from "./receiptAi";
+// Bewusst aus `./expenseRules` und NICHT aus `./routers`: dieser Test steht im
+// pre-commit-Gate und muss abhängigkeitsarm bleiben (kein Router-Graph, kein bcrypt).
+import { validateExpenseDateRules } from "./expenseRules";
 
 /**
  * Kanonische Zeitraum-Zuordnung von (Reisekosten-)Belegen. Rein, keine DB.
@@ -19,8 +22,12 @@ import { toExpenseMutationPayload, type ReceiptExpenseCandidate } from "./receip
  *
  *   - Hotel                     → checkOutDate (Check-out)
  *   - Hin-/Rückflug 1 Ticket    → checkOutDate (Rückflugdatum)
- *   - alles Übrige (Taxi, Zug,
- *     Kraftstoff, km-Pauschale) → date (kein Enddatum vorhanden)
+ *   - mehrtägige Belege
+ *     (Mietwagen, Zug, ÖPNV,
+ *     Sonstiges)                → checkOutDate (Nutzungsende, optional erfassbar)
+ *   - punktuelle Ereignisse
+ *     (Taxi, Kraftstoff,
+ *     Verpflegung, km-Pauschale) → date (kein Enddatum, fachlich auch keins nötig)
  *
  * Hintergrund: `date` ist bei Hotels der CHECK-IN (`TimeTracking.tsx` setzt
  * `payloadBase.date = hotelCheckIn`). Die Vorgängerregel (allein `date`, ADR 0001)
@@ -57,6 +64,21 @@ const hotelAcrossMonthEnd: MonthlyExpense = {
 const flightAcrossMonthEnd: MonthlyExpense = {
   customerId: 1,
   amount: 90_00,
+  sourceCurrency: "PLN",
+  date: "2026-06-30",
+  checkOutDate: "2026-07-02",
+};
+
+/**
+ * Mietwagen über den Monatswechsel: Anmietung 30.06. (`date`), Rückgabe 02.07.
+ * (`checkOutDate` als generisches Leistungsende). Kein `checkInDate` — Mietwagen
+ * befüllen nur `date` + Enddatum. Ohne erfassbares Enddatum (Zustand vor der
+ * Erweiterung der Erfassungs-UI) lag der Beleg im Juni, obwohl das Fahrzeug erst im
+ * Juli zurückgeht.
+ */
+const carAcrossMonthEnd: MonthlyExpense = {
+  customerId: 1,
+  amount: 240_00,
   sourceCurrency: "PLN",
   date: "2026-06-30",
   checkOutDate: "2026-07-02",
@@ -157,6 +179,26 @@ describe("isExpenseInPeriod (kanonische Regel: Leistungsende = checkOutDate ?? d
   it("Hin-/Rückflug 30.06.→02.07. auf einem Ticket zählt zu JULI (Rückflugdatum)", () => {
     expect(isExpenseInPeriod(flightAcrossMonthEnd, JULY.start, JULY.end)).toBe(true);
     expect(isExpenseInPeriod(flightAcrossMonthEnd, JUNE.start, JUNE.end)).toBe(false);
+  });
+
+  it("Mietwagen 30.06.→02.07. zählt zu JULI (Leistungsende = Rückgabe)", () => {
+    // Die Regel ist kategorienunabhängig formuliert — sie greift, sobald ein
+    // Enddatum erfasst ist, ganz gleich ob Hotel, Flug oder Mietwagen.
+    expect(isExpenseInPeriod(carAcrossMonthEnd, JULY.start, JULY.end)).toBe(true);
+    expect(isExpenseInPeriod(carAcrossMonthEnd, JUNE.start, JUNE.end)).toBe(false);
+  });
+
+  it("Mietwagen OHNE Enddatum bleibt bei `date` (unveränderte Semantik, Feld ist optional)", () => {
+    // Das Leistungsende ist bewusst optional: eintägige Anmietungen erfassen nur
+    // `date`. Regressionsschutz — die UI-Erweiterung darf den Normalfall nicht
+    // verschieben.
+    const carSingleDay = { date: "2026-06-30" };
+    expect(isExpenseInPeriod(carSingleDay, JUNE.start, JUNE.end)).toBe(true);
+    expect(isExpenseInPeriod(carSingleDay, JULY.start, JULY.end)).toBe(false);
+    // Leeres Feld (Nutzer hat das Enddatum wieder geleert) verhält sich identisch.
+    expect(isExpenseInPeriod({ date: "2026-06-30", checkOutDate: "" }, JUNE.start, JUNE.end)).toBe(
+      true
+    );
   });
 
   it("checkOutDate schlägt date auch dann, wenn beide im selben Zeitraum lägen", () => {
@@ -368,5 +410,155 @@ describe("receiptAi.toExpenseMutationPayload: Check-out aus nights (Voraussetzun
     expect(
       isExpenseInPeriod({ date: payload.date, checkOutDate: payload.checkOutDate }, JULY.start, JULY.end)
     ).toBe(true);
+  });
+});
+
+/**
+ * Schreibender Pfad: Ein Enddatum VOR dem Startdatum ordnet den Beleg einem Monat vor
+ * seinem eigenen Beginn zu — die Zuordnungsregel (`checkOutDate ?? date`) fragt nicht
+ * nach Plausibilität. Vor ADR 0002 war `checkOutDate` faktisch nur bei flight/hotel
+ * befüllt, entsprechend prüfte der Server auch nur dort. Mit der Erfassung für
+ * mehrtägige Belege (Mietwagen, Zug, ÖPNV, Sonstiges) muss die Chronologie
+ * kategorienunabhängig gelten — genau diesen Defekt sucht auch die Vorprüfung
+ * `scripts/analyze-expense-attribution.mjs` („DEFEKT: Enddatum VOR Startdatum").
+ *
+ * Rein, keine DB: die Funktion validiert nur den Eingabe-Payload.
+ */
+describe("validateExpenseDateRules: Leistungsende >= Leistungsbeginn (kategorienunabhängig)", () => {
+  it("Mietwagen mit Enddatum VOR dem Startdatum wird abgelehnt", () => {
+    expect(() =>
+      validateExpenseDateRules({
+        category: "car",
+        date: "2026-07-02",
+        checkOutDate: "2026-06-30",
+      })
+    ).toThrow("Enddatum (Leistungsende) darf nicht vor dem Startdatum des Belegs liegen");
+  });
+
+  it("dieselbe Regel greift für Zug, ÖPNV und Sonstiges", () => {
+    for (const category of ["train", "transport", "other"]) {
+      expect(() =>
+        validateExpenseDateRules({
+          category,
+          date: "2026-07-02",
+          checkOutDate: "2026-07-01",
+        })
+      ).toThrow("Enddatum (Leistungsende) darf nicht vor dem Startdatum des Belegs liegen");
+    }
+  });
+
+  it("gültiger Mietwagen 30.06.→02.07. passiert — und landet im Juli", () => {
+    const valid = { category: "car", date: "2026-06-30", checkOutDate: "2026-07-02" };
+    expect(() => validateExpenseDateRules(valid)).not.toThrow();
+    expect(isExpenseInPeriod(valid, JULY.start, JULY.end)).toBe(true);
+  });
+
+  it("gleiches Start- und Enddatum ist zulässig (eintägige Nutzung)", () => {
+    expect(() =>
+      validateExpenseDateRules({
+        category: "car",
+        date: "2026-07-02",
+        checkOutDate: "2026-07-02",
+      })
+    ).not.toThrow();
+  });
+
+  it("ohne Enddatum bleibt jede Kategorie unverändert gültig", () => {
+    // Regressionsschutz: Taxi/Tanken & Co. dürfen von der neuen Prüfung nicht
+    // erfasst werden — dort ist checkOutDate korrekterweise leer.
+    expect(() => validateExpenseDateRules({ category: "taxi", date: "2026-07-02" })).not.toThrow();
+    expect(() =>
+      validateExpenseDateRules({ category: "fuel", date: "2026-07-02", checkOutDate: "" })
+    ).not.toThrow();
+  });
+
+  it("Hotel und Flug behalten ihre spezifischeren Fehlermeldungen", () => {
+    // Die kategorienspezifischen Prüfungen laufen zuerst — ihre Texte benennen das
+    // konkrete Feld und dürfen von der generischen Regel nicht verdrängt werden.
+    expect(() =>
+      validateExpenseDateRules({
+        category: "hotel",
+        date: "2026-07-02",
+        checkInDate: "2026-07-02",
+        checkOutDate: "2026-06-30",
+      })
+    ).toThrow(/Check-out darf nicht vor Check-in liegen/);
+
+    expect(() =>
+      validateExpenseDateRules({
+        category: "flight",
+        date: "2026-07-02",
+        checkOutDate: "2026-06-30",
+        departureTime: "07:15",
+        flightRouteType: "international",
+      })
+    ).toThrow(/Rueckflug-Datum darf nicht vor dem Hinflug-Datum liegen/);
+  });
+
+  it("Startdatum ist COALESCE(checkInDate, date) — identisch zu Ladefilter und Vorprüfung", () => {
+    // Ist ein checkInDate gesetzt, gewinnt es als Leistungsbeginn; sonst `date`.
+    expect(() =>
+      validateExpenseDateRules({
+        category: "other",
+        date: "2026-06-01",
+        checkInDate: "2026-07-02",
+        checkOutDate: "2026-07-01",
+      })
+    ).toThrow("Enddatum (Leistungsende) darf nicht vor dem Startdatum des Belegs liegen");
+  });
+});
+
+/**
+ * Kategoriewechsel beim Bearbeiten. `TimeTracking.tsx` setzt `checkInDate`/`checkOutDate`
+ * in JEDEM Zweig explizit — bei Kategorien ohne das jeweilige Feld auf `""`, das
+ * `db.normalizeExpenseMutationPayload` zu `NULL` normalisiert. Ohne dieses aktive Räumen
+ * bliebe der Altwert stehen (ein fehlender Schlüssel heißt dort „unverändert"), mit zwei
+ * Folgen — beide hier abgesichert.
+ */
+describe("Kategoriewechsel räumt die Datumsfelder der alten Kategorie", () => {
+  // Genau der Payload, den die Maske nach dem Wechsel auf eine Kategorie ohne
+  // Enddatum baut: die Felder fehlen nicht, sie stehen auf "".
+  const switchedToTaxi = {
+    category: "taxi",
+    date: "2026-07-20",
+    checkInDate: "",
+    checkOutDate: "",
+  };
+
+  it("(b) der gewechselte Beleg bleibt speicherbar — keine Sackgasse", () => {
+    // Ausgangslage: Flug 10.06. mit Rückflug 12.06., Wechsel auf Taxi am 20.07.
+    expect(() => validateExpenseDateRules(switchedToTaxi)).not.toThrow();
+    // Gegenprobe — so sähe der Merge OHNE explizites Räumen aus: der Altwert
+    // 12.06. läge vor dem neuen Datum, die Chronologie-Regel würde den Beleg
+    // dauerhaft ablehnen (nur noch löschen und neu anlegen).
+    expect(() =>
+      validateExpenseDateRules({ category: "taxi", date: "2026-07-20", checkOutDate: "2026-06-12" })
+    ).toThrow("Enddatum (Leistungsende) darf nicht vor dem Startdatum des Belegs liegen");
+  });
+
+  it('(a) die Zuordnung fällt auf `date` zurück — "" und NULL verhalten sich gleich', () => {
+    // Vor dem Speichern trägt der Payload "", danach steht in der DB NULL. Beide
+    // Zustände müssen dieselbe Zuordnung liefern, sonst hinge das Ergebnis am
+    // Speicherzeitpunkt.
+    const persisted = { category: "taxi", date: "2026-07-20", checkInDate: null, checkOutDate: null };
+    expect(isExpenseInPeriod(switchedToTaxi, JULY.start, JULY.end)).toBe(true);
+    expect(isExpenseInPeriod(persisted, JULY.start, JULY.end)).toBe(true);
+  });
+
+  it("Mietwagen 30.06.–02.07. → Wechsel auf Taxi: zählt wieder im Juni, nicht am Altwert klebend", () => {
+    const asCar = { category: "car", date: "2026-06-30", checkOutDate: "2026-07-02" };
+    expect(isExpenseInPeriod(asCar, JULY.start, JULY.end)).toBe(true);
+
+    const afterSwitch = { category: "taxi", date: "2026-06-30", checkInDate: "", checkOutDate: "" };
+    expect(isExpenseInPeriod(afterSwitch, JUNE.start, JUNE.end)).toBe(true);
+    expect(isExpenseInPeriod(afterSwitch, JULY.start, JULY.end)).toBe(false);
+  });
+
+  it("Hotel → Mietwagen: das Check-in wird geräumt, das Enddatum bleibt erhalten", () => {
+    // `car` gehört zu SERVICE_END_DATE_CATEGORIES, das Enddatum bleibt also bewusst
+    // stehen (Nutzer sieht das Feld und kann es ändern) — nur checkInDate fällt weg.
+    const afterSwitch = { category: "car", date: "2026-06-30", checkInDate: "", checkOutDate: "2026-07-02" };
+    expect(() => validateExpenseDateRules(afterSwitch)).not.toThrow();
+    expect(isExpenseInPeriod(afterSwitch, JULY.start, JULY.end)).toBe(true);
   });
 });

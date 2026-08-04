@@ -195,7 +195,19 @@ export const expenses = mysqlTable("expenses", {
   flightRouteType: varchar("flightRouteType", { length: 20 }),
   departureTime: varchar("departureTime", { length: 10 }), // HH:MM format
   arrivalTime: varchar("arrivalTime", { length: 10 }), // HH:MM format
-  // Hotel specific
+  // Leistungszeitraum des Belegs — NICHT hotel-spezifisch.
+  //
+  // `checkOutDate` ist das generische LEISTUNGSENDE und damit seit ADR 0002
+  // (docs/adr/0002-reisekosten-leistungsende.md) allein maßgeblich für die
+  // Monatszuordnung: `leistungsende = checkOutDate ?? date`
+  // (`isExpenseInPeriod` in client/src/lib/monthlyFinancials.ts).
+  //   Hotel               → Check-out
+  //   Flug (ein Ticket)   → Rückflugdatum
+  //   mehrtägige Belege   → Nutzungsende (Mietwagen, Zug, ÖPNV, Sonstiges)
+  //   NULL                → eintägige Leistung, `date` entscheidet
+  // `checkInDate` ist der Leistungsbeginn (heute nur bei Hotel befüllt); der
+  // Startdatum-Fallback ist `date`. Chronologie (Ende >= Beginn) erzwingt
+  // `validateExpenseDateRules` in server/expenseRules.ts kategorienunabhängig.
   checkInDate: timestamp("checkInDate", { mode: "string" }),
   checkOutDate: timestamp("checkOutDate", { mode: "string" }),
   // Fuel specific
