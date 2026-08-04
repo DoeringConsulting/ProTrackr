@@ -126,6 +126,57 @@ export function selectExpensesForRangeCopy<
   });
 }
 
+/**
+ * Die EXPLIZITE Kundenzuordnung (`expenses.customerId`) eines geladenen Belegs für die
+ * KOPIE — oder `null`, wenn es keine gibt.
+ *
+ * VORBEDINGUNG: gilt NUR für Beleg-Objekte aus `db.getAllExpenses`. Andere Lader
+ * (`getExpenseById`, `getExpensesByTimeEntry`) machen `select().from(expenses)` und liefern
+ * die Rohspalte auch für VERKNÜPFTE Belege — für solche Objekte ist die Annahme unten
+ * invertiert, und diese Funktion verwürfe eine echte Zuordnung. Die Signatur nimmt sie
+ * klaglos an; der Name grenzt den Einsatz ein.
+ *
+ * DAS PROBLEM: `db.getAllExpenses` liefert das Feld `customerId` aus ZWEI verschiedenen
+ * Quellen, unter demselben Namen:
+ *   - verknüpfter Zweig (`innerJoin timeEntries`): `customerId: timeEntries.customerId`
+ *     — der Kunde des ELTERN-ZEITEINTRAGS, keine Belegzuordnung.
+ *   - Standalone-Zweig (`expenses.timeEntryId IS NULL`): `customerId: expenses.customerId`
+ *     — die echte explizite Zuordnung (Spalte seit Migration 0024).
+ *
+ * Beim Kopieren darf deshalb NUR der zweite Fall übernommen werden. Übernähme man auch den
+ * ersten, stünde der Zeiteintrags-Kunde anschließend als EXPLIZITE Zuweisung in
+ * `expenses.customerId`; `getExpenseBillingCustomerId`
+ * (`client/src/lib/expenseAttribution.ts`) entschiede für die Kopie dann über Zweig (1)
+ * „explizite customerId gewinnt immer" statt wie beim Original über den Zeiteintrag. Bei
+ * einem späteren Kundenwechsel des Zeiteintrags liefe die Kopie auseinander — geldwirksam
+ * bei `costModel: "exclusive"`.
+ *
+ * Umgekehrt kostet das FEHLEN der Übernahme bei Standalone-Belegen ebenso Geld: ohne
+ * `customerId` bleibt nur die Datums-Heuristik „genau ein Kunde mit Zeiteintrag an diesem
+ * Tag". An einem Tag mit zwei Kunden — oder ganz ohne Zeiteintrag — fällt die Kopie still
+ * aus der Kundenabrechnung.
+ *
+ * UNTERSCHEIDUNG: `timeEntryId == null` spiegelt exakt die SQL-Bedingung des
+ * Standalone-Zweigs (`IS NULL`). Bewusst `== null` und kein truthy-Check: eine `0` ist zwar
+ * falsy, kam aber aus dem verknüpften Zweig (innerJoin) — ihr `customerId` stammt dann vom
+ * Zeiteintrag und darf nicht übernommen werden. Gleiche Lesart wie in
+ * `selectExpensesForRangeCopy`.
+ */
+export function explicitCustomerIdForRangeCopy(expense: {
+  timeEntryId?: unknown;
+  customerId?: unknown;
+}): number | null {
+  if (expense?.timeEntryId !== null && expense?.timeEntryId !== undefined) return null;
+
+  const raw = expense?.customerId;
+  if (raw === null || raw === undefined || raw === "") return null;
+
+  // Die Spalte ist ein int-FK. Ein nicht-numerischer Wert wäre ein Datenfehler und wird
+  // fallengelassen, statt ihn in ein INSERT zu tragen.
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export type ExpenseDateRuleInput = {
   category?: string;
   date?: string;

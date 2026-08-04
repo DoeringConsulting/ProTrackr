@@ -26,6 +26,7 @@ import {
 import { toScopeContext } from "./scope";
 import {
   expenseServiceEndDateSql,
+  explicitCustomerIdForRangeCopy,
   selectExpensesForRangeCopy,
   validateExpenseDateRules,
 } from "./expenseRules";
@@ -1326,6 +1327,12 @@ export const appRouter = router({
         const payload: Record<string, any> = {
           timeEntryId: mappedTimeEntryId ?? undefined,
           userId: mappedTimeEntryId ? undefined : expense.userId ?? ctx.user.id,
+          // Explizite Kundenzuordnung nur für EIGENSTÄNDIGE Belege übernehmen. Ohne sie
+          // verlöre die Kopie ihre Zuordnung und fiele auf die Datums-Heuristik zurück
+          // (an einem Tag mit zwei Kunden: gar keine Zuordnung, still). Für verknüpfte
+          // Belege wäre die Übernahme dagegen falsch — `getAllExpenses` liefert dort den
+          // Kunden des ZEITEINTRAGS unter demselben Feldnamen. Begründung am Helfer.
+          customerId: explicitCustomerIdForRangeCopy(expense),
           date: shiftedDates.date,
           category: expense.category,
           amount: expense.amount,

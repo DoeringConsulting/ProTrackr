@@ -16,6 +16,7 @@ import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { expenses as expensesTable } from "../drizzle/schema";
 import {
   expenseServiceEndDateSql,
+  explicitCustomerIdForRangeCopy,
   isExpenseServiceEndInRange,
   selectExpensesForRangeCopy,
   validateExpenseDateRules,
@@ -969,5 +970,87 @@ describe("copyRangeToNext: Auswahl der zu kopierenden Belege (Duplikat-Fix)", ()
     // Bei Umbenennung hier NACHZIEHEN, nicht löschen.
     const routersSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
     expect(routersSource).toContain("selectExpensesForRangeCopy(");
+  });
+});
+
+/**
+ * SCHREIBENDER PFAD — Kundenzuordnung der KOPIE („Zeitraum kopieren", `copyRangeToNext`).
+ *
+ * Der Bug: Der Kopier-Payload trug `expense.customerId` gar nicht mit. Eine kopierte
+ * EIGENSTÄNDIGE Position (`timeEntryId IS NULL`) landete mit `customerId = NULL` in der DB
+ * und verlor ihre explizite Zuordnung. `getExpenseBillingCustomerId`
+ * (`client/src/lib/expenseAttribution.ts`) fiel damit von Zweig (1) „explizite customerId
+ * gewinnt immer" auf die Datums-Heuristik „genau EIN Kunde mit Zeiteintrag an diesem Tag"
+ * zurück. An einem Tag mit zwei Kunden — oder ganz ohne Zeiteintrag — war die Kopie danach
+ * KEINEM Kunden zugeordnet: raus aus der Kundenabrechnung, bei `costModel: "exclusive"`
+ * kein weiterberechneter Umsatz mehr. Still, ohne Hinweis.
+ *
+ * Die FALLGRUBE beim Beheben: `db.getAllExpenses` liefert `customerId` aus zwei Quellen
+ * unter EINEM Namen (siehe Test „die beiden Zweige …" unten). Blind übernommen, stünde bei
+ * verknüpften Belegen der Kunde des ZEITEINTRAGS als explizite Belegzuweisung in der Kopie —
+ * sie entschiede fortan über Zweig (1) statt über den Zeiteintrag und liefe bei einem
+ * Kundenwechsel des Eintrags vom Original weg.
+ */
+describe("copyRangeToNext: Kundenzuordnung der Kopie", () => {
+  it("die beiden `getAllExpenses`-Zweige liefern `customerId` aus VERSCHIEDENEN Quellen", () => {
+    // Die Existenzberechtigung des Helfers. Würde der verknüpfte Zweig eines Tages ebenfalls
+    // `expenses.customerId` selektieren, wäre die Unterscheidung überflüssig — und dieser
+    // Test der Ort, an dem das auffällt. Quelltext-Prüfung, weil `db.ts` einen DB-Treiber
+    // zieht und nicht ins schnelle Gate gehört. Bei Umbenennung NACHZIEHEN, nicht löschen.
+    const dbSource = readFileSync(new URL("./db.ts", import.meta.url), "utf8");
+    expect(dbSource).toContain("customerId: timeEntries.customerId,"); // verknüpfter Zweig
+    expect(dbSource).toContain("customerId: expenses.customerId,"); // Standalone-Zweig
+  });
+
+  it("eigenständiger Beleg MIT Kundenzuordnung: die Kopie trägt dieselbe customerId", () => {
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: 42 })).toBe(42);
+  });
+
+  it("eigenständiger Beleg OHNE Kundenzuordnung: die Kopie bleibt null (keine erfundene Zuordnung)", () => {
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: null })).toBeNull();
+    // Alt-Belege vor Migration 0024 kommen ohne das Feld aus dem Backup-Restore.
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: null })).toBeNull();
+  });
+
+  it("FALLGRUBE: verknüpfter Beleg — die Kopie bekommt KEINE explizite customerId", () => {
+    // `customerId: 42` stammt hier aus `timeEntries.customerId` (verknüpfter Zweig), ist also
+    // keine Belegzuweisung. Die Kopie erbt ihre Zuordnung über den mitkopierten Zeiteintrag.
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: 77, customerId: 42 })).toBeNull();
+  });
+
+  it("timeEntryId 0 gilt als verknüpft, nicht als 'nicht gesetzt'", () => {
+    // Regressionsschutz gegen einen truthy-Check — gleiche Lesart wie in
+    // `selectExpensesForRangeCopy`. Eine `0` kam aus dem innerJoin-Zweig.
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: 0, customerId: 42 })).toBeNull();
+  });
+
+  it("ein unbrauchbarer Wert wird fallengelassen statt in ein INSERT getragen", () => {
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: "" })).toBeNull();
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: "keine Zahl" })).toBeNull();
+    // Numerische Strings sind gültige FK-Werte (JSON-Restore) und bleiben erhalten.
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: "42" })).toBe(42);
+  });
+
+  it("die Kopier-Prozedur verwendet genau diesen Baustein", () => {
+    // Ohne diese Prüfung bliebe sowohl der Rückbau (Feld fehlt wieder) als auch die
+    // Blindübernahme (`customerId: expense.customerId`) unbemerkt: beides ist an den reinen
+    // Funktionstests oben nicht sichtbar. Bei Umbenennung NACHZIEHEN, nicht löschen.
+    const routersSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+
+    // Beide Prüfungen gelten NUR dem Kopier-Payload, nicht der ganzen Datei: `routers.ts`
+    // hat über 5.000 Zeilen und weitere Prozeduren mit einer lokalen `expense`-Variablen
+    // (z. B. `expenses.update`, das den Beleg über `getExpenseById` lädt — dort liefert der
+    // Treiber die ROHSPALTE, eine Übernahme wäre also legitim). Dateiweit würde dieser Test
+    // sonst irgendwann grundlos rot. Anker ist die erste Payload-Zeile (dateiweit eindeutig,
+    // anders als `const payload: Record<string, any> = {`, das es zweimal gibt); der Block
+    // enthält nur flache Felder, das nächste `};` ist damit sein Ende.
+    const payloadStart = routersSource.indexOf("timeEntryId: mappedTimeEntryId ?? undefined,");
+    expect(payloadStart).toBeGreaterThan(-1);
+    const payloadEnd = routersSource.indexOf("};", payloadStart);
+    expect(payloadEnd).toBeGreaterThan(payloadStart);
+    const payloadBlock = routersSource.slice(payloadStart, payloadEnd);
+
+    expect(payloadBlock).toContain("customerId: explicitCustomerIdForRangeCopy(expense),");
+    expect(payloadBlock).not.toContain("customerId: expense.customerId");
   });
 });
