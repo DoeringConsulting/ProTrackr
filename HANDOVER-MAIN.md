@@ -2,49 +2,47 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-08-04 · App-Release v2.7.0 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
-> **⚠️ EIN UNCOMMITTETER CHANGE offen — siehe §0.1 „SOFORT ZU TUN".**
+> **Stand: 2026-08-04 · App-Release v2.7.4 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
+> **Working Tree sauber, Manifest `2.7.4.json` + Tag `v2.7.4` gesetzt.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
 
 ---
 
-## 0.1 SOFORT ZU TUN (offener Arbeitsstand vom 2026-08-04)
+## 0.1 SOFORT ZU TUN (Stand 2026-08-04, Abschluss der Sitzung)
 
-**Es liegt ein fertig implementierter, aber NICHT committeter Change im Working Tree.**
-Betroffene Dateien: `server/routers.ts`, `server/expenseRules.ts`, `server/expensePeriodAttribution.test.ts`.
+**Nichts Halbfertiges offen.** Working Tree sauber, `origin/main` synchron (Drift `0 0`), HEAD auf
+**v2.7.4**, Manifest `.claude/rollouts/2.7.4.json` + Tag `v2.7.4` gesetzt. Der in der Vorsitzung
+offene `customerId`-Fix ist reviewt, committet (`b3625d0`, v2.7.3) und gepusht; die Fallgrube wurde
+dabei **nicht** getreten (belegt: `routers.ts` nutzt `explicitCustomerIdForRangeCopy(expense)`, null
+Vorkommen von `customerId: expense.customerId`).
 
-**Was er tut:** `copyRangeToNext` überträgt beim Kopieren die **explizite Kundenzuordnung**
-(`expenses.customerId`) nicht — eine kopierte **eigenständige** Reisekostenposition landet mit
-`customerId = NULL` in der DB, fällt auf die Datums-Heuristik zurück und kann bei mehreren Kunden am
-selben Tag (oder ohne Zeiteintrag) **still aus der Kundenabrechnung verschwinden**; bei
-`costModel: "exclusive"` zählt sie dann nicht mehr als weiterberechneter Umsatz. Der Fix überträgt
-`customerId` **nur für eigenständige Belege** über die neue reine Funktion
-`explicitCustomerIdForRangeCopy` (`server/expenseRules.ts`), plus 7 Tests im Gate.
+**Zwei Punkte fällig, beide NICHT im Code offen:**
 
-> **🪤 FALLGRUBE, die den Fix nötig macht (nicht wegoptimieren!):** `getAllExpenses` hat **zwei**
-> Zweige, die `customerId` unter **demselben Feldnamen** liefern — `server/db.ts:762` selektiert
-> `timeEntries.customerId` (Kunde des **Eltern-Zeiteintrags**), `server/db.ts:808` selektiert
-> `expenses.customerId` (die **explizite** Zuordnung). Ein blindes `customerId: expense.customerId`
-> würde für verknüpfte Belege den Zeiteintrags-Kunden als *explizite* Zuweisung schreiben und die
-> Attributionssemantik dauerhaft ändern. Diskriminator ist `timeEntryId == null`.
+1. **NAS-Prod-Rollout** (NAS-Chat, `/nas-rollout`). PROD steht weiterhin auf **v2.4.0**, main auf
+   v2.7.4 — dazwischen liegen 2.5.0, 2.5.2, 2.5.5, 2.6.0, 2.6.2, 2.6.4, 2.7.0, 2.7.3, 2.7.4.
+   Maßgeblich ist Manifest `2.7.4.json` (löst `2.7.3.json` ab). **Vorbedingung unverändert:** vor dem
+   Rollout `node scripts/analyze-expense-attribution.mjs` (read-only) **erneut** fahren — ADR 0002,
+   offener Punkt 5 (kategoriefremde Enddaten aus früheren Kategoriewechseln; die Prüfung vom
+   2026-08-03 deckt sie nicht ab). **Zusätzlich auf Dev abzunehmen:** der neue Betrags-Hinweis in der
+   Reisekosten-Maske wurde **nie visuell geprüft** (lokal läuft seit A5 weder Server noch MySQL) —
+   Kilometerpauschale-Beleg öffnen, nur den Kommentar ändern, es darf kein stiller Betragswechsel
+   passieren.
+2. **Offene Entscheidung des Account-Inhabers** (klein, UX): Bei der **Neuanlage** eines
+   Kilometerpauschale-Belegs wird ein eingetippter Betrag weiterhin **ohne Rückmeldung** durch
+   km × Pauschale ersetzt — der Speicherpfad ignoriert das Betrag-Feld für diese Kategorie. Das ist
+   Alt-Verhalten, aber dieselbe Klasse stiller Überschreibung, gegen die v2.7.4 antritt. Sauberster
+   Fix wäre, das Betrag-Feld für `mileage_allowance` auf `readOnly` zu setzen (der berechnete Wert
+   steht ohnehin darunter). Beim Bearbeiten ist das Problem seit v2.7.4 gelöst (Hinweis mit altem
+   und neuem Betrag).
 
-**Status:** `npx tsc --noEmit` → Exit 0, Gate → **184/184 grün**. **Der Senior-Review (3-Agenten-Loop,
-K2) steht noch aus** — das ist der **erste Schritt** der neuen Sitzung, danach Commit.
-
-**Danach fällig (Reihenfolge):**
-1. Senior-Review des customerId-Fixes → Commit (`fix(copy): …`).
-2. **Rollout-Manifest** `node scripts/generate-rollout-manifest.mjs --notes "…"` + **Tag** `v<version>`
-   — für v2.6.4 und v2.7.0 wurde beides **bewusst aufgeschoben**, damit alles in *einem* Release geht.
-   Letztes Manifest ist `2.6.2.json`, letzter Tag `v2.6.2` → **beides fehlt für 2.6.4/2.7.0/den
-   customerId-Fix.**
-3. Push (origin/main steht auf v2.7.0, Drift 0/0).
-
-**Bekannter, NICHT gefixter Folgebefund** (vom Junior gemeldet, noch nicht vorgelegt): `getAllExpenses`
-selektiert **`distance`, `rate`, `liters`, `pricePerLiter`** in **keinem** der beiden Zweige. Der
-Kopier-Payload liest sie trotzdem (`routers.ts:1350-1353`) → immer `undefined` → **die Kopie verliert
-die Berechnungsgrundlage**: Tanken ohne `liters`/`pricePerLiter`, Mietwagen und Kilometerpauschale ohne
-`distance`/`rate`. Der Betrag (`amount`) bleibt korrekt, die Nachvollziehbarkeit nicht. Fix wäre
-additiv (Spalten in beide Zweige aufnehmen) — **Entscheidung des Account-Inhabers einholen.**
+> **🪤 FALLGRUBE, die weiterhin gilt (nicht wegoptimieren!):** `getAllExpenses` hat **zwei** Zweige,
+> die Felder unter **demselben Namen** aus **verschiedenen Quellen** liefern. `customerId`:
+> `server/db.ts` verknüpfter Zweig = `timeEntries.customerId` (Kunde des **Eltern-Zeiteintrags**),
+> Standalone-Zweig = `expenses.customerId` (die **explizite** Zuordnung). Diskriminator
+> `timeEntryId == null` (`isLinkedExpense`). Seit v2.7.4 gilt dasselbe für **`rate`**: der verknüpfte
+> Zweig joint `expenses` UND `timeEntries`, **beide** haben eine Spalte `rate` — selektiert wird
+> `expenses.rate` (Kilometerpauschale), **nicht** `timeEntries.rate` (Tagessatz). Beide Fallgruben
+> sind im Gate per Quelltext-Wächter gepinnt; ein Rückbau wird rot.
 
 ---
 
@@ -53,11 +51,12 @@ additiv (Spalten in beide Zweige aufnehmen) — **Entscheidung des Account-Inhab
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich). NIE in
   `ProTrackr_developing_path` (= `nas-setup`, NAS-Welt).
 - **Stand:** main-HEAD **v2.7.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
-  App-Release **v2.7.0** (2026-08-04), `origin/main` synchron (Drift `0 0`).
-  **⚠️ Working Tree NICHT sauber** — ein fertiger, unreviewter Change liegt offen (§0.1).
+  App-Release **v2.7.4** (2026-08-04), `origin/main` synchron (Drift `0 0`), **Working Tree sauber**.
+  Manifest `2.7.4.json` + Tag `v2.7.4` gesetzt.
 - **Versionsstände auseinander:** **PROD läuft weiterhin auf `v2.4.0`** (Stand 2026-08-04) — die
   v2.5.0-Promotion wurde nie abgeschlossen. Zwischen Prod und main liegen damit **v2.5.0, v2.5.2,
-  v2.5.5, v2.6.0, v2.6.2, v2.6.4, v2.7.0**. Ein Rollout bringt alles auf einmal; Details §0.1 + §6.7.
+  v2.5.5, v2.6.0, v2.6.2, v2.6.4, v2.7.0, v2.7.3, v2.7.4**. Ein Rollout bringt alles auf einmal;
+  Details §0.1 + §6.7 + §6.8.
   Die Workstreams **bis v2.4.0** sind live auf Prod:
   1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — live auf Prod (Prod-Tab-„(DEV)"-Bug behoben).
   2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — live auf Prod.
@@ -65,11 +64,14 @@ additiv (Spalten in beide Zweige aufnehmen) — **Entscheidung des Account-Inhab
   4. **§6.2-Aufräumaufgaben — live auf Prod (v2.4.0):** (a) **TZ-Kohärenz** (v2.3.5, `warsawDateKey`);
      (b) **persistenter MySQL-Session-Store** (v2.4.0, `express-mysql-session` + Migration
      `0025_sessions`) — Abnahme bestanden (Login überlebt Container-Restart).
-- **Offen (Kurzliste, Details §0.1):** (1) Senior-Review + Commit des `customerId`-Fixes;
-  (2) **Manifest + Tag fehlen für 2.6.4/2.7.0**; (3) **NAS-Prod-Rollout** (Prod = v2.4.0, NAS-Chat,
-  vorher Analyse-Skript erneut fahren — ADR 0002 offene Punkte 3+5); (4) **664,17 EUR** aus den
-  verfallenen Tickets #605/#492 sind **abrechenbar, aber noch nicht nachberechnet** (§6.5, kaufmännisch);
-  (5) Entscheidung zu `distance`/`rate`/`liters`/`pricePerLiter`, die beim Kopieren verlorengehen.
+- **Offen (Kurzliste, Details §0.1):** (1) **NAS-Prod-Rollout** (Prod = v2.4.0, NAS-Chat, Manifest
+  `2.7.4.json`; vorher Analyse-Skript erneut fahren — ADR 0002 offene Punkte 3+5; **visuelle Abnahme
+  des Betrags-Hinweises auf Dev nachholen**); (2) **664,17 EUR** aus den verfallenen Tickets
+  #605/#492 sind **abrechenbar, aber noch nicht nachberechnet** (§6.5, kaufmännisch); (3) kleine
+  offene UX-Entscheidung: Betrag-Feld bei **Neuanlage** einer Kilometerpauschale wird still
+  überschrieben (§0.1 Punkt 2). — **Erledigt in dieser Sitzung:** `customerId`-Fix reviewt +
+  released (v2.7.3), Manifest + Tag für 2.6.4/2.7.0 nachgeholt, Berechnungsgrundlage und
+  KI-Freigabe-Zuordnung gefixt (v2.7.4).
 - **Historie:** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
   (Prod v2.3.0 → v2.4.0, Image `91e956650dd9`); Migration `0025` auf Dev+Prod angewandt. **Erster
   NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
@@ -475,6 +477,52 @@ Beide Änderungen ziehen die letzten Stellen nach, die Belege noch nach `expense
    `expenses.date` wäre grün geblieben. Jetzt wird der SQL-Baustein über `MySqlDialect` gerendert und
    assertiert.
 
+### 6.8 Kundenzuordnung + Berechnungsgrundfeld-Verlust (v2.7.3 + v2.7.4) — ✅ ERLEDIGT, 2026-08-04
+
+Drei Stellen, an denen beim Schreiben eines Belegs Information **still** verlorenging. Je
+3-Agenten-Loop mit Senior-PASS; Manifest `2.7.4.json`, Tag `v2.7.4`.
+
+**v2.7.3 — „Zeitraum kopieren" verlor die explizite Kundenzuordnung** (`b3625d0`)
+- Der Kopier-Payload trug `expenses.customerId` nicht mit. Eine kopierte **eigenständige** Position
+  landete mit `customerId = NULL` und fiel auf die Datums-Heuristik zurück — an einem Tag mit zwei
+  Kunden (oder ohne Zeiteintrag) **still raus aus der Kundenabrechnung**, bei `exclusive` kein
+  weiterberechneter Umsatz. Betrag blieb korrekt, Zuordnung nicht.
+- Übernahme über `explicitCustomerIdForRangeCopy`, **nur für eigenständige Belege**.
+
+**v2.7.4 — Berechnungsgrundlage + KI-Freigabe** (`be5a1eb`)
+- `getAllExpenses` selektierte `distance`/`rate`/`liters`/`pricePerLiter` in **keinem** Zweig,
+  obwohl der Kopier-Payload sie liest → immer `undefined` → die Kopie eines Tank-, Mietwagen- oder
+  Kilometerpauschale-Belegs hatte einen korrekten `amount`, aber **keinen Nachweis** mehr. Dieselbe
+  Lücke machte die Bearbeiten-Maske für `mileage_allowance` **de facto unbenutzbar**: Felder leer,
+  Wächter brach jeden Speichervorgang ab.
+- Beide **KI-Freigabepfade** lösten einen Ziel-Kunden auf, prüften sogar den **Zugriff** darauf, und
+  verwarfen ihn dann — `toExpenseMutationPayload` kennt `customerId` gar nicht. Ergebnis: dasselbe
+  Fehlerbild wie beim Kopieren. Neu: `explicitCustomerIdForApproval`, in beiden Pfaden.
+- **K4:** Das Prädikat „ist verknüpft" stand zweimal wortgleich → jetzt einmal als `isLinkedExpense`;
+  Zahl-Normalisierung als `toCustomerIdOrNull` (fordert `> 0`, damit Zugriffs-Guard und Schreibpfad
+  dieselbe Menge akzeptieren — eine `0` lief sonst am truthy-Guard vorbei in einen rohen FK-Fehler).
+- **Folgeänderung in der Maske:** Da sie jetzt durchläuft statt abzubrechen, hätte eine reine
+  Kommentaränderung den Betrag still auf km × Pauschale korrigiert (Import und KI-Freigabe setzen
+  Betrag und Grundlage unabhängig). Auf Entscheidung des Account-Inhabers zeigt sie einen **Hinweis
+  mit altem und neuem Betrag**, sobald beide auseinanderliegen — Bedingung deckungsgleich mit dem
+  Speicherpfad (`Math.round(x * 100)`) **und** dessen Guard (`> 0`).
+
+**🔑 Lessons:**
+1. **Ein Feldname ist keine Quellenangabe.** `getAllExpenses` liefert `customerId` und `rate` je nach
+   Zweig aus **verschiedenen Tabellen**. Wer ein solches Objekt in eine *Schreib*operation
+   weiterreicht, muss den Zweig kennen — sonst wird der Kunde des Zeiteintrags zur „expliziten"
+   Belegzuweisung oder der Tagessatz zur Kilometerpauschale. Beide Fallen sind jetzt per
+   Quelltext-Wächter gepinnt.
+2. **Ein Ladefehler kann sich als Validierungsfehler tarnen.** Die Maske war für Kilometerpauschale
+   unbenutzbar — sichtbar aber nur als Toast „Bitte Kilometer eingeben", nicht als fehlendes Feld.
+   Die Ursache lag zwei Schichten tiefer im SELECT.
+3. **Wer einen Ladefehler behebt, schaltet Schreibpfade frei, die vorher nie liefen.** Der
+   Betrags-Hinweis existiert nur, weil das Beheben von (1) einen bis dahin toten Pfad aktiviert hat.
+   Bei jedem „wir laden jetzt zusätzlich X" prüfen, wer X **schreibt**.
+4. **Prüf-Guard und Schreibpfad müssen dieselbe Menge akzeptieren.** `else if (targetCustomerId)`
+   (truthy) und `Number.isFinite` (lässt `0` durch) ergaben zusammen einen Wert, der die
+   Zugriffsprüfung übersprang.
+
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
 - **Main-only in diesem Chat** ([[feedback_main_only_session]]); NAS hat eigenen Chat.
@@ -508,9 +556,13 @@ Beide Änderungen ziehen die letzten Stellen nach, die Belege noch nach `expense
 
 ## 9. ROLLBACK-/SICHERHEITSPUNKTE
 
-- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main-HEAD` = v2.4.x (App-Release v2.4.0).
-  Tags: `v2.1.28`, `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `v2.3.5`, `v2.4.0`; NAS-Prod-Rollout-
-  Tags `nas-rollout/2.4.0` (2026-07-06), `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
+- Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main-HEAD` = **v2.7.x**
+  (App-Release **v2.7.4**, Commit `be5a1eb`).
+  Tags: `v2.1.28`, `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `v2.3.5`, `v2.4.0`, `v2.6.0`,
+  `v2.6.2`, **`v2.7.3`**, **`v2.7.4`**; NAS-Prod-Rollout-Tags `nas-rollout/2.4.0` (2026-07-06),
+  `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
+  **Hinweis:** `v2.7.3` deckt zugleich 2.6.4 und 2.7.0 ab — für die beiden wurden Tag und Manifest
+  bewusst aufgeschoben und in **einem** Release nachgeholt. Für 2.5.x existieren keine eigenen Tags.
 - **v2.4.0 war der ERSTE NAS-Rollout mit Schema-Change seit 0024** (live auf Prod): `sessions`-Tabelle
   (Migration `0025`) + neue Runtime-Dependency `express-mysql-session`. **Rollback (falls je nötig):**
   Migration `0025` ist additiv (`CREATE TABLE IF NOT EXISTS`, keine bestehende Tabelle berührt) →
