@@ -20,7 +20,7 @@ Vorkommen von `customerId: expense.customerId`).
 
 1. **NAS-Prod-Rollout** (NAS-Chat, `/nas-rollout`). PROD steht weiterhin auf **v2.4.0**, main auf
    v2.7.4 — dazwischen liegen 2.5.0, 2.5.2, 2.5.5, 2.6.0, 2.6.2, 2.6.4, 2.7.0, 2.7.3, 2.7.4.
-   Maßgeblich ist Manifest `2.7.4.json` (löst `2.7.3.json` ab). **Vorbedingung unverändert:** vor dem
+   Maßgeblich ist Manifest `2.7.4.json` (löst `2.7.3.json` und `2.7.2.json` ab). **Vorbedingung unverändert:** vor dem
    Rollout `node scripts/analyze-expense-attribution.mjs` (read-only) **erneut** fahren — ADR 0002,
    offener Punkt 5 (kategoriefremde Enddaten aus früheren Kategoriewechseln; die Prüfung vom
    2026-08-03 deckt sie nicht ab). **Zusätzlich auf Dev abzunehmen:** der neue Betrags-Hinweis in der
@@ -522,6 +522,15 @@ Drei Stellen, an denen beim Schreiben eines Belegs Information **still** verlore
 4. **Prüf-Guard und Schreibpfad müssen dieselbe Menge akzeptieren.** `else if (targetCustomerId)`
    (truthy) und `Number.isFinite` (lässt `0` durch) ergaben zusammen einen Wert, der die
    Zugriffsprüfung übersprang.
+5. **⚠️ Release-Artefakte gegen den FRISCHEN Remote-Stand prüfen, nicht gegen den Sessionstart.**
+   Während dieser Sitzung hat eine **Parallelsession** im selben Worktree (21:53) Manifest
+   `2.7.2.json` erzeugt und die Tags `v2.6.4` + `v2.7.0` gesetzt — genau die Artefakte, die laut
+   Auftrag „fehlten". Der Sessionstart-Befund (`git tag --list` zeigte nur bis `v2.6.2`) war beim
+   Setzen der Tags längst veraltet. Entstandener Schaden: keiner (die Manifest-Reihe
+   `2.7.2 → 2.7.3 → 2.7.4` ist konsistent, jedes pinnt einen eigenen Commit), aber die Begründung im
+   Tag `v2.7.3` („holt 2.6.4/2.7.0 nach") ist unzutreffend. **Vor `git tag` und vor dem Manifest
+   immer erneut `git fetch` + `git tag --list` + `ls .claude/rollouts/`.** Siehe
+   [[feedback_parallel_sessions_one_worktree]].
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
@@ -558,11 +567,11 @@ Drei Stellen, an denen beim Schreiben eines Belegs Information **still** verlore
 
 - Alles auf **GitHub `DoeringConsulting/ProTrackr`**, `origin/main-HEAD` = **v2.7.x**
   (App-Release **v2.7.4**, Commit `be5a1eb`).
-  Tags: `v2.1.28`, `v2.2.0`, `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `v2.3.5`, `v2.4.0`, `v2.6.0`,
-  `v2.6.2`, **`v2.7.3`**, **`v2.7.4`**; NAS-Prod-Rollout-Tags `nas-rollout/2.4.0` (2026-07-06),
-  `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
-  **Hinweis:** `v2.7.3` deckt zugleich 2.6.4 und 2.7.0 ab — für die beiden wurden Tag und Manifest
-  bewusst aufgeschoben und in **einem** Release nachgeholt. Für 2.5.x existieren keine eigenen Tags.
+  Tags (Stand 2026-08-04, `git ls-remote --tags origin`): `v2.1.21`, `v2.1.22`, `v2.1.28`, `v2.2.0`,
+  `v2.2.2`, `v2.2.3`, `v2.3.0`, `v2.3.3`, `v2.3.5`, `v2.4.0`, `v2.5.0`, `v2.5.2`, `v2.5.5`, `v2.6.0`,
+  `v2.6.2`, `v2.6.4`, `v2.7.0`, **`v2.7.3`**, **`v2.7.4`**; NAS-Prod-Rollout-Tags
+  `nas-rollout/2.4.0` (2026-07-06), `nas-rollout/2.3.0`, `nas-rollout/2.1.28` etc.
+  Manifest-Reihe zuletzt: `2.6.2` → `2.7.2` → `2.7.3` → **`2.7.4`** (maßgeblich).
 - **v2.4.0 war der ERSTE NAS-Rollout mit Schema-Change seit 0024** (live auf Prod): `sessions`-Tabelle
   (Migration `0025`) + neue Runtime-Dependency `express-mysql-session`. **Rollback (falls je nötig):**
   Migration `0025` ist additiv (`CREATE TABLE IF NOT EXISTS`, keine bestehende Tabelle berührt) →
