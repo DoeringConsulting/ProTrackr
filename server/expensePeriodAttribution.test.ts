@@ -10,7 +10,11 @@ import {
 import { toExpenseMutationPayload, type ReceiptExpenseCandidate } from "./receiptAi";
 // Bewusst aus `./expenseRules` und NICHT aus `./routers`: dieser Test steht im
 // pre-commit-Gate und muss abhängigkeitsarm bleiben (kein Router-Graph, kein bcrypt).
-import { validateExpenseDateRules } from "./expenseRules";
+import { readFileSync } from "node:fs";
+import { sql } from "drizzle-orm";
+import { MySqlDialect } from "drizzle-orm/mysql-core";
+import { expenses as expensesTable } from "../drizzle/schema";
+import { expenseServiceEndDateSql, validateExpenseDateRules } from "./expenseRules";
 
 /**
  * Kanonische Zeitraum-Zuordnung von (Reisekosten-)Belegen. Rein, keine DB.
@@ -560,5 +564,265 @@ describe("Kategoriewechsel räumt die Datumsfelder der alten Kategorie", () => {
     const afterSwitch = { category: "car", date: "2026-06-30", checkInDate: "", checkOutDate: "2026-07-02" };
     expect(() => validateExpenseDateRules(afterSwitch)).not.toThrow();
     expect(isExpenseInPeriod(afterSwitch, JULY.start, JULY.end)).toBe(true);
+  });
+});
+
+/**
+ * DESTRUKTIVER PFAD — Zurücksetzen/Purge (`clearTimeAndExpenseEntries`, `routers.ts`).
+ *
+ * Was der Nutzer für einen Monat abgerechnet SIEHT, muss ein Reset dieses Monats auch
+ * löschen. Vorher filterte der Purge über `DATE(expenses.date)` und lief damit an
+ * ADR 0002 vorbei — Beleg #596 (Hotel 30.06.→02.07.) stand in der JULI-Abrechnung, wurde
+ * aber von einem JUNI-Reset gelöscht und von einem Juli-Reset nicht erfasst.
+ *
+ * Die Regel existiert produktiv in GENAU ZWEI Formulierungen, weil sie in zwei Laufzeiten
+ * ausgewertet wird — mehr geht nicht, weniger auch nicht:
+ *
+ *   (1) SQL:  `expenseServiceEndDateSql` (`server/expenseRules.ts`) → der Purge
+ *   (2) JS:   `isExpenseInPeriod` (`client/src/lib/monthlyFinancials.ts`) → die Abrechnung
+ *
+ * Dieser Block sichert beide Seiten ab:
+ *   - Abschnitt 1 rendert (1) über den echten MySQL-Dialekt und assertiert den erzeugten
+ *     SQL-String. Ohne das wäre die SQL-Seite ungetestet — ein Rückbau auf
+ *     `DATE(expenses.date)` bliebe unbemerkt.
+ *   - Abschnitt 3 pinnt die Semantik von (1) gegen (2). Das ist der eigentliche Zweck der
+ *     Umstellung: Löschumfang == Abrechnungsumfang.
+ *
+ * Die Werte kommen so aus der DB, wie Drizzle sie liefert: `date`, `checkInDate` und
+ * `checkOutDate` sind `timestamp(..., { mode: "string" })` (`drizzle/schema.ts`), also
+ * Strings — `""` erreicht die Spalte nie, `normalizeExpenseMutationPayload` mappt es
+ * vorher auf `NULL`.
+ */
+describe("Purge/Zurücksetzen: löscht nach Leistungsende (deckungsgleich zur Abrechnung)", () => {
+  const dialect = new MySqlDialect();
+
+  /** Exakt das Prädikat, das `clearTimeAndExpenseEntries` auf Belege anwendet. */
+  const renderPurgeExpenseFilter = (from: string, to: string) =>
+    dialect.sqlToQuery(
+      sql`DATE(${expenseServiceEndDateSql(expensesTable)}) BETWEEN ${from} AND ${to}`
+    );
+
+  /** Backticks und Whitespace raus — die Struktur wird geprüft, nicht der Quoting-Stil. */
+  const normalizeSql = (statement: string) =>
+    statement.replace(/`/g, "").replace(/\s+/g, " ").trim();
+
+  /**
+   * TEST-ORAKEL: die SQL-Semantik `DATE(COALESCE(checkOutDate, date)) BETWEEN …` in JS
+   * nachgebildet, um sie in Abschnitt 3 gegen `isExpenseInPeriod` stellen zu können.
+   *
+   * Bewusst NUR hier im Test. Die Key-Ableitung ist **absichtlich identisch** zu
+   * `toDateKey` — das ist keine Schwäche, sondern Voraussetzung: Die Matrix soll die
+   * **Zuordnungssemantik** pinnen (COALESCE-Reihenfolge, Grenzen inklusive, Durchfallen
+   * bei leer/unparsebar), NICHT das Datums-Parsing. Wäre die Parsung hier abweichend,
+   * würde die Matrix Parsing-Unterschiede statt Zuordnungsfehler melden.
+   * Ein drittes Exemplar dieser Regel im PRODUKTIVCODE wäre dagegen ein K4-Verstoß ohne
+   * Nutzen: es hätte keinen Aufrufer und würde nur eine weitere Driftquelle schaffen.
+   *
+   * `from`/`to` `null` (Löschmodus „all") entspricht dem SQL-Zweig `TRUE`.
+   */
+  const sqlDateKey = (value: unknown): string | null => {
+    if (!value) return null;
+    const parsed = value instanceof Date ? value : new Date(String(value));
+    if (Number.isNaN(parsed.getTime())) return null;
+    return [
+      parsed.getFullYear(),
+      String(parsed.getMonth() + 1).padStart(2, "0"),
+      String(parsed.getDate()).padStart(2, "0"),
+    ].join("-");
+  };
+  const purgeMatches = (
+    expense: { date?: unknown; checkOutDate?: unknown },
+    from: string | null,
+    to: string | null
+  ): boolean => {
+    if (!from || !to) return true;
+    const serviceEndKey = sqlDateKey(expense?.checkOutDate) ?? sqlDateKey(expense?.date);
+    return serviceEndKey !== null && serviceEndKey >= from && serviceEndKey <= to;
+  };
+
+  /**
+   * Der Filter VOR der Umstellung — `DATE(expenses.date) BETWEEN …`. Nur hier im Test,
+   * um die Verhaltensänderung explizit festzuhalten statt sie zu behaupten.
+   */
+  const legacyDateOnlyMatch = (expense: { date?: unknown }, from: string, to: string) => {
+    const key = String(expense.date ?? "").slice(0, 10);
+    return key >= from && key <= to;
+  };
+
+  describe("1) Das produktive SQL-Prädikat", () => {
+    it("rendert DATE(COALESCE(checkOutDate, date)) — und nicht DATE(date)", () => {
+      const query = renderPurgeExpenseFilter("2026-07-01", "2026-07-31");
+      expect(normalizeSql(query.sql)).toBe(
+        "DATE(COALESCE(expenses.checkOutDate, expenses.date)) BETWEEN ? AND ?"
+      );
+    });
+
+    it("nimmt die Spalten in der richtigen Reihenfolge — checkOutDate schlägt date", () => {
+      // Vertauscht wäre `date` immer gesetzt (NOT NULL) und `checkOutDate` nie wirksam:
+      // der Fix wäre lautlos zurückgebaut.
+      const rendered = normalizeSql(renderPurgeExpenseFilter("2026-07-01", "2026-07-31").sql);
+      expect(rendered.indexOf("checkOutDate")).toBeLessThan(rendered.indexOf("expenses.date"));
+    });
+
+    it("bindet die Zeitraumgrenzen als Parameter (keine String-Interpolation)", () => {
+      const query = renderPurgeExpenseFilter("2026-07-01", "2026-07-31");
+      expect(query.params).toEqual(["2026-07-01", "2026-07-31"]);
+      expect(query.sql).not.toContain("2026-07-01");
+    });
+
+    it("die Purge-Prozedur verwendet genau diesen Baustein", () => {
+      // Quelltext-Prüfung, weil `routers.ts` nicht importierbar ist (zieht `bcrypt` und
+      // damit ein natives Binding ins schnelle Gate). Ohne sie bliebe genau die Drift
+      // ungesichert, um die es hier geht: ein Rückbau der Aufrufstelle auf
+      // `dateFilter(expensesTable.date)` ließe alle übrigen Tests grün.
+      //
+      // GRENZEN dieser Prüfung (bewusst in Kauf genommen): Sie deckt nur die WÖRTLICHE
+      // Schreibweise ab — `dateFilter( expensesTable.date )`, `expensesTable["date"]`
+      // oder ein direkt eingebettetes `sql`-Fragment schlüpfen durch. Umgekehrt färbt
+      // ein Kommentar, der den Alt-Aufruf zitiert, das Gate grundlos rot.
+      // Bei Umbenennung/Umformatierung hier **nachziehen, nicht löschen**.
+      // Sauberere Lösung als Folgeschritt: das gesamte Beleg-Prädikat nach
+      // `expenseRules.ts` ziehen (`purgeExpenseWhere(...)`), dann testet das Gate den
+      // vollständigen WHERE-Ausdruck und diese Quelltext-Prüfung entfällt ersatzlos.
+      const routersSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+      expect(routersSource).toContain("expenseServiceEndDateSql(expensesTable)");
+      expect(routersSource).not.toContain("dateFilter(expensesTable.date)");
+    });
+  });
+
+  describe("2) Verhalten des Prädikats (über das Test-Orakel)", () => {
+  it("REFERENZFALL #596: Hotel 30.06.→02.07. wird vom JULI-Reset gelöscht, nicht mehr vom Juni-Reset", () => {
+    expect(purgeMatches(hotelAcrossMonthEnd, JULY.start, JULY.end)).toBe(true);
+    expect(purgeMatches(hotelAcrossMonthEnd, JUNE.start, JUNE.end)).toBe(false);
+
+    // Genau umgekehrt zum alten Verhalten — das ist die Verhaltensänderung.
+    expect(legacyDateOnlyMatch(hotelAcrossMonthEnd, JUNE.start, JUNE.end)).toBe(true);
+    expect(legacyDateOnlyMatch(hotelAcrossMonthEnd, JULY.start, JULY.end)).toBe(false);
+  });
+
+  it("ohne checkOutDate entscheidet weiterhin `date` (unverändert für Taxi/Kraftstoff/Verpflegung)", () => {
+    const taxi = { date: "2026-06-30 00:00:00" };
+    expect(purgeMatches(taxi, JUNE.start, JUNE.end)).toBe(true);
+    expect(purgeMatches(taxi, JULY.start, JULY.end)).toBe(false);
+    // NULL und leerer String verhalten sich wie „nicht gesetzt" — kein stiller Ausfall
+    // aus jedem Zeitraum (der Beleg wäre sonst von KEINEM Reset mehr erfasst).
+    expect(purgeMatches({ date: "2026-06-30", checkOutDate: null }, JUNE.start, JUNE.end)).toBe(true);
+    expect(purgeMatches({ date: "2026-06-30", checkOutDate: "" }, JUNE.start, JUNE.end)).toBe(true);
+    // Gegenprobe zum alten Verhalten: hier ändert sich nichts.
+    expect(legacyDateOnlyMatch(taxi, JUNE.start, JUNE.end)).toBe(true);
+  });
+
+  it("Grenzen sind inklusive — erster und letzter Tag des Zeitraums zählen", () => {
+    expect(purgeMatches({ date: "2026-07-01" }, JULY.start, JULY.end)).toBe(true);
+    expect(purgeMatches({ date: "2026-07-31" }, JULY.start, JULY.end)).toBe(true);
+    expect(purgeMatches({ date: "2026-06-30" }, JULY.start, JULY.end)).toBe(false);
+    expect(purgeMatches({ date: "2026-08-01" }, JULY.start, JULY.end)).toBe(false);
+    // … auch wenn das Leistungsende exakt auf einer Grenze liegt.
+    expect(
+      purgeMatches({ date: "2026-06-28", checkOutDate: "2026-07-01" }, JULY.start, JULY.end)
+    ).toBe(true);
+    expect(
+      purgeMatches({ date: "2026-07-29", checkOutDate: "2026-07-31" }, JULY.start, JULY.end)
+    ).toBe(true);
+    expect(
+      purgeMatches({ date: "2026-07-30", checkOutDate: "2026-08-01" }, JULY.start, JULY.end)
+    ).toBe(false);
+    // Teilmonats-Zeitraum (Löschmodus „custom"): dieselbe Regel, engere Grenzen.
+    expect(purgeMatches({ date: "2026-07-15" }, "2026-07-15", "2026-07-20")).toBe(true);
+    expect(purgeMatches({ date: "2026-07-20" }, "2026-07-15", "2026-07-20")).toBe(true);
+    expect(purgeMatches({ date: "2026-07-14" }, "2026-07-15", "2026-07-20")).toBe(false);
+  });
+
+  it("MySQL-Timestamp-Strings ergeben denselben Kalendertag wie reine Datums-Keys (DATE())", () => {
+    // So liefert Drizzle die Spalten tatsächlich. `DATE()` schneidet die Uhrzeit ab —
+    // die Uhrzeit darf die Zuordnung an der Monatsgrenze nicht kippen.
+    const hotelFromDb = { date: "2026-06-30 00:00:00", checkOutDate: "2026-07-02 00:00:00" };
+    expect(purgeMatches(hotelFromDb, JULY.start, JULY.end)).toBe(true);
+    expect(purgeMatches(hotelFromDb, JUNE.start, JUNE.end)).toBe(false);
+    expect(purgeMatches({ date: "2026-07-31 23:59:59" }, JULY.start, JULY.end)).toBe(true);
+  });
+
+  it('Löschmodus "all" (keine Grenzen) erfasst jeden Beleg — entspricht dem SQL-Zweig TRUE', () => {
+    expect(purgeMatches(hotelAcrossMonthEnd, null, null)).toBe(true);
+    expect(purgeMatches({ date: "1999-01-01" }, null, null)).toBe(true);
+    // Ohne verwertbares Datum, aber mit Grenzen: kein Treffer (SQL: DATE(NULL) → NULL).
+    expect(purgeMatches({}, JULY.start, JULY.end)).toBe(false);
+  });
+
+  it("Altbestand mit Enddatum VOR dem Startdatum: das Enddatum entscheidet trotzdem", () => {
+    // Chronologie-Verletzung, die vor `validateExpenseDateRules` speicherbar war (und
+    // per direkter DB-Manipulation weiterhin entstehen kann). COALESCE fragt nicht nach
+    // Plausibilität, `checkOutDate ?? date` ebenso wenig — beide nehmen stumpf das
+    // Enddatum. Das ist nicht schön, aber KONSISTENT: der Beleg wird von dem Reset
+    // erfasst, in dessen Monat ihn auch die Abrechnung ausweist. Genau das ist die
+    // Eigenschaft, auf die es hier ankommt; die Plausibilität sichert der Schreibpfad.
+    const brokenChronology = { date: "2026-07-10", checkOutDate: "2026-06-05" };
+    expect(purgeMatches(brokenChronology, JUNE.start, JUNE.end)).toBe(true);
+    expect(purgeMatches(brokenChronology, JULY.start, JULY.end)).toBe(false);
+    expect(isExpenseInPeriod(brokenChronology, JUNE.start, JUNE.end)).toBe(true);
+    expect(isExpenseInPeriod(brokenChronology, JULY.start, JULY.end)).toBe(false);
+  });
+  });
+
+  /**
+   * DER EIGENTLICHE ZWECK DER UMSTELLUNG: dieselbe Menge, die für einen Monat
+   * abgerechnet wird, ist die Menge, die ein Reset dieses Monats löscht.
+   */
+  describe("3) Deckungsgleichheit mit isExpenseInPeriod (Abrechnung == Löschumfang)", () => {
+    const cases: Array<{ label: string; expense: { date?: unknown; checkOutDate?: unknown } }> = [
+      { label: "Hotel #596 über den Monatswechsel", expense: hotelAcrossMonthEnd },
+      { label: "Hin-/Rückflug auf einem Ticket", expense: flightAcrossMonthEnd },
+      { label: "Mietwagen über den Monatswechsel", expense: carAcrossMonthEnd },
+      { label: "punktueller Beleg ohne Enddatum", expense: { date: "2026-07-05" } },
+      { label: "Beleg am ersten Tag", expense: { date: "2026-07-01" } },
+      { label: "Beleg am letzten Tag", expense: { date: "2026-07-31" } },
+      { label: "Enddatum genau auf der unteren Grenze", expense: { date: "2026-06-28", checkOutDate: "2026-07-01" } },
+      { label: "Enddatum einen Tag hinter der oberen Grenze", expense: { date: "2026-07-30", checkOutDate: "2026-08-01" } },
+      { label: "Enddatum NULL", expense: { date: "2026-07-05", checkOutDate: null } },
+      { label: "Enddatum leerer String", expense: { date: "2026-07-05", checkOutDate: "" } },
+      { label: "Enddatum unparsebar", expense: { date: "2026-07-05", checkOutDate: "kein datum" } },
+      { label: "gar kein Datum", expense: {} },
+      { label: "MySQL-Timestamp aus der DB", expense: { date: "2026-06-30 00:00:00", checkOutDate: "2026-07-02 00:00:00" } },
+      { label: "Date-Objekt statt String", expense: { date: new Date(2026, 5, 30), checkOutDate: new Date(2026, 6, 2) } },
+      { label: "Enddatum liegt im Vormonat des Zeitraums", expense: { date: "2026-05-30", checkOutDate: "2026-06-02" } },
+      // Altbestand vor `validateExpenseDateRules`: Enddatum VOR dem Startdatum. Beide
+      // Formulierungen nehmen stumpf das Enddatum — unplausibel, aber deckungsgleich.
+      { label: "Enddatum vor dem Startdatum (Chronologie-Verletzung)", expense: { date: "2026-07-10", checkOutDate: "2026-06-05" } },
+    ];
+
+    const ranges = [
+      { label: "Juni", start: JUNE.start, end: JUNE.end },
+      { label: "Juli", start: JULY.start, end: JULY.end },
+      { label: "Teilmonat 15.–20.07.", start: "2026-07-15", end: "2026-07-20" },
+      { label: "Jahr 2026", start: "2026-01-01", end: "2026-12-31" },
+    ];
+
+    for (const { label, expense } of cases) {
+      for (const range of ranges) {
+        it(`${label} — ${range.label}: Purge-Filter == Abrechnungs-Filter`, () => {
+          expect(purgeMatches(expense, range.start, range.end)).toBe(
+            isExpenseInPeriod(expense, range.start, range.end)
+          );
+        });
+      }
+    }
+
+    it("Partition: jeder Beleg wird von GENAU EINEM Monats-Reset erfasst — nichts doppelt, nichts übrig", () => {
+      // Das ist die Sicherheits-Invariante der Umstellung: über eine lückenlose
+      // Monatsfolge verschiebt sich der Löschumfang nur, er wächst nicht und lässt
+      // keinen Beleg zurück. Belege ohne verwertbares Datum sind ausgenommen — die
+      // erfasst nur der Löschmodus „all".
+      const months = [
+        { start: "2026-05-01", end: "2026-05-31" },
+        { start: "2026-06-01", end: "2026-06-30" },
+        { start: "2026-07-01", end: "2026-07-31" },
+        { start: "2026-08-01", end: "2026-08-31" },
+      ];
+      for (const { label, expense } of cases) {
+        if (label === "gar kein Datum") continue;
+        const hits = months.filter((m) => purgeMatches(expense, m.start, m.end)).length;
+        expect(hits, `${label} wurde von ${hits} Monats-Resets erfasst`).toBe(1);
+      }
+    });
   });
 });

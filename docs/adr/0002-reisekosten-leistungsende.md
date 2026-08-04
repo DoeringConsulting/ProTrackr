@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Datum:** 2026-08-03
 - **Entscheider:** Alexander Döring (Account-Inhaber)
-- **Betrifft:** `client/src/lib/monthlyFinancials.ts`, `client/src/pages/Reports.tsx`, `client/src/pages/Dashboard.tsx`, `client/src/pages/Import.tsx`, Kundenabrechnung, Steuerbasis
+- **Betrifft:** `client/src/lib/monthlyFinancials.ts`, `client/src/pages/Reports.tsx`, `client/src/pages/Dashboard.tsx`, `client/src/pages/Import.tsx`, `server/expenseRules.ts`, `server/routers.ts` (Purge, siehe Offener Punkt 4), Kundenabrechnung, Steuerbasis
 - **Ersetzt:** [ADR 0001](0001-reisekosten-zeitraum-zuordnung.md) (`expense.date` als kanonische Zuordnung)
 - **Bezug:** KERN K4 (SSoT), K8 (Zeit-Invarianten), K13 (ADR), K14 (Steuer-/Berechnungslogik)
 
@@ -311,12 +311,108 @@ geldwirksam (Kundenrechnungen); das Skript weist die betroffenen Belege und die 
 > selten. Hin-/Rückrichtung ist zudem **in keinem DB-Feld kodiert**: `flightRouteType` beschreibt
 > Geografie (`international`), nicht Hin/Rück.
 
-### 4. Bulk-Delete/Purge filtert weiter über `expenses.date`
+### 4. Bulk-Delete/Purge filterte über `expenses.date` (ERLEDIGT)
 
-`server/routers.ts` löscht per `DATE(expenses.date) BETWEEN dateFrom AND dateTo`. Ein Beleg,
-der nach neuer Regel im Juli ausgewiesen wird, kann damit von einem „Juni"-Purge erfasst werden.
-**Bewusst nicht geändert:** destruktive Admin-Funktion mit eigener Semantik („welche Datensätze wurden
-in diesem Zeitraum erfasst"), eigene Entscheidung erforderlich.
+`server/routers.ts` löschte per `DATE(expenses.date) BETWEEN dateFrom AND dateTo`. Ein Beleg,
+der nach neuer Regel im Juli ausgewiesen wird, konnte damit von einem „Juni"-Purge erfasst werden.
+Zunächst **bewusst nicht geändert:** destruktive Admin-Funktion mit eigener Semantik („welche
+Datensätze wurden in diesem Zeitraum erfasst"), eigene Entscheidung erforderlich.
+
+> **✅ ERLEDIGT — der Purge folgt jetzt dem Leistungsende. Kein Schema-Change, keine Migration.**
+>
+> **Entscheidung:** Die oben skizzierte Erfassungs-Semantik („welche Datensätze wurden in diesem
+> Zeitraum erfasst") wird **verworfen**. Maßgeblich ist, dass ein Reset genau das löscht, was der
+> Nutzer für diesen Zeitraum abgerechnet **sieht**. Beleg **#596** (Hotel 30.06.→02.07.) machte die
+> Lücke konkret: Er steht in der **Juli**-Abrechnung, wurde aber von einem **Juni**-Reset gelöscht
+> und von einem Juli-Reset nicht erfasst. Bei einer destruktiven Funktion ist eine Differenz
+> zwischen „angezeigt" und „gelöscht" nicht vertretbar.
+>
+> **Umgesetzt** in `clearTimeAndExpenseEntries` (`server/routers.ts`):
+> - Der Belegfilter lautet jetzt
+>   `DATE(COALESCE(expenses.checkOutDate, expenses.date)) BETWEEN dateFrom AND dateTo` —
+>   fachlich deckungsgleich zur kanonischen Formel `leistungsende = checkOutDate ?? date`
+>   (`isExpenseInPeriod`).
+> - Der SQL-Baustein liegt als **`expenseServiceEndDateSql`** in `server/expenseRules.ts`, nicht
+>   inline im Router. Grund: nur dort ist er vom pre-commit-Gate aus erreichbar (der Router zieht
+>   `bcrypt` nach). Damit existiert die Regel produktiv in **genau zwei** Formulierungen — eine je
+>   Laufzeit (MySQL / JS) —, und beide sind getestet. Die Spalten kommen als Parameter herein,
+>   damit `expenseRules.ts` das Schema nicht importieren muss; aus `drizzle-orm` kommt nur der
+>   reine SQL-Builder, kein Treiber.
+> - **Unverändert:** der Filter für **Zeiteinträge** (`DATE(timeEntries.date)` — ein Zeiteintrag hat
+>   kein Leistungsende), die **Löschreihenfolge** documents → expenses → timeEntries, der
+>   **Mandanten-/User-Scope** und die Berechtigungsprüfung (`adminOrMandantAdminProcedure`).
+> - **Unverändert und bewusst so: die Kaskade `timeEntryId IN (…)`.** Sie ist keine
+>   Zeitraum-Zuordnung. `fk_expenses_timeentry` ist **ON DELETE CASCADE**
+>   (`drizzle/0020_fk_constraints.sql`) — MySQL räumt die Belege eines gelöschten Zeiteintrags
+>   also ohnehin ab. Das explizite Einsammeln der IDs ist trotzdem nötig, weil
+>   `fk_documents_expense` und `fk_documents_timeentry` **ON DELETE SET NULL** sind: ohne die
+>   vorab ermittelten `expenseIds`/`timeEntryIds` blieben die zugehörigen **Dokumente** als Waisen
+>   mit `expenseId = NULL` zurück statt gelöscht zu werden — und `deleted.expenses` fiele im
+>   Rückgabewert zu niedrig aus. Daraus folgt auch die Löschreihenfolge.
+> - **Neu: alle drei Löschungen laufen in einer Transaktion** (`db.transaction`). Vorher konnte ein
+>   Abbruch zwischen den Statements die Dokumente löschen und Belege wie Zeiteinträge stehen
+>   lassen — Datensätze ohne ihren Beleg-Scan, nicht wiederherstellbar. Reihenfolge und
+>   Rückgabewerte unverändert.
+>
+> **Bewusste Einschränkung der Deckungsgleichheit (nicht verschwiegen):** Durch diese Kaskade gibt es
+> weiterhin einen Fall, in dem Löschumfang und Abrechnung auseinanderfallen — **ein Beleg mit
+> Leistungsende im Juli, der an einem JUNI-Zeiteintrag hängt, wird von einem Juni-Reset trotzdem
+> gelöscht**, obwohl er in der Juli-Abrechnung steht. Sein Zeiteintrag verschwindet, also muss er
+> mitverschwinden. Integrität schlägt hier Zeitraum-Deckungsgleichheit. Der Fall ist im Code
+> kommentiert; eine Auflösung wäre nur über ein Ablösen der FK-Bindung möglich (nicht gewollt).
+>
+> **Wirkung auf den Löschumfang:** Der Umfang **verschiebt sich, er wächst nicht**. Ein
+> monatsübergreifender Beleg wandert vom Anreise- in den Abreisemonat — er wird künftig vom
+> Reset des Abreisemonats erfasst und vom Reset des Anreisemonats nicht mehr (Kaskade ausgenommen).
+> Über eine lückenlose Monatsfolge trifft jeden Beleg weiterhin **genau ein** Reset: kein Beleg wird
+> doppelt erfasst, keiner bleibt zurück (als Invariante getestet). Löschmodus **„all"** ist
+> unberührt (kein Zeitraumfilter). Kein Beleg fällt durch das Raster: `expenses.date` ist
+> `NOT NULL` (`drizzle/schema.ts`), `COALESCE(checkOutDate, date)` also nie `NULL`.
+> **Eine Einschränkung dieser Aussage:** Ein implausibles `checkOutDate` (Tippfehler, z.B. Jahr
+> `2126`) schiebt den Beleg außer Reichweite jedes realistischen Monats-/Jahres-Resets — vorher fing
+> ihn der `date`-Filter. `validateExpenseDateRules` erzwingt nur „Ende ≥ Beginn", keine Obergrenze.
+> Das ist **konsequent, nicht fehlerhaft**: Derselbe Beleg erscheint dann auch in der Abrechnung
+> 2126, „löschen was man sieht" bleibt also erfüllt. Löschmodus „all" und die Einzellöschung bleiben
+> als Ausweg.
+> Für einen **einzelnen** Lauf kann der Umfang durchaus **größer** ausfallen als vorher — ein
+> Juli-Reset erfasst jetzt alle im Juni begonnenen, im Juli endenden Belege. Größer wird nur der
+> einzelne Lauf, nicht die Summe.
+>
+> **Tests** in `server/expensePeriodAttribution.test.ts` (pre-commit-Gate), drei Abschnitte —
+> beide Laufzeiten sind abgedeckt:
+> 1. **SQL-Seite:** `expenseServiceEndDateSql` wird über den echten `MySqlDialect` gerendert und
+>    der erzeugte String assertiert (`DATE(COALESCE(...checkOutDate, ...date)) BETWEEN ? AND ?`),
+>    inklusive Spaltenreihenfolge und Parameterbindung. Dazu eine Quelltext-Prüfung, dass die
+>    Purge-Prozedur genau diesen Baustein aufruft — `routers.ts` ist im Gate nicht importierbar
+>    (`bcrypt`), und ohne diese Prüfung bliebe ein Rückbau der Aufrufstelle auf
+>    `dateFilter(expensesTable.date)` unbemerkt grün.
+> 2. **Verhalten** am Test-Orakel (Referenzfall #596, Grenzen, MySQL-Timestamps, Löschmodus „all",
+>    Altbestand mit Enddatum vor Startdatum).
+> 3. **Deckungsgleichheit:** Fall-/Zeitraum-Matrix des Orakels gegen `isExpenseInPeriod`, plus die
+>    Partitions-Invariante (über eine lückenlose Monatsfolge trifft jeden Beleg genau ein Reset).
+>
+> Das JS-Orakel liegt **im Testfile**, nicht im Produktivcode: eine dritte produktive Formulierung
+> derselben Regel hätte keinen Aufrufer und wäre nur eine weitere Driftquelle (K4).
+>
+> **Gate-Zeitzone gepinnt (K8):** `vitest.config.ts` setzt `TZ=Europe/Warsaw`. Die
+> Zuordnungsregeln vergleichen bewusst über lokale Datumskomponenten (nie `toISOString`); ihr
+> Ergebnis hängt damit an der Prozess-Zeitzone. Unter negativem UTC-Offset (z. B.
+> `America/New_York`) fiel die Suite auseinander, obwohl produktiv nichts kaputt ist — Server und
+> DB laufen in Warschau. Ohne die Festlegung wäre das Gate latent umgebungsabhängig.
+>
+> **Mitgenommen — `toISOString` im Lösch-Dialog (`client/src/pages/settings/BackupTab.tsx`):** Die
+> Monats-Voreinstellung kam aus `new Date().toISOString().slice(0, 7)` und stand deshalb am
+> Monatsersten zwischen 00:00 und 02:00 Warschauer Zeit auf dem **Vormonat** — in einem Dialog,
+> der endgültig löscht, und ausgerechnet auf dem vollen statt dem fast leeren Monat. Das
+> Jahresfeld daneben nutzte lokale Komponenten und war dadurch zusätzlich inkonsistent. Beide
+> laufen jetzt über `warsawDateKey` (`shared/dateStichtag.ts`), ebenso der Backup-Dateiname.
+>
+> **Weiterhin offen (bewusst nicht mitgenommen, eigene Entscheidung):** Die Lösch-UI hat **keine
+> Vorschau** — kein Preview-Endpunkt, keine Mengenangabe. Der `window.confirm`-Dialog nennt nur den
+> Zeitraum; die Zahlen erscheinen erst **nach** dem Löschen im Toast bzw. im Panel „Letztes
+> Lösch-Ergebnis". Der Nutzer bestätigt eine Menge, die er vorher nicht sieht. Eine künftige
+> Vorschau **muss denselben Filter verwenden** (ein `dryRun` derselben Prozedur) — inklusive der
+> `timeEntryId`-Kaskade, sonst zeigt sie systematisch zu wenig an.
 
 ### 5. Bestandsdaten: kategoriefremde Enddaten (Rollout-Vorbehalt, OFFEN)
 

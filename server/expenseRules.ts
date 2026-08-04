@@ -13,6 +13,7 @@
 // hat. Hier hängt nichts an DB, Session oder nativen Modulen.
 
 import { TRPCError } from "@trpc/server";
+import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 
 const hhmmTimeSchema = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -46,6 +47,30 @@ export function toComparableDate(value: unknown): Date | null {
 
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Das LEISTUNGSENDE eines Belegs als SQL-Ausdruck: `COALESCE(checkOutDate, date)`.
+ *
+ * Die EINZIGE produktive Formulierung dieser Regel auf der SQL-Seite. Sie liegt hier
+ * und nicht in `routers.ts`, damit das pre-commit-Gate sie rendern und den erzeugten
+ * SQL-String assertieren kann — ohne den Router-Graph (und damit `bcrypt`) zu importieren.
+ * Aus `drizzle-orm` kommt nur der reine SQL-Builder, kein Treiber, kein nativer Code;
+ * das Modul bleibt damit so abhängigkeitsarm wie zuvor.
+ *
+ * Fachlich deckungsgleich zur kanonischen JS-Regel `leistungsende = checkOutDate ?? date`
+ * (`isExpenseInPeriod`, `client/src/lib/monthlyFinancials.ts`, ADR 0002). Zwei Laufzeiten
+ * (MySQL und JS) lassen sich nicht auf eine Implementierung reduzieren; die Gleichheit
+ * beider Formulierungen ist deshalb in `server/expensePeriodAttribution.test.ts` gepinnt.
+ *
+ * Die Spalten kommen als Parameter herein, damit dieses Modul das Drizzle-Schema nicht
+ * importieren muss.
+ */
+export function expenseServiceEndDateSql(columns: {
+  checkOutDate: SQLWrapper;
+  date: SQLWrapper;
+}): SQL {
+  return sql`COALESCE(${columns.checkOutDate}, ${columns.date})`;
 }
 
 export type ExpenseDateRuleInput = {

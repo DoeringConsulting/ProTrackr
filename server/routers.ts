@@ -24,7 +24,7 @@ import {
   type ReceiptExpenseCandidate,
 } from "./receiptAi";
 import { toScopeContext } from "./scope";
-import { validateExpenseDateRules } from "./expenseRules";
+import { expenseServiceEndDateSql, validateExpenseDateRules } from "./expenseRules";
 import { capRateStichtagKey, warsawDateKey } from "@shared/dateStichtag";
 
 async function isSameMandantForUser(actorMandantId: number | null, targetUserId: number): Promise<boolean> {
@@ -3867,11 +3867,46 @@ export const appRouter = router({
       const dateFilter = (column: any) =>
         dateFrom && dateTo ? sql`DATE(${column}) BETWEEN ${dateFrom} AND ${dateTo}` : sql`TRUE`;
 
+      // Zeiteinträge: `date` ist hier das EINZIGE Datum — ein Zeiteintrag hat kein
+      // Leistungsende. Bewusst unverändert.
       const timeEntriesToDelete = await db
         .select({ id: timeEntries.id })
         .from(timeEntries)
         .where(and(inArray(timeEntries.userId, userIds), dateFilter(timeEntries.date)));
       const timeEntryIds = timeEntriesToDelete.map((entry) => Number(entry.id));
+
+      // Zeitraum-Zuordnung eines BELEGS = Leistungsende `COALESCE(checkOutDate, date)`.
+      //
+      // WARUM Leistungsende und nicht `date`: Es muss dasselbe gelöscht werden, was der
+      // Nutzer für diesen Zeitraum abgerechnet SIEHT. Die Abrechnung (Bericht, Dashboard,
+      // Steuerbasis) ordnet Belege seit ADR 0002 über `isExpenseInPeriod`
+      // (`checkOutDate ?? date`) zu — bei Hotels ist `date` der Check-in, bei einem
+      // Hin-/Rückflug auf einem Ticket das Hinflugdatum. Mit dem alten `DATE(expenses.date)`
+      // löschte ein Juni-Reset einen Beleg, der in der JULI-Abrechnung steht (Referenzfall
+      // #596: Hotel 30.06.→02.07.), und ein Juli-Reset ließ ihn stehen. Bei einer
+      // destruktiven Funktion ist genau diese Lücke zwischen „angezeigt" und „gelöscht"
+      // nicht hinnehmbar.
+      //
+      // Der Ausdruck wird bewusst NICHT hier gebaut: `expenseServiceEndDateSql`
+      // (`server/expenseRules.ts`) ist die einzige produktive Formulierung der Regel auf
+      // der SQL-Seite und wird im pre-commit-Gate gerendert und assertiert. Inline hier
+      // wäre sie vom Gate aus nicht erreichbar (der Router zieht `bcrypt` nach).
+      //
+      // WARUM die timeEntryId-Kaskade von der Umstellung UNBERÜHRT bleibt: Sie ist keine
+      // Zeitraum-Zuordnung. `fk_expenses_timeentry` ist ON DELETE CASCADE (Migration
+      // 0020) — MySQL räumt die Belege eines gelöschten Zeiteintrags also ohnehin ab. Das
+      // explizite Einsammeln der IDs ist trotzdem nötig, weil `fk_documents_expense` und
+      // `fk_documents_timeentry` ON DELETE SET NULL sind: ohne die vorab ermittelten
+      // `expenseIds`/`timeEntryIds` blieben die zugehörigen DOKUMENTE als Waisen mit
+      // `expenseId = NULL` zurück statt gelöscht zu werden — und der Rückgabewert
+      // `deleted.expenses` fiele zu niedrig aus. Daraus folgt auch die Löschreihenfolge
+      // documents → expenses → timeEntries.
+      //
+      // Bewusste Konsequenz der Kaskade: Ein Beleg mit Leistungsende im Juli, der an einem
+      // JUNI-Zeiteintrag hängt, wird von einem Juni-Reset trotzdem gelöscht, obwohl er in
+      // der Juli-Abrechnung steht. Integrität schlägt hier Zeitraum-Deckungsgleichheit;
+      // siehe ADR 0002, Offener Punkt 4.
+      const expenseServiceEndDate = expenseServiceEndDateSql(expensesTable);
 
       const expensesToDelete = await db
         .select({ id: expensesTable.id })
@@ -3884,7 +3919,7 @@ export const appRouter = router({
             ),
             dateFrom && dateTo
               ? or(
-                  dateFilter(expensesTable.date),
+                  dateFilter(expenseServiceEndDate),
                   timeEntryIds.length > 0 ? inArray(expensesTable.timeEntryId, timeEntryIds) : sql`FALSE`
                 )
               : sql`TRUE`
@@ -3909,15 +3944,22 @@ export const appRouter = router({
           : [];
       const documentIds = documentsToDelete.map((entry) => Number(entry.id));
 
-      if (documentIds.length > 0) {
-        await db.delete(documents).where(inArray(documents.id, documentIds));
-      }
-      if (expenseIds.length > 0) {
-        await db.delete(expensesTable).where(inArray(expensesTable.id, expenseIds));
-      }
-      if (timeEntryIds.length > 0) {
-        await db.delete(timeEntries).where(inArray(timeEntries.id, timeEntryIds));
-      }
+      // Alle drei Löschungen in EINER Transaktion. Ohne sie hinterlässt ein Abbruch
+      // zwischen den Statements einen inkonsistenten Bestand — nach Delete 1 wären die
+      // Dokumente weg, die zugehörigen Belege und Zeiteinträge aber noch da: Datensätze
+      // ohne ihren Beleg-Scan, nicht wiederherstellbar. Reihenfolge (documents →
+      // expenses → timeEntries) und Rückgabewerte bleiben unverändert.
+      await db.transaction(async (tx) => {
+        if (documentIds.length > 0) {
+          await tx.delete(documents).where(inArray(documents.id, documentIds));
+        }
+        if (expenseIds.length > 0) {
+          await tx.delete(expensesTable).where(inArray(expensesTable.id, expenseIds));
+        }
+        if (timeEntryIds.length > 0) {
+          await tx.delete(timeEntries).where(inArray(timeEntries.id, timeEntryIds));
+        }
+      });
 
       return {
         success: true,
