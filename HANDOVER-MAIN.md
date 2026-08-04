@@ -18,9 +18,11 @@ Vorkommen von `customerId: expense.customerId`).
 
 **Zwei Punkte fällig, beide NICHT im Code offen:**
 
-1. **NAS-Prod-Rollout** (NAS-Chat, `/nas-rollout`). PROD steht weiterhin auf **v2.4.0**, main auf
-   v2.7.4 — dazwischen liegen 2.5.0, 2.5.2, 2.5.5, 2.6.0, 2.6.2, 2.6.4, 2.7.0, 2.7.3, 2.7.4.
-   Maßgeblich ist Manifest `2.7.4.json` (löst `2.7.3.json` und `2.7.2.json` ab). **Vorbedingung unverändert:** vor dem
+1. **NAS-Prod-Rollout** (NAS-Chat, `/nas-rollout`). PROD steht auf **v2.5.0** (Screenshot
+   Account-Inhaber, 2026-08-04 — die frühere Angabe „v2.4.0" war eine unbestätigte Annahme, siehe
+   Korrektur in §0), main auf v2.7.4 — dazwischen liegen 2.5.2, 2.5.5, 2.6.0, 2.6.2, 2.6.4, 2.7.0,
+   2.7.3, 2.7.4. Maßgeblich ist Manifest `2.7.4.json` (löst `2.7.3.json` und `2.7.2.json` ab).
+   **Prod-Stand vor der Planung frisch verifizieren**, nicht aus Dokumenten übernehmen. **Vorbedingung unverändert:** vor dem
    Rollout `node scripts/analyze-expense-attribution.mjs` (read-only) **erneut** fahren — ADR 0002,
    offener Punkt 5 (kategoriefremde Enddaten aus früheren Kategoriewechseln; die Prüfung vom
    2026-08-03 deckt sie nicht ab). **Zusätzlich auf Dev abzunehmen:** der neue Betrags-Hinweis in der
@@ -59,18 +61,31 @@ Vorkommen von `customerId: expense.customerId`).
 - **Stand:** main-HEAD **v2.7.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
   App-Release **v2.7.4** (2026-08-04), `origin/main` synchron (Drift `0 0`), **Working Tree sauber**.
   Manifest `2.7.4.json` + Tag `v2.7.4` gesetzt.
-- **Versionsstände auseinander:** **PROD läuft weiterhin auf `v2.4.0`** (Stand 2026-08-04) — die
-  v2.5.0-Promotion wurde nie abgeschlossen. Zwischen Prod und main liegen damit **v2.5.0, v2.5.2,
-  v2.5.5, v2.6.0, v2.6.2, v2.6.4, v2.7.0, v2.7.3, v2.7.4**. Ein Rollout bringt alles auf einmal;
-  Details §0.1 + §6.7 + §6.8.
-  Die Workstreams **bis v2.4.0** sind live auf Prod:
+- **Versionsstände auseinander:** **PROD läuft auf `v2.5.0`** — belegt durch Screenshot des
+  Account-Inhabers vom 2026-08-04 (:9443, Footer „Version: 2.5.0 · Build 15.07.2026, 21:41").
+  Zwischen Prod und main liegen damit **v2.5.2, v2.5.5, v2.6.0, v2.6.2, v2.6.4, v2.7.0, v2.7.3,
+  v2.7.4**. Ein Rollout bringt alles auf einmal; Details §0.1 + §6.7 + §6.8.
+  > ⚠️ **Korrektur 2026-08-04:** Bis hierher stand in dieser Handover (und im Memory) „PROD = v2.4.0,
+  > v2.5.0-Promotion nie abgeschlossen". Das war eine **unbestätigte Annahme**, die als Fakt
+  > weitergetragen wurde — Grundlage war eine Prüfung am Sessionanfang der NAS-Sitzung plus das
+  > Ausbleiben eines sichtbaren Deploy-Outputs. Die Promotion fand statt (außerhalb des sichtbaren
+  > Austauschs bzw. in einer Parallelsession). **Lehre: den Prod-Stand vor jeder Rollout-Planung frisch
+  > abfragen, nicht aus dem Chatverlauf ableiten.**
+  Die Workstreams **bis v2.5.0** sind live auf Prod:
   1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — live auf Prod (Prod-Tab-„(DEV)"-Bug behoben).
   2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — live auf Prod.
   3. **Zeitumsatz-Tooltip** (v2.3.3) — **live auf Prod** (im v2.4.0-Rollout).
   4. **§6.2-Aufräumaufgaben — live auf Prod (v2.4.0):** (a) **TZ-Kohärenz** (v2.3.5, `warsawDateKey`);
      (b) **persistenter MySQL-Session-Store** (v2.4.0, `express-mysql-session` + Migration
      `0025_sessions`) — Abnahme bestanden (Login überlebt Container-Restart).
-- **Offen (Kurzliste, Details §0.1):** (1) **NAS-Prod-Rollout** (Prod = v2.4.0, NAS-Chat, Manifest
+  5. **Dashboard-Backlog** (v2.5.0, §6.4) — „Rechnungen"-Kachel + Umsatz-Prognose-Toggle: **live auf
+     Prod** (Promotion nachträglich bestätigt, siehe Korrektur oben).
+  > **Offene Beobachtung (NAS-Chat, nicht dringend):** Der Prod-Footer nennt Build **15.07.2026 21:41**,
+  > der abgenommene Dev-Build lief auf **19:41**. Bei strikt **bit-identischer** Image-Promotion müssten
+  > beide Zeitstempel übereinstimmen. Mögliche Ursachen: separater Prod-Build oder ein Dev-Rebuild vor
+  > der Promotion. Berührt die Governance-Regel „nur bit-identische Promotion" — **im NAS-Chat zu
+  > klären**, kein Handlungsbedarf in der main-Welt.
+- **Offen (Kurzliste, Details §0.1):** (1) **NAS-Prod-Rollout** (Prod = **v2.5.0**, NAS-Chat, Manifest
   `2.7.4.json`; vorher Analyse-Skript erneut fahren — ADR 0002 offene Punkte 3+5; **visuelle Abnahme
   des Betrags-Hinweises auf Dev nachholen**); (2) **664,17 EUR** aus den verfallenen Tickets
   #605/#492 sind **abrechenbar, aber noch nicht nachberechnet** (§6.5, kaufmännisch); (3) kleine
@@ -110,7 +125,7 @@ Vorkommen von `customerId: expense.customerId`).
 
 1. **Branch/Worktree prüfen:** `cd C:\Projects\ProTrackr_main` → `git branch --show-current`
    == `main`; `git fetch origin`; Drift `git rev-list --left-right --count origin/main...HEAD`
-   == `0 0`; HEAD-Version == 2.4.0 oder neuer.
+   == `0 0`; HEAD-Version == 2.7.4 oder neuer.
 2. **Memory lesen:** `MEMORY.md` + verlinkte Einträge, v.a. [[feedback_deploy_workflow]]
    (nach A5!), [[feedback_worktree_separation]], [[feedback_3agent_workflow]],
    [[feedback_prod_only_via_dev_promotion]], [[project_umsatzchart_task]],
@@ -160,7 +175,10 @@ git commit …`** (client-only/Nicht-DB-Fixes; Tests laufen normal) ODER `Start-
 (Admin-PowerShell) vor Commits mit DB-Fixtures. Nach Push ggf. `git checkout -- client/public/sw.js`
 (Build-Artefakt-Drift). Drift danach `0 0` prüfen.
 
-## 4. AKTUELLER STAND (v2.4.0, komplett live auf Prod)
+## 4. STAND DER WORKSTREAMS BIS v2.4.0 (alle live auf Prod)
+
+> Historischer Abschnitt: beschreibt die bis v2.4.0 abgeschlossenen Workstreams. Der **aktuelle**
+> Stand steht in §0/§0.1 (main = v2.7.4, PROD = v2.5.0); die neueren Arbeiten in §6.4–§6.9.
 
 **Frühere Basis:** task_bba37780 (Reisekosten-Berichte) komplett + LIVE auf Prod (v2.1.22).
 Fehler #1/#2/#3, Backlog P1/P2/P4/P5, A5-localhost-Shutdown, NAS-Rollout-Tooling + Blueprint —
@@ -203,10 +221,14 @@ Datei `client/src/pages/Dashboard.tsx`, Funktion `buildRevenueChart`. **Kein Dat
 - Referenz [[project_umsatzchart_task]] (inkl. recharts-Fragment-Lesson).
 
 ### 4.3 Version/Prod-Stand
-- **origin/main-HEAD = v2.4.x** (laufende Doku-Bumps); letzter **App-Release = v2.4.0**. Manifeste: `2.1.28`,
-  `2.2.0`, `2.2.2`, `2.2.3`, `2.3.0`, `2.3.3`, `2.3.5`, `2.4.0`.
-- **PROD (NAS :9443) = v2.4.0** (2026-07-06, Image `91e956650dd9`) — Tooltip + TZ-Fix + Session-Store
-  live; Migration `0025` angewandt; APP_ENV_LABEL-Titel-Garantie intakt. **Prod + Dev beide v2.4.0, healthy.**
+- **origin/main-HEAD = v2.7.x** (laufende Doku-Bumps); letzter **App-Release = v2.7.4**
+  (Commit `be5a1eb`). Manifest-Reihe zuletzt: `2.6.2` → `2.7.2` → `2.7.3` → **`2.7.4`** (maßgeblich).
+- **PROD (NAS :9443) = v2.5.0** — Screenshot Account-Inhaber 2026-08-04, Footer „Version: 2.5.0 ·
+  Build 15.07.2026, 21:41". Enthält alles bis v2.4.0 (APP_ENV_LABEL, Umsatzchart, Tooltip, TZ-Fix,
+  Session-Store, Migration `0025`) **plus v2.5.0** (Dashboard-Backlog, §6.4).
+  ⚠️ Die frühere Angabe „PROD = v2.4.0, Promotion offen" war eine **unbestätigte Annahme** und ist
+  seit dieser Korrektur hinfällig — Details und Lehre in §0. Build-Zeitstempel-Abweichung
+  (Prod 21:41 vs. Dev 19:41) ist im NAS-Chat offen.
 
 ## 5. VERHÄLTNIS ZUR NAS-WELT
 
@@ -621,8 +643,13 @@ als nach einem echten Migrationsplan.
   Migration `0025` ist additiv (`CREATE TABLE IF NOT EXISTS`, keine bestehende Tabelle berührt) →
   Roll-back = altes Image (NAS hält 2 Generationen vor: v2.4.0 + v2.3.0); die Tabelle kann bleiben
   (alter Code ignoriert sie). `sessions` ist NICHT im Backup.
-- **PROD (NAS :9443) = v2.4.0** (2026-07-06, Image `91e956650dd9`) — alles live: APP_ENV_LABEL,
-  Umsatzchart, Tooltip, TZ-Fix, Session-Store. Dev + Prod beide v2.4.0, healthy.
+- **PROD (NAS :9443) = v2.5.0** (Screenshot Account-Inhaber 2026-08-04, Build 15.07.2026 21:41).
+  Live: APP_ENV_LABEL, Umsatzchart, Tooltip, TZ-Fix, Session-Store (alles bis v2.4.0, Image
+  `91e956650dd9`, 2026-07-06) **plus v2.5.0** (Dashboard-Backlog). Rollback-Ziel für einen
+  fehlgeschlagenen Rollout ist damit **v2.5.0**, nicht v2.4.0.
+  ⚠️ Die frühere Angabe „v2.4.0" war eine unbestätigte Annahme (§0). Offen im NAS-Chat: der
+  Build-Zeitstempel weicht vom abgenommenen Dev-Build ab (21:41 vs. 19:41) — bei bit-identischer
+  Promotion müssten beide gleich sein.
 
 ---
 
