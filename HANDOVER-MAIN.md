@@ -35,6 +35,12 @@ Vorkommen von `customerId: expense.customerId`).
    steht ohnehin darunter). Beim Bearbeiten ist das Problem seit v2.7.4 gelöst (Hinweis mit altem
    und neuem Betrag).
 
+3. **Legacy-Kommentare im Kategorie-Enum — Entscheidung offen (K14, siehe §6.9).**
+   `drizzle/schema.ts` markiert `transport` als „legacy, wird zu taxi migriert" und `food` als
+   „legacy, wird zu meal migriert". Beide sind aktiv auswählbar, und `transport` darf seit v2.6.0 ein
+   `checkOutDate` tragen — eine Migration nach `taxi` (punktuell, kein Enddatum) erzeugte genau den
+   Befundtyp 3, den `analyze-expense-attribution.mjs` sucht. **Nichts tun ohne Entscheidung.**
+
 > **🪤 FALLGRUBE, die weiterhin gilt (nicht wegoptimieren!):** `getAllExpenses` hat **zwei** Zweige,
 > die Felder unter **demselben Namen** aus **verschiedenen Quellen** liefern. `customerId`:
 > `server/db.ts` verknüpfter Zweig = `timeEntries.customerId` (Kunde des **Eltern-Zeiteintrags**),
@@ -531,6 +537,44 @@ Drei Stellen, an denen beim Schreiben eines Belegs Information **still** verlore
    Tag `v2.7.3` („holt 2.6.4/2.7.0 nach") ist unzutreffend. **Vor `git tag` und vor dem Manifest
    immer erneut `git fetch` + `git tag --list` + `ls .claude/rollouts/`.** Siehe
    [[feedback_parallel_sessions_one_worktree]].
+
+### 6.9 „Legacy"-Kategorien `transport` und `food` — ⚠️ OFFEN, Entscheidung Account-Inhaber (K14)
+
+Nebenbefund aus der Doku-Session, hier festgehalten. **Kein Auftrag, keine Code-Änderung erfolgt** —
+die Lage ist am 2026-08-04 gegen den Code verifiziert und gilt unverändert.
+
+**Der Befund:** `drizzle/schema.ts` kommentiert zwei Enum-Werte als Übergangszustand —
+`"transport", // Transport (legacy, wird zu taxi migriert)` und
+`"food", // Food (legacy, wird zu meal migriert)`. Beide sind jedoch **aktiv auswählbar**
+(`client/src/pages/TimeTracking.tsx`, Select + `EXPENSE_CATEGORY_LABELS`).
+
+**Warum das geldwirksam ist:** `transport` gehört seit v2.6.0 zu
+`SERVICE_END_DATE_CATEGORIES` (`car`/`train`/`transport`/`other`), darf also ein **Leistungsende**
+(`checkOutDate`) tragen. `taxi` gehört bewusst **nicht** dazu (punktuelles Ereignis). Eine
+Migration `transport → taxi` würde Bestandsbelege mit **kategoriefremdem Enddatum** erzeugen —
+exakt **Befundtyp 3** aus `scripts/analyze-expense-attribution.mjs` (dessen Positivliste
+`('hotel','flight','car','train','transport','other')` lautet, ohne `taxi`). Wirkung: das Enddatum
+bleibt für die Monatszuordnung nach ADR 0002 maßgeblich, ist in der Maske aber **unsichtbar** →
+stille Fehlzuordnung, geldwirksam bei `costModel: "exclusive"`.
+
+**Beobachtung, die gegen die Legacy-Annahme spricht (2026-08-04):** Die Labels beschreiben
+**fachlich verschiedene Sachverhalte**, keine Dubletten:
+- `transport` = **„ÖPNV"**, `taxi` = „Taxi". Eine ÖPNV-Wochen-/Monatskarte ist genau der mehrtägige
+  Fall, für den `transport` zu Recht ein Leistungsende führt; eine Taxifahrt ist punktuell.
+- `food` = **„Lebensmittel"**, `meal` = **„Verpflegungspauschale"**. Ein Einkaufsbeleg ist kein
+  Pauschbetrag — die Zusammenlegung hätte eine steuerliche Dimension (Polish JDG), nicht nur eine
+  technische.
+
+Damit sieht der Kommentar eher nach einer **nie ausgeführten und fachlich überholten Absicht** aus
+als nach einem echten Migrationsplan.
+
+**Zu entscheiden (nur der Account-Inhaber):**
+- **(a) `transport` ist NICHT legacy** → Kommentar in `drizzle/schema.ts` streichen, Kategorie bleibt
+  eigenständig. *(Nach heutiger Beleglage die naheliegende Variante; kein Datenänderungsbedarf.)*
+- **(b) Migration wird doch gewollt** → sie **muss** vorhandene `checkOutDate`-Werte mitbehandeln
+  (räumen oder Belege vorher trennen) und das Analyse-Skript **vorher und nachher** laufen.
+- **`food`/`meal`** ist bezüglich des Enddatums **harmlos** (beide punktuell, keins von beiden steht
+  in `SERVICE_END_DATE_CATEGORIES`) — die fachliche Frage oben bleibt davon unberührt.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
