@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Download, Upload, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DashboardLayout from "@/components/DashboardLayout";
+import { warsawDateKey } from "@shared/dateStichtag";
 
 export default function Backup() {
   const [isCreating, setIsCreating] = useState(false);
@@ -20,7 +21,9 @@ export default function Backup() {
       const backup = await createBackupMutation.mutateAsync();
       
       // Download as JSON file
-      const filename = `backup-${new Date().toISOString().split("T")[0]}.json`;
+      // Warschauer Kalendertag, nicht UTC: zwischen 00:00 und 02:00 trug die Datei sonst das
+      // VORTAGSDATUM im Namen — verwirrend genau dann, wenn nachts gesichert wird.
+      const filename = `backup-${warsawDateKey()}.json`;
       const content = JSON.stringify(backup, null, 2);
       
       // Try to save to local file system

@@ -106,3 +106,25 @@ export function warsawDateKey(instant: Date = new Date()): string {
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
+
+/**
+ * Letzter Tag des Monats, zu dem `dateKey` (YYYY-MM-DD) gehört — als Tageszahl.
+ *
+ * Über `Date.UTC` gerechnet, damit die Zeitzone der ausführenden Maschine die Monatslänge
+ * nicht verschieben kann: `Date.UTC(y, m, 0)` ist Tag 0 des FOLGEmonats, also der letzte des
+ * laufenden (`m` ist hier 1-basiert und damit für den 0-basierten Konstruktor bereits der
+ * Folgemonat). Der Jahresüberlauf im Dezember wird von `Date.UTC` normalisiert.
+ */
+export function monthLastDay(dateKey: string): number {
+  const [year, month] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * Ist `dateKey` der letzte Tag seines Monats? Auslöser für die Monatsend-Benachrichtigung —
+ * gehört deshalb an dieselbe Zeitrechnung wie alles andere (Europe/Warsaw), nicht an die
+ * Zeitzone des Containers, in dem der Scheduler zufällig läuft.
+ */
+export function isLastDayOfMonth(dateKey: string): boolean {
+  return Number(dateKey.split("-")[2]) === monthLastDay(dateKey);
+}

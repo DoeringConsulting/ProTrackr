@@ -10,6 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { RefreshCw, Plus, WifiOff } from "lucide-react";
 import { syncService } from "@/lib/syncService";
+// „Heute" ist in dieser App IMMER der Warschauer Kalendertag, nie der des Browsers und nie
+// UTC. Bei Wechselkursen ist das geldwirksam: der Stichtag geht in `effectiveDate` ein und
+// entscheidet über den Kurs, mit dem umgerechnet wird.
+import { toDateKey, warsawDateKey } from "@shared/dateStichtag";
 
 const CURRENCIES = [
   { code: "EUR", name: "Euro" },
@@ -25,7 +29,10 @@ function normalizeStoredRate(rawRate: number) {
 export default function ExchangeRates() {
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
   const [manualRate, setManualRate] = useState("");
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  // Vorher `new Date().toISOString()` = UTC: zwischen 00:00 und 02:00 Warschauer Zeit war das
+  // Feld mit GESTERN vorbelegt, und `max` unten sperrte den heutigen Tag. Ein Abruf legte den
+  // Kurs dann unter dem Vortagsdatum ab und verfälschte den Stichtag-Match der Berichte.
+  const [selectedDate, setSelectedDate] = useState(warsawDateKey());
   const isOnline = syncService.isConnected();
 
   const { data: rates, refetch } = trpc.exchangeRates.list.useQuery();
@@ -38,9 +45,14 @@ export default function ExchangeRates() {
   }, [selectedDate, selectedCurrency]);
 
   // Get current rate for selected currency and date
+  // Vergleich über Datums-Keys statt über zwei `new Date(...)`: die beiden Operanden wurden
+  // nach VERSCHIEDENEN Regeln geparst — `selectedDate` ist date-only ("2026-08-04") und wird
+  // laut Spezifikation als UTC-Mitternacht interpretiert, `r.date` ist ein MySQL-Timestamp mit
+  // Leerzeichen und wird lokal geparst. Östlich von UTC fiel das zusammen, westlich nicht:
+  // dort blieb „Aktueller Kurs" leer, obwohl der Kurs vorlag.
   const currentRate = rates?.find(
-    (r: any) => r.currencyPair === `${selectedCurrency}/PLN` && 
-    new Date(r.date).toDateString() === new Date(selectedDate).toDateString()
+    (r: any) => r.currencyPair === `${selectedCurrency}/PLN` &&
+    toDateKey(r.date) === selectedDate
   );
 
   const handleFetchRate = async () => {
@@ -148,7 +160,7 @@ export default function ExchangeRates() {
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                max={new Date().toISOString().split("T")[0]}
+                max={warsawDateKey()}
               />
             </div>
 

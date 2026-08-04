@@ -1,5 +1,57 @@
 import { describe, it, expect } from "vitest";
-import { capRateStichtagKey, previousDayKey, warsawDateKey } from "@shared/dateStichtag";
+import {
+  capRateStichtagKey,
+  isLastDayOfMonth,
+  monthLastDay,
+  previousDayKey,
+  warsawDateKey,
+} from "@shared/dateStichtag";
+
+/**
+ * Monatslänge und Monatsletzter — Auslöser der Monatsend- und Rechnungsfrist-Benachrichtigung
+ * (`server/scheduler.ts`). Lagen bis v2.7.x als maschinenlokale Date-Getter im Scheduler und
+ * hingen damit an der Container-Zeitzone; hier liegen sie zeitzonenfrei über `Date.UTC`.
+ */
+describe("monthLastDay", () => {
+  it.each([
+    ["2024-02-15", 29, "Schaltjahr"],
+    ["2026-02-15", 28, "Nicht-Schaltjahr"],
+    ["2000-02-01", 29, "durch 400 teilbar → Schaltjahr"],
+    ["1900-02-01", 28, "durch 100, nicht durch 400 → kein Schaltjahr"],
+    ["2026-04-10", 30, "30-Tage-Monat"],
+    ["2026-01-01", 31, "31-Tage-Monat"],
+  ])("%s → %i (%s)", (key, expected) => {
+    expect(monthLastDay(key as string)).toBe(expected);
+  });
+
+  it("normalisiert den Jahresüberlauf im Dezember", () => {
+    // Dezember rechnet intern mit Monat 12 = Januar des FOLGEjahres, Tag 0. Ohne die
+    // Date.UTC-Normalisierung käme hier ein Unsinnswert heraus.
+    expect(monthLastDay("2026-12-31")).toBe(31);
+  });
+
+  it("ist unabhängig von der Tageszahl im Key", () => {
+    expect(monthLastDay("2026-02-01")).toBe(monthLastDay("2026-02-28"));
+  });
+});
+
+describe("isLastDayOfMonth", () => {
+  it.each([
+    ["2026-12-31", true],
+    ["2026-12-30", false],
+    ["2024-02-29", true],
+    ["2026-02-28", true],
+    ["2026-04-30", true],
+    ["2026-04-29", false],
+  ])("%s → %s", (key, expected) => {
+    expect(isLastDayOfMonth(key as string)).toBe(expected);
+  });
+
+  it("führende Null in der Tageszahl wird dezimal gelesen, nicht oktal", () => {
+    // Regressionsschutz: `Number("08")` ist 8, `parseInt("08", 8)` wäre 0.
+    expect(isLastDayOfMonth("2026-04-08")).toBe(false);
+  });
+});
 
 describe("previousDayKey", () => {
   it("subtrahiert einen Tag innerhalb des Monats", () => {

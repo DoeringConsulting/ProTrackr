@@ -598,6 +598,58 @@ als nach einem echten Migrationsplan.
 - **`food`/`meal`** ist bezüglich des Enddatums **harmlos** (beide punktuell, keins von beiden steht
   in `SERVICE_END_DATE_CATEGORIES`) — die fachliche Frage oben bleibt davon unberührt.
 
+### 6.10 Zeitzonen-Audit Europe/Warsaw (v2.7.x) — teils erledigt, drei Punkte OFFEN
+
+Vollaudit auf Anweisung des Account-Inhabers: Alle Zeitstempel und Zeitmessungen sollen auf
+**Europe/Warsaw** basieren (Haupt- und Standardzeit; Polish JDG, Monatsgrenzen sind geldwirksam).
+Der geldwirksame Kern (Zeitraum-Zuordnung, Monatssteuer-Serie, Kurs-Stichtag) ist **sauber** — er
+rechnet auf `YYYY-MM-DD`-Strings und meidet `toISOString` bewusst.
+
+**✅ Behoben:**
+- **Kurs-Stichtag** (`ExchangeRates.tsx`): Datumsfeld war zwischen 00:00–02:00 mit *gestern*
+  vorbelegt und sperrte *heute* → Kurs landete unter falschem `effectiveDate`. Jetzt `warsawDateKey()`.
+  Dazu der Nachbar: „Aktueller Kurs" verglich zwei unterschiedlich geparste Werte (date-only = UTC
+  gegen MySQL-Timestamp = lokal) — jetzt Vergleich über Datums-Keys.
+- **Build-Zeitstempel** (`VersionFooter.tsx`): wurde in der *Betrachter*-Zeitzone gerendert. Jetzt auf
+  Warschau gepinnt. **Diese Abweichung hat real einen Fehlverdacht ausgelöst** (Prod 21:41 gegen Dev
+  19:41 war derselbe Build, nur UTC gegen CEST). Fallback zeigte außerdem die *Aufrufzeit* als
+  Build-Zeit → jetzt „—".
+- **`toIsoDateOnly`** (`routers.ts`): Fallback-Belegdatum aus einem Zeiteintrag zog UTC-Komponenten →
+  behebt einen Off-by-one in den Vormonat.
+- **Wochentag-Label** bei `timeEntries.bulkCreate`: wurde in Container-Zeitzone gerendert und
+  **gespeichert**.
+- **Scheduler**: Auslöser für Monatsende und Rechnungsfrist folgen Warschau statt der Container-TZ;
+  Helfer `monthLastDay`/`isLastDayOfMonth` nach `shared/dateStichtag.ts` gezogen und getestet.
+- **Backup-Dateiname**: trug nachts das Vortagsdatum.
+
+**⚠️ OFFEN — Entscheidung des Account-Inhabers, bewusst NICHT angefasst:**
+1. **Verkoppelte Wandzeit-Konvention (geldwirksam, Teilfix gefährlich).** `timeEntries.date` wird mit
+   ZWEI Konventionen geschrieben: `new Date(input.date)` (UTC-Mitternacht → DB-Wandzeit 02:00) bei
+   create/update, `new Date(\`${key}T00:00:00\`)` (00:00) bei `copyRangeToNext`. Gleichzeitig liegen
+   die Tagesgrenzen aus `db.ts` (`localDayStartUtc`/`localNextDayStartUtc`) 2 h zu früh, weil MySQL
+   den `...Z`-String in der Session-TZ interpretiert. **Beide Fehler sind +2 h und heben sich auf.**
+   Ein einseitiger Fix zerstört die Kompensation und erzeugt echte Fehlzuordnungen über
+   Monatsgrenzen. Nur als Paket angehen, mit Analyse der Bestandsdaten (beide Konventionen liegen
+   gemischt in der DB).
+2. **Zeiteinträge hängen an der Browser-Zeitzone (geldwirksam beim Reisen).** `timeEntries.date`
+   reist per superjson als echtes `Date` zum Client; `toDateKey` liest dort **browser-lokale**
+   Komponenten. **Belege sind immun** (`mode: "string"` im Schema, kommen als String an). Folge: Wird
+   ein Bericht außerhalb CET/CEST geöffnet, können Zeiteinträge des Monatsersten in den Vormonat
+   kippen — und zwar **selektiv nur die per „Zeitraum kopieren" erzeugten** (00:00-Konvention), was
+   es schwer bemerkbar macht. Sauberster Fix: `timeEntries.date` serverseitig als Datums-String
+   ausliefern, dann verschwindet die Fehlerklasse strukturell.
+3. **Die Projekt-Zeitzone ist im Repo nirgends gesetzt.** Kein `TZ` in `.env`, kein `process.env.TZ`,
+   keine `timezone`-Option beim mysql2-Connect (Default `'local'`). Die Korrektheit hängt allein an
+   der Container-Einstellung. `vitest.config.ts` pinnt `Europe/Warsaw` — **das Gate ist damit
+   strenger als die Produktion** und würde echte Drift durchlassen. Empfehlung: `TZ=Europe/Warsaw`
+   und `timezone` explizit setzen, plus Startup-Assert gegen `@@session.time_zone`. Berührt den
+   Serverstart — deshalb nicht unmittelbar vor einem Rollout gemacht.
+
+**Nebenbefund, kein TZ-Thema (offen):** `Import.tsx` vergleicht `String(dateObjekt).slice(0,10)` gegen
+`"YYYY-MM-DD"` — das trifft **nie** (`String(Date)` liefert „Tue Jul 01 2026 …"). Folge: die
+Duplikatserkennung beim Import greift nie, und Belege werden nie an Zeiteinträge gehängt. Fix ist
+klein, ändert aber spürbar das Import-Verhalten — deshalb eigene Entscheidung.
+
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
 - **Main-only in diesem Chat** ([[feedback_main_only_session]]); NAS hat eigenen Chat.

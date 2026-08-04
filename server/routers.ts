@@ -223,7 +223,12 @@ function toIsoDateOnly(value: unknown): string | undefined {
   if (!value) return undefined;
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return undefined;
-    return value.toISOString().slice(0, 10);
+    // NICHT `toISOString()` — das liest UTC-Komponenten. Zeiteinträge werden mit lokaler
+    // Mitternacht gespeichert; ein Eintrag vom 01.07. liegt als Instant `2026-06-30T22:00Z`
+    // in der DB und käme hier als „2026-06-30" heraus. Dieser Wert ist das Fallback-Datum
+    // eines Belegs ohne eigenes `date` (siehe `linkedTimeEntryDate`) und entscheidet damit
+    // über die Steuerperiode — der Vormonat wäre geldwirksam falsch.
+    return toLocalDateKey(value) ?? undefined;
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -235,7 +240,11 @@ function toIsoDateOnly(value: unknown): string | undefined {
       return `${yyyy}-${mm}-${dd}`;
     }
     const parsed = new Date(trimmed);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    // Gleiche Lesart wie im Date-Zweig oben — sonst lieferte dieselbe Funktion je nach
+    // Eingabeform einen UTC- oder einen lokalen Tag. Praktisch unerreichbar (die drei Regex-
+    // Zweige darüber fangen alle vorkommenden Formate ab), aber die Inkonsistenz gehört nicht
+    // stehen gelassen.
+    if (!Number.isNaN(parsed.getTime())) return toLocalDateKey(parsed) ?? undefined;
   }
   return undefined;
 }
@@ -1208,7 +1217,19 @@ export const appRouter = router({
           userId: ctx.user.id,
           customerId: sourceEntry.customerId,
           date: new Date(targetDate),
-          weekday: new Date(targetDate).toLocaleDateString('de-DE', { weekday: 'long' }),
+          // `timeZone` explizit: ohne sie rendert der Wochentag in der Container-Zeitzone und
+          // wird so GESPEICHERT — ein stiller Datenfehler, sobald der Container nicht auf
+          // Europe/Warsaw läuft. (Das Schreibformat „Mittwoch" bleibt unverändert; die
+          // Schwester-Prozedur `copyRangeToNext` leitet den Wochentag bereits zeitzonenfrei
+          // aus dem Datums-Key ab und schreibt das Kurzformat „Mi/Sr".)
+          // BEWUSST NICHT MITGEZOGEN: `date: new Date(targetDate)` eine Zeile darüber bleibt auf
+          // UTC-Mitternacht. Das ist die projektweite Wandzeit-Konvention, die mit den
+          // Tagesgrenzen in `db.ts` verkoppelt ist (beide +2 h, sie heben sich auf) — ein
+          // einseitiger Fix hier zerstörte die Kompensation. Wird separat entschieden.
+          weekday: new Date(targetDate).toLocaleDateString('de-DE', {
+            timeZone: 'Europe/Warsaw',
+            weekday: 'long',
+          }),
           projectName: sourceEntry.projectName,
           entryType: sourceEntry.entryType,
           description: sourceEntry.description,
