@@ -2,7 +2,7 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-08-03 · App-Release v2.5.2 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
+> **Stand: 2026-08-04 · App-Release v2.6.0 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
 
 ---
@@ -26,9 +26,14 @@
 - **Zuletzt erledigt auf main:** (a) **v2.5.0** Dashboard-Backlog (§6.4) — „Rechnungen"-Kachel +
   Umsatzentwicklung-**Prognose-Toggle**; (b) **v2.5.2** (§6.5) **Reisekosten-Zeitraum-Zuordnung vereinheitlicht**
   (Divergenz Report/Dashboard + Doppelzählung behoben, ADR `docs/adr/0001`).
-  **Direkt danach fachlich nachgeschärft (§6.5, ⏳ implementiert, QA/Commit offen):** maßgeblich ist jetzt das
-  **Leistungsende `checkOutDate ?? date`** statt `expense.date` — ADR `docs/adr/0002` **supersedes 0001**.
-  **NAS-Prod-Rollout offen** (Manifeste `2.5.0.json` + `2.5.2.json`, NAS-Chat). — Sonst nur
+  **Direkt danach fachlich nachgeschärft (§6.5, ✅ v2.5.5):** maßgeblich ist das
+  **Leistungsende `checkOutDate ?? date`** statt `expense.date` — ADR `docs/adr/0002` **supersedes 0001**;
+  (c) **v2.6.0** (§6.6) **Phase 2** — Leistungsende auch für **mehrtägige Belege** erfassbar
+  (`car`/`train`/`transport`/`other`), ohne Schema-Change; dabei zwei Defekte gefixt (Kategoriewechsel
+  räumte Datumsfelder nie; Rückflugdatum nicht löschbar) und die Validierung „Ende ≥ Start"
+  kategorienunabhängig gemacht.
+  **NAS-Prod-Rollout offen — aktuelles Manifest `2.6.0.json`** (enthält 2.5.0 + 2.5.2 + 2.5.5), NAS-Chat.
+  **⚠️ Vor dem Rollout Analyse-Skript ERNEUT fahren** (ADR 0002, offener Punkt 5 — dritter Befund-Typ). — Sonst nur
   der TZ-Restpunkt (Scheduler-Monatstrigger +
   db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
   bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
@@ -323,6 +328,47 @@ Zuordnung hatten oder das Feld **erzeugen**:
    `toISOString`-Vortagsfehler) und `receiptAi.ts` (leitete `nights` überhaupt nicht ab). Ein Feld, das
    vorher nur Anzeige/Stichtag war, wird durch die Regeländerung **geldwirksam** — seine Erzeuger
    brauchen dieselbe Sorgfalt wie die Rechenlogik.
+
+### 6.6 Leistungsende für mehrtägige Belege (ADR 0002 Phase 2) — ✅ ERLEDIGT (v2.6.0, 2026-08-04)
+**Lücke:** Das Leistungsende war nur bei **Hotel** (Check-out) und **Flug** (Rückflug) erfassbar. Ein
+**Mietwagen** 30.06.–02.07. landete daher weiter im Juni — die ADR-0002-Regel griff dort nicht.
+
+**Kernerkenntnis (korrigiert die ursprüngliche Phase-2-Annahme):** Es brauchte **kein neues Feld und
+keine Migration**. `checkOutDate` ist bereits ein **generisches Leistungsende** (bei Flügen trägt es das
+Rückflugdatum, nicht ein „Check-out"), die Spalte ist nullable und kategorienunabhängig. Ein zweites Feld
+`usageEndDate` wäre **K4-Redundanz** gewesen. Freigegeben für `car`/`train`/`transport`/`other`
+(User-Entscheidung K14); punktuelle Arten (`taxi`, `fuel`, `meal`, `food`, `mileage_allowance`) bleiben
+bewusst ohne Enddatum.
+
+**Zwei Defekte im selben Zug gefixt (Senior-Review):**
+- **Kategoriewechsel räumte die Datumsfelder der alten Kategorie NIE.** (a) Ein von Mietwagen auf Taxi
+  gewechselter Beleg behielt sein `checkOutDate` — **unsichtbar** in der Maske, aber weiterhin maßgeblich
+  für die Monatszuordnung (Steuerbasis + Kundenrechnung). (b) **Neue Sackgasse durch die generische
+  Validierung:** Ein Flug mit Rückflug, auf Taxi mit späterem Datum gewechselt, war über die UI **nicht
+  mehr speicherbar**. Jetzt setzt jeder Zweig die nicht zuständigen Datumsfelder explizit auf `""` → NULL.
+- **Rückflugdatum war nie löschbar** (`|| undefined` verwarf den Key statt `""` → NULL zu schreiben).
+
+**Validierung** „Ende ≥ Start" gilt jetzt **kategorienunabhängig** — vorher wurde `checkOutDate`
+außerhalb von hotel/flight **gar nicht** geprüft, ein invertiertes Datum war speicherbar.
+
+**Gate-Härtung:** Validierung nach `server/expenseRules.ts` extrahiert und in `validateExpenseDateRules`
+umbenannt (der alte Name `validateFlightAndHotelExpenseRules` stimmte nicht mehr). Grund: Der Test zog
+sonst den kompletten Router-Graph inkl. **bcrypt** (Native-Binding) in das pre-commit-Gate.
+**Gate-Laufzeit 5,8s → 2,8s.**
+
+**🔑 Lessons:**
+1. **Prüfe, ob ein Feld schon existiert, bevor du eins hinzufügst.** Der Feldname (`checkOutDate`) war
+   hotel-klingend, die Semantik längst generisch — ein zweites Feld hätte zwei Wahrheiten erzeugt.
+2. **Wer eine Validierung verschärft, muss die Zustände prüfen, die schon in der DB liegen.** Die neue
+   Regel war korrekt, machte aber einen bestehenden (falschen) Datenzustand plötzlich *unspeicherbar*
+   statt nur falsch — aus einem stillen Fehler wurde eine Sackgasse.
+3. **Ein Gate-Test darf nicht am halben Server hängen.** Native Bindings im schnellsten Test blockieren
+   im Zweifel jeden Commit.
+
+**⚠️ Offen (ADR 0002, Punkt 5):** Kategoriefremde Enddaten im **Bestand** (Altfälle aus früheren
+Kategoriewechseln) sind **heute schon still fehlzugeordnet**. Die Vorprüfung vom 2026-08-03 deckte diese
+Klasse **nicht** ab. Das Skript hat dafür jetzt einen dritten Befund-Typ — **vor dem Prod-Rollout erneut
+fahren**.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
