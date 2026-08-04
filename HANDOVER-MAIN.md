@@ -283,11 +283,14 @@ Zuordnung hatten oder das Feld **erzeugen**:
   der **gewollte** Effekt (Beleg-Kommentar „koszt ujęty w lipcu"). Beleg #368 (273,00 EUR, März → April)
   ist keinem Kunden zugeordnet → nur interne Steuerbasis. **Datenqualitätsseitig grünes Licht für
   v2.5.5.** Details im ADR 0002, offener Punkt 3.
-- **⚠️ Verbleibend (kaufmännisch, kein Code):** Prod läuft noch auf **v2.4.0 mit Doppelzählung** —
-  #596 steht dort im Juni- *und* im Juli-Bericht mit je 150 EUR. Abgleichen, ob für Fritzmeier neben
-  der Juli- auch eine **Juni-Rechnung mit denselben 150 EUR** versandt wurde; falls ja, doppelt
-  berechnet (Altbestand, nicht Folge der Umstellung) → Gutschrift. Ein Beleg, ein Kunde, Grenze
-  Juni/Juli 2026.
+- **✅ Kaufmännischer Abgleich erledigt (2026-08-04):** Für Fritzmeier gab es **keine** Juni-Rechnung mit
+  den 150 EUR — nur die Juli-Rechnung. **Keine Doppelfakturierung, keine Gutschrift nötig**; ADR 0002
+  bestätigt die gelebte Praxis. Punkt geschlossen.
+- **✅ Verfallene Tickets geklärt (2026-08-04):** #605 (425,97 EUR, Fritzmeier) und #492 (238,20 EUR)
+  beide **dienstlich/kundenverursacht** → nach Spec §8.1a **weiterberechenbar**, zusammen **664,17 EUR**.
+  **Offener kaufmännischer Schritt:** Die Nachberechnung ist möglich, aber noch nicht erfolgt — und sie
+  läuft nicht automatisch, weil `status='VERFALLEN'` + `verfall_ursache` erst mit der Spec-Umsetzung
+  existieren. Manuell anzustoßen.
 - **Prüfergebnis im Detail (NAS-Chat, read-only gegen Prod):** Hotels **48/48** plausibel (0× `NULL`,
   0× `== checkIn`, 0× `< checkIn`); Flüge **32**, davon 9 Kandidaten mit fehlendem/gleichem Enddatum —
   **alle unkritisch** (One-Way, Round-Trip im selben Monat, 0 EUR).

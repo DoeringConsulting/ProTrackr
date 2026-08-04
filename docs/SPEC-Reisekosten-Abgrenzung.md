@@ -365,9 +365,15 @@ Kein Default — die Ursache ist eine kaufmännische Feststellung und darf nicht
 (Missing-Data-Penalty, globale Regel §6). Bis zur Erfassung gilt die Position als **nicht**
 weiterberechenbar.
 
-**Offene Altfälle (Stand 2026-08-03):** Prod-Belege **#605** (Fritzmeier, 425,97 EUR,
-„bilet niewykorzystany") und **#492** (238,20 EUR) — Abrechenbarkeit hängt je Beleg an der Ursache und
-ist kaufmännisch zu klären.
+**Altfälle — geklärt (Account-Inhaber, 2026-08-04):** Prod-Belege **#605** (Fritzmeier, 425,97 EUR,
+„bilet niewykorzystany") und **#492** (238,20 EUR) sind **beide dienstlich/kundenverursacht** verfallen
+(`verfall_ursache` ∈ {`DIENSTLICH`, `MANDANT`}) → nach obiger Regel **beide weiterberechenbar**,
+zusammen **664,17 EUR**.
+
+> **Offener kaufmännischer Schritt (kein Code-Thema):** Die tatsächliche Nachberechnung gegenüber dem
+> Mandanten ist damit *möglich*, aber noch nicht *erfolgt*. Solange die Positionen im System nicht als
+> `VERFALLEN` + `verfall_ursache` geführt werden (Feld existiert erst mit dieser Spec), erscheinen sie
+> in keiner automatischen Weiterberechnung — die Nachforderung wäre manuell anzustoßen.
 
 `GEPLANT` und `GEBUCHT` fließen **nie** in eine Rechnung — sie erscheinen ausschließlich im
 Vorfinanzierungsreport (§13.2).

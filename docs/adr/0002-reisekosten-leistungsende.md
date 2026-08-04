@@ -201,11 +201,12 @@ geldwirksam (Kundenrechnungen); das Skript weist die betroffenen Belege und die 
 >
 > **Datenqualitätsseitig grünes Licht für den v2.5.5-Rollout.**
 >
-> **Verbleibender kaufmännischer Abgleich (kein Code-Thema):** Prod läuft noch auf v2.4.0, wo die
-> **Doppelzählung** aktiv ist — #596 erscheint dort im Juni- *und* im Juli-Bericht mit je 150 EUR.
-> Zu prüfen ist daher, ob für Fritzmeier neben der Juli-Rechnung auch eine **Juni-Rechnung mit
-> denselben 150 EUR** versandt wurde. Falls ja, wurden sie doppelt berechnet (Altbestand aus der
-> Doppelzählung, nicht Folge dieser Umstellung) und wären per Gutschrift zu bereinigen.
+> **✅ Kaufmännischer Abgleich erledigt (Account-Inhaber, 2026-08-04):** Für Fritzmeier wurde **keine**
+> Juni-Rechnung mit diesen 150 EUR versandt — sie stehen ausschließlich in der Juli-Rechnung. Damit ist
+> **keine Doppelfakturierung** entstanden (obwohl Prod auf v2.4.0 mit aktiver Doppelzählung läuft und
+> der Beleg dort in beiden Monatsberichten erscheint), und **keine Gutschrift nötig**. ADR 0002
+> bestätigt die gelebte Abrechnungspraxis: Eine Neuerstellung des Juli-Berichts liefert denselben
+> Betrag wie die versandte Rechnung. **Punkt geschlossen.**
 >
 > **🔑 Methodische Lesson (wichtig für jede künftige Vorprüfung):** Die Abweichungs-Abfrage des
 > Skripts findet **nur Monatsverschiebungen** — ein **kaputtes `checkOutDate` bleibt darin
