@@ -2,8 +2,49 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-08-04 · App-Release v2.6.0 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
+> **Stand: 2026-08-04 · App-Release v2.7.0 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
+> **⚠️ EIN UNCOMMITTETER CHANGE offen — siehe §0.1 „SOFORT ZU TUN".**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
+
+---
+
+## 0.1 SOFORT ZU TUN (offener Arbeitsstand vom 2026-08-04)
+
+**Es liegt ein fertig implementierter, aber NICHT committeter Change im Working Tree.**
+Betroffene Dateien: `server/routers.ts`, `server/expenseRules.ts`, `server/expensePeriodAttribution.test.ts`.
+
+**Was er tut:** `copyRangeToNext` überträgt beim Kopieren die **explizite Kundenzuordnung**
+(`expenses.customerId`) nicht — eine kopierte **eigenständige** Reisekostenposition landet mit
+`customerId = NULL` in der DB, fällt auf die Datums-Heuristik zurück und kann bei mehreren Kunden am
+selben Tag (oder ohne Zeiteintrag) **still aus der Kundenabrechnung verschwinden**; bei
+`costModel: "exclusive"` zählt sie dann nicht mehr als weiterberechneter Umsatz. Der Fix überträgt
+`customerId` **nur für eigenständige Belege** über die neue reine Funktion
+`explicitCustomerIdForRangeCopy` (`server/expenseRules.ts`), plus 7 Tests im Gate.
+
+> **🪤 FALLGRUBE, die den Fix nötig macht (nicht wegoptimieren!):** `getAllExpenses` hat **zwei**
+> Zweige, die `customerId` unter **demselben Feldnamen** liefern — `server/db.ts:762` selektiert
+> `timeEntries.customerId` (Kunde des **Eltern-Zeiteintrags**), `server/db.ts:808` selektiert
+> `expenses.customerId` (die **explizite** Zuordnung). Ein blindes `customerId: expense.customerId`
+> würde für verknüpfte Belege den Zeiteintrags-Kunden als *explizite* Zuweisung schreiben und die
+> Attributionssemantik dauerhaft ändern. Diskriminator ist `timeEntryId == null`.
+
+**Status:** `npx tsc --noEmit` → Exit 0, Gate → **184/184 grün**. **Der Senior-Review (3-Agenten-Loop,
+K2) steht noch aus** — das ist der **erste Schritt** der neuen Sitzung, danach Commit.
+
+**Danach fällig (Reihenfolge):**
+1. Senior-Review des customerId-Fixes → Commit (`fix(copy): …`).
+2. **Rollout-Manifest** `node scripts/generate-rollout-manifest.mjs --notes "…"` + **Tag** `v<version>`
+   — für v2.6.4 und v2.7.0 wurde beides **bewusst aufgeschoben**, damit alles in *einem* Release geht.
+   Letztes Manifest ist `2.6.2.json`, letzter Tag `v2.6.2` → **beides fehlt für 2.6.4/2.7.0/den
+   customerId-Fix.**
+3. Push (origin/main steht auf v2.7.0, Drift 0/0).
+
+**Bekannter, NICHT gefixter Folgebefund** (vom Junior gemeldet, noch nicht vorgelegt): `getAllExpenses`
+selektiert **`distance`, `rate`, `liters`, `pricePerLiter`** in **keinem** der beiden Zweige. Der
+Kopier-Payload liest sie trotzdem (`routers.ts:1350-1353`) → immer `undefined` → **die Kopie verliert
+die Berechnungsgrundlage**: Tanken ohne `liters`/`pricePerLiter`, Mietwagen und Kilometerpauschale ohne
+`distance`/`rate`. Der Betrag (`amount`) bleibt korrekt, die Nachvollziehbarkeit nicht. Fix wäre
+additiv (Spalten in beide Zweige aufnehmen) — **Entscheidung des Account-Inhabers einholen.**
 
 ---
 
@@ -32,8 +73,12 @@
   (`car`/`train`/`transport`/`other`), ohne Schema-Change; dabei zwei Defekte gefixt (Kategoriewechsel
   räumte Datumsfelder nie; Rückflugdatum nicht löschbar) und die Validierung „Ende ≥ Start"
   kategorienunabhängig gemacht.
-  **NAS-Prod-Rollout offen — aktuelles Manifest `2.6.0.json`** (enthält 2.5.0 + 2.5.2 + 2.5.5), NAS-Chat.
-  **⚠️ Vor dem Rollout Analyse-Skript ERNEUT fahren** (ADR 0002, offener Punkt 5 — dritter Befund-Typ). — Sonst nur
+  (d) **v2.6.2** Cleanup (tote Erfassungsmasken entfernt, separate Session); (e) **v2.6.4 + v2.7.0**
+  (§6.7) **Purge- und Kopier-Konsistenz** — Zurücksetzen folgt dem Leistungsende, „Zeitraum kopieren"
+  wird wochentagstreu und legt keine Duplikate mehr an.
+  **NAS-Prod-Rollout offen. ⚠️ Manifest + Tag fehlen für 2.6.4/2.7.0** (bewusst aufgeschoben, siehe
+  §0.1) — letztes Manifest `2.6.2.json`. **Vor dem Rollout Analyse-Skript ERNEUT fahren** (ADR 0002,
+  offene Punkte 3 + 5). — Sonst nur
   der TZ-Restpunkt (Scheduler-Monatstrigger +
   db.ts-Range-Filter, server-lokal) ist über die **Container-TZ** abgesichert — **User-Check 2026-07-06
   bestätigt beide Container `CEST`** (Europe/Warsaw), §6.1/§6.2. Rest-Kandidaten (kosmetisch/unkritisch,
@@ -369,6 +414,57 @@ sonst den kompletten Router-Graph inkl. **bcrypt** (Native-Binding) in das pre-c
 Kategoriewechseln) sind **heute schon still fehlzugeordnet**. Die Vorprüfung vom 2026-08-03 deckte diese
 Klasse **nicht** ab. Das Skript hat dafür jetzt einen dritten Befund-Typ — **vor dem Prod-Rollout erneut
 fahren**.
+
+### 6.7 Purge- und Kopier-Konsistenz (v2.6.4 + v2.7.0) — ✅ ERLEDIGT, 2026-08-04
+Beide Änderungen ziehen die letzten Stellen nach, die Belege noch nach `expense.date` statt nach dem
+**Leistungsende** (ADR 0002) einem Zeitraum zuordneten. Je 3-Agenten-Loop mit Senior-PASS.
+
+**v2.6.4 — Zurücksetzen/Purge** (`server/routers.ts`, Aufrufer `BackupTab.tsx`)
+- Belegfilter jetzt `DATE(COALESCE(checkOutDate, date))`. Vorher löschte ein **Juni**-Reset Beleg #596,
+  der in der **Juli**-Abrechnung steht — und ein Juli-Reset erfasste ihn nicht.
+- **Bewusste Einschränkung:** Ein Beleg mit Leistungsende Juli an einem **Juni**-Zeiteintrag wird vom
+  Juni-Reset trotzdem mitgelöscht (die Kaskade). Integrität schlägt Deckungsgleichheit.
+- **Kaskaden-Begründung korrigiert:** `fk_expenses_timeentry` ist `ON DELETE CASCADE` — MySQL räumt die
+  Belege ohnehin ab. Das explizite Einsammeln ist nötig, weil `fk_documents_expense`
+  `ON DELETE SET NULL` ist (sonst **Waisen-Dokumente**) und `deleted.expenses` sonst zu niedrig wäre.
+- **Transaktion** um die drei Deletes ergänzt (vorher: Abbruch nach Delete 1 = Dokumente weg, Rest da).
+- `BackupTab.tsx` nutzt `warsawDateKey()`; vorher lieferte `toISOString().slice(0,7)` am Monatsersten
+  zwischen 00:00–02:00 den **Vormonat** als vorausgewählten Löschmonat (K8, destruktiver Dialog).
+
+**v2.7.0 — „Zeitraum kopieren"**
+- **Doppelanlage behoben:** Die Overlap-Ladung wurde als Selektionsmenge einer *Schreib*operation
+  genutzt → ein grenzüberspannender **eigenständiger** Beleg wurde von mehreren Läufen kopiert
+  („Juni kopieren" + „Juli kopieren" = dasselbe Duplikat; `scope:"day"` sogar dreifach), bei
+  `exclusive` doppelt in Kundenrechnung **und** Steuerbasis. Jetzt Auswahl nach Leistungsende.
+  **Verknüpfte Belege bleiben bewusst ungefiltert** — sie können ohnehin nicht doppeln, mit Filter
+  wären sie *nie wieder* kopierbar.
+- **Wochentagstreue (User-Entscheidung):** `day` → nächster Arbeitstag (Fr→Mo); `week` → +7 (war schon
+  korrekt); `month` → n-tes Wochentag-Vorkommen bleibt erhalten (3. Montag → 3. Montag); Überzählige
+  (nur das **5.** Vorkommen, also Quelltage 29.–31.) → 1. Vorkommen im Folgemonat. **Kein
+  Feiertagskalender.**
+- **Anker ist das Leistungsende, nicht `date`** — sonst fielen Auswahl- und Verschiebungsanker
+  auseinander und die **Kopie landete im Quellzeitraum** (Sweep 2024–2028, ~12.800 Fälle: vorher
+  **214** Rückfälle, jetzt **0**). Für eintägige Belege ist der Ankerwechsel ein **exakter No-op**.
+  `date`/`checkInDate` folgen per **Tagesoffset** → Dauer und Chronologie konstruktiv erhalten.
+- **K4:** Die Zuordnungsregel liegt jetzt **einmal** in `shared/expenseServiceEnd.ts`;
+  `isExpenseInPeriod` delegiert dorthin (im Review als **byte-identisch verschoben** nachgewiesen),
+  `toDateKey` wanderte nach `shared/dateStichtag.ts` (Client-Importe über Re-Export). Damit hat die
+  Regel erstmals einen echten Produktionsaufrufer im Serverbereich.
+- Gate um `server/copyRangeShift.test.ts` erweitert (bleibt abhängigkeitsarm).
+
+**🔑 Lessons:**
+1. **Ein Ladefilter ist keine Zuordnungsregel.** Wird eine großzügige Ladung (Overlap) als
+   Selektionsmenge einer Schreib- oder Löschoperation verwendet, entstehen Duplikate bzw.
+   Fehllöschungen. Beides trat hier real auf.
+2. **Wer eine Validierung verschärft, muss die Zustände prüfen, die schon in der DB liegen** — die
+   neue Chronologie-Regel machte einen bestehenden falschen Zustand von „still falsch" zu
+   „unspeicherbar" (Kategoriewechsel, §6.6).
+3. **Auswahl- und Verschiebungsanker müssen dasselbe Datum sein.** Diese Inkonsistenz stand zuerst in
+   der *Spezifikation*, nicht im Code — der Review hat sie gefunden.
+4. **Ein Test, der die Spiegelung prüft, prüft nicht das Original.** Die Matrix pinnte die JS-Fassung
+   gegen die kanonische Regel, während das **produktive SQL** ungetestet blieb: ein Rückbau auf
+   `expenses.date` wäre grün geblieben. Jetzt wird der SQL-Baustein über `MySqlDialect` gerendert und
+   assertiert.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 
