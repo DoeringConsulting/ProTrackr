@@ -26,6 +26,7 @@ import {
 import { toScopeContext } from "./scope";
 import {
   expenseServiceEndDateSql,
+  explicitCustomerIdForApproval,
   explicitCustomerIdForRangeCopy,
   selectExpensesForRangeCopy,
   validateExpenseDateRules,
@@ -728,6 +729,12 @@ async function prepareReceiptBatchItem(
   const basePayload: Record<string, unknown> = {
     ...payload,
     userId: ownerUserId,
+    // Der oben aufgelöste Ziel-Kunde wurde bisher verworfen — inklusive der bereits
+    // erfolgten Zugriffsprüfung. Ein per KI OHNE Zeiteintrag, aber MIT Kundentreffer
+    // freigegebener Beleg landete mit `customerId = NULL` in der DB und fiel auf die
+    // Datums-Heuristik zurück (an einem Tag mit zwei Kunden: gar keine Zuordnung,
+    // still). Nur für eigenständige Belege — Begründung am Helfer.
+    customerId: explicitCustomerIdForApproval(targetTimeEntryId, targetCustomerId),
   };
   if (targetTimeEntryId) {
     basePayload.timeEntryId = Number(targetTimeEntryId);
@@ -2445,6 +2452,9 @@ export const appRouter = router({
       const basePayload: Record<string, unknown> = {
         ...payload,
         userId: ownerUserId,
+        // Siehe Batch-Pfad: der aufgelöste Ziel-Kunde muss in den Beleg, sonst geht die
+        // Zuordnung still verloren. Nur für eigenständige Belege.
+        customerId: explicitCustomerIdForApproval(targetTimeEntryId, targetCustomerId),
       };
       if (targetTimeEntryId) {
         basePayload.timeEntryId = Number(targetTimeEntryId);

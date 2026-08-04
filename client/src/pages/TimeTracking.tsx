@@ -236,6 +236,14 @@ export default function TimeTracking() {
   const [selectedExpenseDate, setSelectedExpenseDate] = useState<Date | null>(null);
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
   const [tempExpenseAmount, setTempExpenseAmount] = useState('');
+  // Gespeicherter Betrag (cents) des gerade BEARBEITETEN Belegs. Eigener State, weil
+  // `tempExpenseAmount` das Eingabefeld ist und vom User verändert werden kann — für den
+  // Abweichungs-Hinweis unten braucht es den unveränderten Ausgangswert.
+  const [editingExpenseAmountCents, setEditingExpenseAmountCents] = useState<number | null>(null);
+  // Zugehörige Währung des Snapshots. Die Währungs-Auswahl gilt für alle Kategorien und ist
+  // im Dialog editierbar — ohne eigenen Snapshot trüge der GESPEICHERTE Betrag im Hinweis
+  // die gerade neu gewählte Währung als Etikett und behauptete damit etwas Falsches.
+  const [editingExpenseCurrency, setEditingExpenseCurrency] = useState('EUR');
   const [tempExpenseCategory, setTempExpenseCategory] = useState('car');
   const [tempExpenseCurrency, setTempExpenseCurrency] = useState('EUR');
   const [tempExpenseComment, setTempExpenseComment] = useState('');
@@ -363,6 +371,8 @@ export default function TimeTracking() {
     const defaultDate = date ? formatLocalDate(date) : "";
     setEditingExpense(null);
     setTempExpenseAmount("");
+    setEditingExpenseAmountCents(null);
+    setEditingExpenseCurrency("EUR");
     setTempExpenseCategory("car");
     setTempExpenseCurrency("EUR");
     setTempExpenseComment("");
@@ -662,6 +672,27 @@ export default function TimeTracking() {
       ? Math.round(Number(tempDistanceKm || "0") * Number(tempRatePerKm || "0") * 100) / 100
       : null;
 
+  // Würde das Speichern den gespeicherten Betrag verändern, ohne dass der User ihn angefasst
+  // hat? Für `mileage_allowance` setzt der Speicherpfad `amount` IMMER auf km × Pauschale und
+  // ignoriert das Betrag-Feld. Solange die Maske die Berechnungsgrundlage gar nicht laden
+  // konnte, war das folgenlos — sie brach vorher mit einer Fehlermeldung ab. Jetzt läuft sie
+  // durch, und eine reine Kommentaränderung würde den Betrag still korrigieren. Import und
+  // KI-Freigabe setzen Betrag und Berechnungsgrundlage unabhängig voneinander, die beiden
+  // können also legitim auseinanderliegen (K1: sichtbar machen, nicht stillschweigend tun).
+  // `editingExpense !== null` ist streng genommen redundant (beide Öffnungspfade setzen den
+  // Snapshot deterministisch), macht den Hinweis aber unabhängig davon, ob ein künftiger
+  // dritter Öffnungspfad das Zurücksetzen vergisst — ein Altwert dürfte in einer NEUANLAGE
+  // nie einen Hinweis erzeugen.
+  // `> 0` statt `!== null`, damit die Bedingung deckungsgleich mit dem Speicher-Guard unten
+  // ist: der lehnt `<= 0` ab. Sonst meldete der Hinweis bei km = 0 eine Neuberechnung auf
+  // 0.00, die gar nicht stattfindet (das Speichern bricht ab, der Betrag bleibt stehen).
+  const mileageAmountWouldChange =
+    editingExpense !== null &&
+    tempExpenseCategory === "mileage_allowance" &&
+    editingExpenseAmountCents !== null &&
+    (computedMileageAmount ?? 0) > 0 &&
+    Math.round((computedMileageAmount ?? 0) * 100) !== editingExpenseAmountCents;
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -914,6 +945,8 @@ export default function TimeTracking() {
                                   // Open edit dialog for expense
                                   setEditingExpense(expense.id);
                                   setTempExpenseAmount((expense.amount / 100).toString());
+                                  setEditingExpenseAmountCents(expense.amount);
+                                  setEditingExpenseCurrency(expense.currency || 'EUR');
                                   setTempExpenseCategory(expense.category);
                                   setTempExpenseCurrency(expense.currency || 'EUR');
                                   setTempExpenseComment(expense.comment || '');
@@ -1458,6 +1491,20 @@ export default function TimeTracking() {
                         {computedMileageAmount !== null ? computedMileageAmount.toFixed(2) : "0.00"} {tempExpenseCurrency}
                       </strong>
                     </div>
+                    {mileageAmountWouldChange && (
+                      <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+                        Achtung: Der gespeicherte Betrag{" "}
+                        <strong>
+                          {((editingExpenseAmountCents ?? 0) / 100).toFixed(2)} {editingExpenseCurrency}
+                        </strong>{" "}
+                        wird beim Speichern auf{" "}
+                        <strong>
+                          {(computedMileageAmount ?? 0).toFixed(2)} {tempExpenseCurrency}
+                        </strong>{" "}
+                        neu berechnet (Kilometer × Pauschale). Korrigieren Sie Kilometer oder
+                        Pauschale, wenn der gespeicherte Betrag stehenbleiben soll.
+                      </div>
+                    )}
                   </>
                 )}
                 {tempExpenseCategory === "flight" && (

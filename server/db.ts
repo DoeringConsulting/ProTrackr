@@ -761,6 +761,15 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
       timeEntryId: expenses.timeEntryId,
       customerId: timeEntries.customerId,
       category: expenses.category,
+      // Berechnungsgrundlage: Kilometerpauschale/Mietwagen (distance+rate) und Tanken
+      // (liters+pricePerLiter). Ohne sie verlieren Kopie und Bearbeiten-Maske den
+      // Nachweis, obwohl `amount` stimmt.
+      // ACHTUNG: `expenses.rate`, NICHT `timeEntries.rate` — dieser Zweig joint BEIDE
+      // Tabellen und beide haben eine Spalte `rate`. `timeEntries.rate` ist der Tagessatz
+      // des Zeiteintrags, `expenses.rate` die Pauschale des Belegs. Dieselbe Fallgrube wie
+      // bei `customerId` eine Zeile weiter oben.
+      distance: expenses.distance,
+      rate: expenses.rate,
       amount: expenses.amount,
       currency: expenses.currency,
       comment: expenses.comment,
@@ -774,6 +783,8 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
       arrivalTime: expenses.arrivalTime,
       checkInDate: expenses.checkInDate,
       checkOutDate: expenses.checkOutDate,
+      liters: expenses.liters,
+      pricePerLiter: expenses.pricePerLiter,
       date: expenses.date,
       createdAt: expenses.createdAt,
     })
@@ -807,6 +818,10 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
       // 0024). Alt-Belege sind NULL (Decision D: kein Backfill).
       customerId: expenses.customerId,
       category: expenses.category,
+      // Dieselbe Feldmenge wie im verknüpften Zweig — beide Ergebnisse werden unten
+      // konkateniert, unterschiedliche Formen ergäben inkonsistente Objekte.
+      distance: expenses.distance,
+      rate: expenses.rate,
       amount: expenses.amount,
       currency: expenses.currency,
       comment: expenses.comment,
@@ -820,6 +835,8 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
       arrivalTime: expenses.arrivalTime,
       checkInDate: expenses.checkInDate,
       checkOutDate: expenses.checkOutDate,
+      liters: expenses.liters,
+      pricePerLiter: expenses.pricePerLiter,
       date: expenses.date,
       createdAt: expenses.createdAt,
     })

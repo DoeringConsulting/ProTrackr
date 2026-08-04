@@ -121,9 +121,45 @@ export function selectExpensesForRangeCopy<
   T extends ExpenseServiceEndFields & { timeEntryId?: unknown }
 >(loadedExpenses: readonly T[], rangeStart: string, rangeEnd: string): T[] {
   return loadedExpenses.filter((expense) => {
-    if (expense?.timeEntryId !== null && expense?.timeEntryId !== undefined) return true;
+    if (isLinkedExpense(expense?.timeEntryId)) return true;
     return isExpenseServiceEndInRange(expense, rangeStart, rangeEnd);
   });
+}
+
+/**
+ * Hängt dieser Beleg an einem Zeiteintrag?
+ *
+ * Gilt für Beleg-Objekte aus `db.getAllExpenses`: `timeEntryId == null` spiegelt exakt die
+ * SQL-Bedingung seines Standalone-Zweigs (`IS NULL`). Bewusst `== null` und KEIN
+ * truthy-Check — eine `0` ist zwar falsy, käme aber aus dem verknüpften Zweig (innerJoin
+ * auf `timeEntries.id`); ihr `customerId` stammt dann vom Zeiteintrag. Bei Autoincrement-PKs
+ * (≥ 1) ist der Fall praktisch unerreichbar, aber die Lesart einmal festzuhalten kostet
+ * nichts und hält die Aufrufer davon ab, auseinanderzulaufen.
+ *
+ * NICHT für Request-Eingaben verwenden (z. B. `targetTimeEntryId` der KI-Freigabe): dort
+ * gilt die truthy-Lesart, weil sie komplementär zu dem Zweig sein muss, der `timeEntryId`
+ * tatsächlich in den Payload schreibt. Siehe `explicitCustomerIdForApproval`.
+ */
+export function isLinkedExpense(timeEntryId: unknown): boolean {
+  return timeEntryId !== null && timeEntryId !== undefined;
+}
+
+/**
+ * Rohwert → `int`-FK oder `null`. Die Spalte `expenses.customerId` ist ein int-FK; ein
+ * nicht-numerischer Wert wäre ein Datenfehler und wird fallengelassen, statt ihn in ein
+ * INSERT zu tragen. Numerische Strings (JSON-Restore) bleiben gültig.
+ *
+ * `> 0` ist nicht kosmetisch: die Zugriffsprüfungen der Aufrufer stehen in truthy-Zweigen
+ * (`else if (targetCustomerId)`), eine `0` liefe also am Guard VORBEI und landete ungeprüft
+ * im INSERT — wo sie der Fremdschlüssel als roher MySQL-1452 abwiese statt als sauberes
+ * 400/403. Kein Sicherheitsloch (einen Kunden mit `id = 0` gibt es nicht), aber Guard und
+ * Schreibpfad sollen dieselbe Menge akzeptieren.
+ */
+function toCustomerIdOrNull(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
 }
 
 /**
@@ -166,15 +202,34 @@ export function explicitCustomerIdForRangeCopy(expense: {
   timeEntryId?: unknown;
   customerId?: unknown;
 }): number | null {
-  if (expense?.timeEntryId !== null && expense?.timeEntryId !== undefined) return null;
+  if (isLinkedExpense(expense?.timeEntryId)) return null;
+  return toCustomerIdOrNull(expense?.customerId);
+}
 
-  const raw = expense?.customerId;
-  if (raw === null || raw === undefined || raw === "") return null;
-
-  // Die Spalte ist ein int-FK. Ein nicht-numerischer Wert wäre ein Datenfehler und wird
-  // fallengelassen, statt ihn in ein INSERT zu tragen.
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
+/**
+ * Die EXPLIZITE Kundenzuordnung für einen per KI freigegebenen Beleg — oder `null`.
+ *
+ * Beide Freigabepfade (`receiptAi.approveBatch`, `receiptAi.approve`) lösen einen
+ * Ziel-Kunden auf und prüfen sogar den Zugriff darauf, schrieben ihn bis v2.7.4 aber NICHT
+ * in den Beleg: `toExpenseMutationPayload` (`server/receiptAi.ts`) kennt `customerId` gar
+ * nicht. Ein per KI OHNE Zeiteintrag, aber MIT Kundentreffer freigegebener Beleg landete
+ * damit als eigenständige Position mit `customerId = NULL` — derselbe stille Verlust wie
+ * beim Kopieren (siehe `explicitCustomerIdForRangeCopy`): zurück auf die Datums-Heuristik,
+ * und an einem Tag mit zwei Kunden fällt der Beleg aus der Kundenabrechnung.
+ *
+ * WARUM HIER TRUTHY statt `isLinkedExpense`: `targetTimeEntryId` ist eine Request-Eingabe,
+ * kein Wert aus dem innerJoin-Zweig. Maßgeblich ist, dass diese Bedingung KOMPLEMENTÄR zu
+ * dem Zweig ist, der `timeEntryId` tatsächlich in den Payload schreibt (`if
+ * (targetTimeEntryId)`) — sonst entstünde ein Beleg, der verknüpft UND explizit zugeordnet
+ * ist, oder einer, der beides nicht ist. Innere Konsistenz der Prozedur schlägt hier
+ * projektweite Einheitlichkeit der Lesart.
+ */
+export function explicitCustomerIdForApproval(
+  targetTimeEntryId: unknown,
+  targetCustomerId: unknown
+): number | null {
+  if (targetTimeEntryId) return null;
+  return toCustomerIdOrNull(targetCustomerId);
 }
 
 export type ExpenseDateRuleInput = {

@@ -16,8 +16,10 @@ import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { expenses as expensesTable } from "../drizzle/schema";
 import {
   expenseServiceEndDateSql,
+  explicitCustomerIdForApproval,
   explicitCustomerIdForRangeCopy,
   isExpenseServiceEndInRange,
+  isLinkedExpense,
   selectExpensesForRangeCopy,
   validateExpenseDateRules,
 } from "./expenseRules";
@@ -1027,6 +1029,9 @@ describe("copyRangeToNext: Kundenzuordnung der Kopie", () => {
   it("ein unbrauchbarer Wert wird fallengelassen statt in ein INSERT getragen", () => {
     expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: "" })).toBeNull();
     expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: "keine Zahl" })).toBeNull();
+    // Kein gültiger FK: die Spalte referenziert `customers.id` (Autoincrement, ≥ 1).
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: 0 })).toBeNull();
+    expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: -1 })).toBeNull();
     // Numerische Strings sind gültige FK-Werte (JSON-Restore) und bleiben erhalten.
     expect(explicitCustomerIdForRangeCopy({ timeEntryId: null, customerId: "42" })).toBe(42);
   });
@@ -1052,5 +1057,124 @@ describe("copyRangeToNext: Kundenzuordnung der Kopie", () => {
 
     expect(payloadBlock).toContain("customerId: explicitCustomerIdForRangeCopy(expense),");
     expect(payloadBlock).not.toContain("customerId: expense.customerId");
+  });
+});
+
+/**
+ * BERECHNUNGSGRUNDLAGE — `distance`/`rate`/`liters`/`pricePerLiter` (v2.7.4).
+ *
+ * `getAllExpenses` selektierte diese vier Spalten in KEINEM seiner beiden Zweige, obwohl der
+ * Kopier-Payload sie liest. Sie waren dort immer `undefined` und wurden von
+ * `normalizeExpenseMutationPayload` entfernt: die Kopie eines Tank-, Mietwagen- oder
+ * Kilometerpauschale-Belegs hatte einen korrekten `amount`, aber keinen Nachweis mehr
+ * (Belegpflicht Kilometerpauschale). Dieselbe Lücke traf die Bearbeiten-Maske, die ihre
+ * Felder aus `expense.distance`/`expense.rate` befüllt.
+ */
+describe("getAllExpenses: Berechnungsgrundlage wird mitgeladen", () => {
+  // Quelltext-Prüfung, weil `db.ts` einen DB-Treiber zieht und nicht ins schnelle Gate
+  // gehört (gleiche Begründung wie beim customerId-Wächter oben). Die Zweige werden über
+  // ihre unterscheidende `customerId`-Zeile aufgetrennt.
+  const dbSource = readFileSync(new URL("./db.ts", import.meta.url), "utf8");
+  const linkedStart = dbSource.indexOf("customerId: timeEntries.customerId,");
+  const standaloneStart = dbSource.indexOf("customerId: expenses.customerId,");
+  const linkedBranch = dbSource.slice(linkedStart, dbSource.indexOf(".innerJoin(", linkedStart));
+  const standaloneBranch = dbSource.slice(
+    standaloneStart,
+    dbSource.indexOf(".where(and(...standaloneConditions))", standaloneStart)
+  );
+
+  it("die Zweige lassen sich im Quelltext sauber auftrennen", () => {
+    // Schlägt das fehl, prüfen die Tests unten nichts mehr — dann NACHZIEHEN, nicht löschen.
+    expect(linkedStart).toBeGreaterThan(-1);
+    expect(standaloneStart).toBeGreaterThan(-1);
+    expect(linkedBranch.length).toBeGreaterThan(0);
+    expect(standaloneBranch.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["distance", "distance: expenses.distance,"],
+    ["rate", "rate: expenses.rate,"],
+    ["liters", "liters: expenses.liters,"],
+    ["pricePerLiter", "pricePerLiter: expenses.pricePerLiter,"],
+  ])("beide Zweige selektieren %s", (_name, selectLine) => {
+    expect(linkedBranch).toContain(selectLine);
+    expect(standaloneBranch).toContain(selectLine);
+  });
+
+  it("FALLGRUBE: der verknüpfte Zweig nimmt `expenses.rate`, NICHT `timeEntries.rate`", () => {
+    // Dieser Zweig joint beide Tabellen und BEIDE haben eine Spalte `rate`.
+    // `timeEntries.rate` ist der Tagessatz des Zeiteintrags, `expenses.rate` die Pauschale
+    // des Belegs — dieselbe Verwechslungsgefahr wie bei `customerId`. Ein Griff daneben
+    // schriebe den Tagessatz als Kilometerpauschale in die Kopie: geldwirksam und still.
+    expect(linkedBranch).not.toContain("rate: timeEntries.rate");
+  });
+});
+
+/**
+ * KI-FREIGABE — die aufgelöste Kundenzuordnung landet im Beleg (v2.7.4).
+ *
+ * Beide Freigabepfade lösen einen Ziel-Kunden auf und prüfen sogar den Zugriff darauf,
+ * verwarfen ihn dann aber: `toExpenseMutationPayload` kennt `customerId` nicht. Ein per KI
+ * ohne Zeiteintrag freigegebener Beleg bekam `customerId = NULL` — exakt das Fehlerbild, das
+ * v2.7.3 für die Kopie behoben hat.
+ */
+describe("receiptAi-Freigabe: Kundenzuordnung der Freigabe", () => {
+  it("ohne Zeiteintrag: der aufgelöste Kunde wird übernommen", () => {
+    expect(explicitCustomerIdForApproval(undefined, 42)).toBe(42);
+    expect(explicitCustomerIdForApproval(null, "42")).toBe(42);
+  });
+
+  it("mit Zeiteintrag: KEINE explizite Zuordnung (der Beleg folgt dem Eintrag)", () => {
+    expect(explicitCustomerIdForApproval(77, 42)).toBeNull();
+  });
+
+  it("ohne Kundentreffer bleibt es null (keine erfundene Zuordnung)", () => {
+    expect(explicitCustomerIdForApproval(undefined, undefined)).toBeNull();
+    expect(explicitCustomerIdForApproval(undefined, "")).toBeNull();
+    expect(explicitCustomerIdForApproval(undefined, "keine Zahl")).toBeNull();
+  });
+
+  it("customerId 0 wird verworfen — sonst liefe sie am Zugriffs-Guard vorbei", () => {
+    // Die Kundenprüfung der Prozedur steht in `else if (targetCustomerId)` — truthy. Eine
+    // `0` überspränge sie und landete ungeprüft im INSERT, wo der FK sie als roher
+    // MySQL-1452 abwiese statt als sauberes 400/403. Guard und Schreibpfad müssen dieselbe
+    // Menge akzeptieren. Gilt auch für negative Werte.
+    expect(explicitCustomerIdForApproval(undefined, 0)).toBeNull();
+    expect(explicitCustomerIdForApproval(undefined, "0")).toBeNull();
+    expect(explicitCustomerIdForApproval(undefined, -1)).toBeNull();
+  });
+
+  it("die Lesart ist KOMPLEMENTÄR zum timeEntryId-Zweig derselben Prozedur", () => {
+    // Der Payload setzt `timeEntryId` unter `if (targetTimeEntryId)` — truthy. Diese
+    // Funktion muss exakt gegenläufig entscheiden, sonst entstünde ein Beleg, der verknüpft
+    // UND explizit zugeordnet ist (oder beides nicht). Deshalb hier truthy statt
+    // `isLinkedExpense`, das für getAllExpenses-Objekte gilt: bei `0` laufen sie auseinander.
+    expect(explicitCustomerIdForApproval(0, 42)).toBe(42);
+    expect(isLinkedExpense(0)).toBe(true);
+  });
+
+  it("beide Freigabepfade verwenden den Baustein", () => {
+    // Batch- und Einzel-Pfad. Bei Umbenennung NACHZIEHEN, nicht löschen.
+    const routersSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+    const uses = routersSource.split(
+      "customerId: explicitCustomerIdForApproval(targetTimeEntryId, targetCustomerId),"
+    ).length - 1;
+    expect(uses).toBe(2);
+  });
+});
+
+/**
+ * Das geteilte Prädikat hinter beiden Kopier-Bausteinen (K4). Stand vorher zweimal
+ * wortgleich in `expenseRules.ts`.
+ */
+describe("isLinkedExpense", () => {
+  it("null/undefined = eigenständig", () => {
+    expect(isLinkedExpense(null)).toBe(false);
+    expect(isLinkedExpense(undefined)).toBe(false);
+  });
+
+  it("jede gesetzte Id = verknüpft, auch die falsy 0", () => {
+    expect(isLinkedExpense(1)).toBe(true);
+    expect(isLinkedExpense(0)).toBe(true);
   });
 });
