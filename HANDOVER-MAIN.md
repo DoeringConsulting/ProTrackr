@@ -52,16 +52,25 @@ additiv (Spalten in beide Zweige aufnehmen) — **Entscheidung des Account-Inhab
 
 - **Wo:** Worktree `C:\Projects\ProTrackr_main`, Branch **`main`** (ausschließlich). NIE in
   `ProTrackr_developing_path` (= `nas-setup`, NAS-Welt).
-- **Stand:** main-HEAD **v2.5.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
-  App-Release **v2.5.0** — **auf main (2026-07-15); NAS-Prod-Rollout offen**. Baum sauber, Drift `0 0`. Die Workstreams bis v2.4.0 sind
-  **live auf Prod**:
+- **Stand:** main-HEAD **v2.7.x** (laufende Handover-Doku-Bumps, jeder Docs-Commit patcht),
+  App-Release **v2.7.0** (2026-08-04), `origin/main` synchron (Drift `0 0`).
+  **⚠️ Working Tree NICHT sauber** — ein fertiger, unreviewter Change liegt offen (§0.1).
+- **Versionsstände auseinander:** **PROD läuft weiterhin auf `v2.4.0`** (Stand 2026-08-04) — die
+  v2.5.0-Promotion wurde nie abgeschlossen. Zwischen Prod und main liegen damit **v2.5.0, v2.5.2,
+  v2.5.5, v2.6.0, v2.6.2, v2.6.4, v2.7.0**. Ein Rollout bringt alles auf einmal; Details §0.1 + §6.7.
+  Die Workstreams **bis v2.4.0** sind live auf Prod:
   1. **APP_ENV_LABEL Runtime-Titel** (v2.1.28) — live auf Prod (Prod-Tab-„(DEV)"-Bug behoben).
   2. **Umsatzentwicklung-Chart** (v2.2.0 → **v2.3.0**) — live auf Prod.
   3. **Zeitumsatz-Tooltip** (v2.3.3) — **live auf Prod** (im v2.4.0-Rollout).
   4. **§6.2-Aufräumaufgaben — live auf Prod (v2.4.0):** (a) **TZ-Kohärenz** (v2.3.5, `warsawDateKey`);
      (b) **persistenter MySQL-Session-Store** (v2.4.0, `express-mysql-session` + Migration
      `0025_sessions`) — Abnahme bestanden (Login überlebt Container-Restart).
-- **Nichts offen, nichts blockiert.** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
+- **Offen (Kurzliste, Details §0.1):** (1) Senior-Review + Commit des `customerId`-Fixes;
+  (2) **Manifest + Tag fehlen für 2.6.4/2.7.0**; (3) **NAS-Prod-Rollout** (Prod = v2.4.0, NAS-Chat,
+  vorher Analyse-Skript erneut fahren — ADR 0002 offene Punkte 3+5); (4) **664,17 EUR** aus den
+  verfallenen Tickets #605/#492 sind **abrechenbar, aber noch nicht nachberechnet** (§6.5, kaufmännisch);
+  (5) Entscheidung zu `distance`/`rate`/`liters`/`pricePerLiter`, die beim Kopieren verlorengehen.
+- **Historie:** v2.4.0 wurde über den Dev-Loop bit-identisch nach Prod promotet
   (Prod v2.3.0 → v2.4.0, Image `91e956650dd9`); Migration `0025` auf Dev+Prod angewandt. **Erster
   NAS-Rollout mit Schema-Change** — sauber durch (Backup → Migration → verify → deploy).
 - **Zuletzt erledigt auf main:** (a) **v2.5.0** Dashboard-Backlog (§6.4) — „Rechnungen"-Kachel +
