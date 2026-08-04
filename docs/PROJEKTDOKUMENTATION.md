@@ -36,7 +36,7 @@ Die Anwendung bietet folgende Hauptfunktionen:
 
 **Zeiterfassung:** Kalenderbasierte Erfassung von Arbeitsstunden mit automatischer Berechnung von Manntagen (1 Stunde = 0,125 MT) und Tagessätzen basierend auf Kundentarifen. Unterstützt werden verschiedene Arbeitstypen wie Onsite, Remote, Off-Duty und Geschäftsreisen. Die Bulk-Zeiterfassung ermöglicht das Kopieren von Einträgen auf mehrere Tage.
 
-**Reisekostenverwaltung:** Erfassung von Reisekosten mit verschiedenen Kategorien (Auto, Zug, Flug, Taxi, Hotel, Tanken, Bewirtung, Sonstiges) inklusive kategoriespezifischer Felder wie Distanz, Ticketnummern, Check-in/Check-out-Daten und Treibstoffmengen. Reisekosten werden tagesbasiert erfasst und können in verschiedenen Währungen (EUR, PLN, USD, CHF, GBP) angelegt werden.
+**Reisekostenverwaltung:** Erfassung von Reisekosten in elf Kategorien (Mietwagen, Kilometerpauschale, Zug/Fernverkehr, Flug, Taxi, ÖPNV, Hotel, Kraftstoff, Bewirtung, Lebensmittel, Sonstiges) inklusive kategoriespezifischer Felder wie Distanz, Ticketnummern, Check-in/Check-out-Daten und Treibstoffmengen. Reisekosten werden tagesbasiert erfasst und können in verschiedenen Währungen (EUR, PLN, USD, CHF, GBP) angelegt werden. Für die Zuordnung zu einem Abrechnungsmonat ist **nicht** das Belegdatum maßgeblich, sondern das **Leistungsende** `checkOutDate ?? date` — siehe [ADR 0002](adr/0002-reisekosten-leistungsende.md).
 
 **Abrechnungsberichte:** Generierung von Buchhaltungsberichten nach polnischem Steuerrecht mit Berechnung von Bruttoumsatz, Fixkosten, ZUS (Sozialversicherung 19,52%), Krankenversicherung (9%) und Steuer (19%). Kundenberichte zeigen detaillierte Tagesübersichten und Zusammenfassungen mit automatischer Rechnungsnummerngenerierung im Format YYYY-NNN.
 
@@ -106,18 +106,48 @@ Die Anwendung basiert auf einem modernen Full-Stack-Technologie-Stack mit React 
 
 **Akzeptanzkriterien:**
 - Tagesbasierte Erfassung über Kalender-Button
-- Mehrere Kostenarten pro Tag: Auto, Zug, Flug, Taxi, Hotel, Tanken, Bewirtung, Sonstiges
+- Mehrere Kostenarten pro Tag; elf Kategorien (DB-Enum `expenses.category`, `drizzle/schema.ts`):
+
+  | Enum-Wert | Bezeichnung in der Oberfläche |
+  |---|---|
+  | `car` | Mietwagen |
+  | `mileage_allowance` | Kilometerpauschale |
+  | `train` | Zug/Fernverkehr |
+  | `flight` | Flug |
+  | `taxi` | Taxi |
+  | `transport` | ÖPNV |
+  | `hotel` | Hotel |
+  | `fuel` | Kraftstoff |
+  | `meal` | Bewirtung |
+  | `food` | Lebensmittel |
+  | `other` | Sonstiges |
+
 - Kategoriespezifische Felder:
-  - Auto: Distanz, Pauschale
-  - Zug/Flug: Ticketnummer, Flugnummer, Abfahrts-/Ankunftszeit
-  - Hotel: Check-in/Check-out-Datum
-  - Tanken: Liter, Preis pro Liter
+  - Kilometerpauschale: Distanz (km), Pauschale (€/km), daraus berechneter Betrag
+  - Zug/Flug: Ticketnummer, Flugnummer, Flugtyp (Inland/International), Abfahrts-/Ankunftszeit
+  - Flug: Hinflug-/Rückflugdatum (Rückflug wird auf `checkOutDate` geschrieben)
+  - Hotel: Check-in-Datum, Nächte bzw. Check-out-Datum
+  - Kraftstoff: Liter, Preis pro Liter
+  - Mietwagen, Zug, ÖPNV, Sonstiges: optionales Feld „Ende (bei mehrtägiger Nutzung)" (seit v2.6.0)
+- **Leistungsende und Monatszuordnung:** Maßgeblich für den Abrechnungsmonat eines Belegs ist das
+  Leistungsende `leistungsende = checkOutDate ?? date`, nicht das Belegdatum. Bei Hotels ist `date`
+  der Check-in, bei einem Hin-/Rückflug auf einem Ticket das Hinflugdatum — ein Aufenthalt über den
+  Monatswechsel zählt deshalb im Abreise-, nicht im Anreisemonat. Ein Beleg wird **nie gesplittet**
+  und zählt in **genau einem** Zeitraum. Die Regel gilt einheitlich für Kundenabrechnung,
+  Report-Anzeige, Dashboard und Steuerbasis; sie ist als einzige Funktion `isExpenseInPeriod`
+  (`client/src/lib/monthlyFinancials.ts`) implementiert. Details, Referenzfall und offene Punkte:
+  [ADR 0002](adr/0002-reisekosten-leistungsende.md) (ersetzt [ADR 0001](adr/0001-reisekosten-zeitraum-zuordnung.md)).
+- Ein Enddatum ist nur dort erfassbar, wo es fachlich existiert: `hotel`, `flight` (eigene Masken)
+  sowie `car`, `train`, `transport`, `other`. Punktuelle Ereignisse (`taxi`, `fuel`, `meal`, `food`,
+  `mileage_allowance`) tragen keins; dort entscheidet `date`.
+- Chronologie-Prüfung kategorienunabhängig: `checkOutDate >= COALESCE(checkInDate, date)`
+  (`validateExpenseDateRules` in `server/expenseRules.ts`)
 - Währungsauswahl pro Kostenart (EUR, PLN, USD, CHF, GBP)
 - Plus-Button zum Hinzufügen weiterer Kostenarten
 - Automatische Verknüpfung mit TimeEntry (Off-Duty Entry wird erstellt falls kein Entry vorhanden)
 - Anzeige in Zeiterfassung als violettes "RKE"-Badge
 
-**Status:** ✅ Abgeschlossen (Aufgabe 3, 4, 5, 21)
+**Status:** ✅ Abgeschlossen (Aufgabe 3, 4, 5, 21); Leistungsende ergänzt in v2.5.5 / v2.6.0
 
 ---
 
@@ -509,7 +539,8 @@ Speichert Reisekosten mit kategoriespezifischen Feldern.
 |--------|-----|--------------|
 | id | INT (PK, AUTO_INCREMENT) | Eindeutige Expense-ID |
 | timeEntryId | INT (FK → timeEntries.id) | Zugehöriger TimeEntry |
-| category | ENUM('car', 'train', 'flight', 'taxi', 'transport', 'meal', 'hotel', 'food', 'fuel', 'other') | Kostenart |
+| date | TIMESTAMP NOT NULL | Belegdatum bzw. Leistungsbeginn (bei Hotel = Check-in, bei Flug = Hinflug) |
+| category | ENUM('car', 'train', 'flight', 'taxi', 'transport', 'mileage_allowance', 'hotel', 'fuel', 'meal', 'food', 'other') | Kostenart (11 Werte, Migration `0021`) |
 | distance | INT | Distanz (Kilometer) |
 | rate | INT | Pauschale (Cents) |
 | amount | INT | Betrag (Cents) |
@@ -519,12 +550,18 @@ Speichert Reisekosten mit kategoriespezifischen Feldern.
 | flightNumber | VARCHAR(100) | Flugnummer |
 | departureTime | VARCHAR(50) | Abfahrtszeit |
 | arrivalTime | VARCHAR(50) | Ankunftszeit |
-| checkInDate | VARCHAR(50) | Check-in-Datum |
-| checkOutDate | VARCHAR(50) | Check-out-Datum |
+| checkInDate | TIMESTAMP (nullable) | Leistungsbeginn (heute nur bei Hotel befüllt); Fallback ist `date` |
+| checkOutDate | TIMESTAMP (nullable) | **Generisches Leistungsende** — nicht hotel-spezifisch: Hotel = Check-out, Flug = Rückflugdatum, mehrtägige Belege (`car`, `train`, `transport`, `other`) = Nutzungsende. `NULL` = eintägige Leistung, dann entscheidet `date`. |
 | liters | INT | Treibstoffmenge (Milliliter) |
 | pricePerLiter | INT | Preis pro Liter (Cents) |
 | createdAt | TIMESTAMP | Erstellungszeitpunkt |
 | updatedAt | TIMESTAMP | Aktualisierungszeitpunkt |
+
+> **Zeitraum-Zuordnung (geldwirksam):** In welchen Abrechnungsmonat ein Beleg fällt, entscheidet
+> allein das Leistungsende `checkOutDate ?? date` — nicht `date`. Die Regel ist einmal implementiert
+> (`isExpenseInPeriod`, `client/src/lib/monthlyFinancials.ts`) und gilt für Kundenabrechnung,
+> Dashboard und Steuerbasis gleichermaßen. Herleitung, Referenzfall #596 und offene Punkte:
+> [ADR 0002](adr/0002-reisekosten-leistungsende.md).
 
 #### fixedCosts
 
@@ -710,7 +747,8 @@ z.object({
 ```typescript
 z.object({
   timeEntryId: z.number(),
-  category: z.enum(['car', 'train', 'flight', 'taxi', 'transport', 'meal', 'hotel', 'food', 'fuel', 'other']),
+  // Quelle: expenseCategorySchema in server/routers.ts
+  category: z.enum(['car', 'mileage_allowance', 'train', 'flight', 'taxi', 'transport', 'meal', 'hotel', 'food', 'fuel', 'other']),
   distance: z.number().optional(),
   rate: z.number().optional(),
   amount: z.number(),
@@ -721,6 +759,7 @@ z.object({
   departureTime: z.string().optional(),
   arrivalTime: z.string().optional(),
   checkInDate: z.string().optional(),
+  // Leistungsende (ADR 0002) — steuert die Monatszuordnung, nicht nur Hotel
   checkOutDate: z.string().optional(),
   liters: z.number().optional(),
   pricePerLiter: z.number().optional(),
