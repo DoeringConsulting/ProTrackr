@@ -2073,3 +2073,49 @@ Rollback-Fähigkeit versichert war). Read-only Bestandsaufnahme, dann gezielt.
   (`af97e678`) + Daten via DB-Backups; alles Ältere über **Git-Tags** (jede Version `git checkout <tag>`
   + `docker compose build` neu baubar). Löschen der alten Images nimmt nur die Sofort-Bequemlichkeit
   für >1 Generation zurück, nicht die Fähigkeit.
+
+## 2026-08-05 — Migration 0021 auf PROD nachgezogen (Promotions-Blocker gefallen)
+
+**Kontext:** `expenses.category` kannte auf PROD den Wert `mileage_allowance` nicht — die
+Kilometerpauschale war dort **seit jeher nicht erfassbar** (Bestandsproblem, keine Release-Folge;
+Handover §6.1). Ausgeführt als die **einzige freigegebene Ausnahme** von der Promotion-Governance,
+mit Backup, **vor** der Promotion v2.7.9.
+
+**Ist-Stand vorab selbst gemessen** (roh `/version.json`, nicht der Footer — Lesson §9.10):
+DEV `2.7.9` / `2026-08-04T22:15:21.391Z`, PROD `2.5.0` / `2026-07-15T19:41:57.047Z`. Über
+`information_schema` bestätigt: PROD 10 ENUM-Werte, DEV 11.
+
+**Ablauf (jeder Schritt verifiziert):**
+1. **Backup** `db-migration/prod-pre-migrate-0021_2026-08-05_12-37-55.sql` — 5.946.365 B, 17 Tabellen,
+   `CREATE TABLE`+`INSERT INTO expenses` vorhanden, Endmarker `Dump completed on 2026-08-05 12:37:55`,
+   **0** `mysqldump:`-Fehlerzeilen im Dump (Lesson 8). Dump-Kommando formatgleich zu `deploy-prod.sh`.
+2. **Guard vor dem ALTER:** das Skript brach ab, wenn das Backup nicht die Vorher-ENUM-Definition
+   **ohne** `mileage_allowance` enthielt. Gefunden:
+   `enum('car','train','flight','taxi','transport','hotel','fuel','meal','food','other')` → bestanden.
+3. **ALTER** aus der Repo-Datei `drizzle/0021_expenses_add_mileage_allowance.sql`
+   (`md5 efdbbd18fe97e8843e0fbb6b9ea7fb82`, kein handgetipptes SQL) via
+   `docker exec -i protrackr-mysql … mysql --show-warnings <`. Exit 0, keine Warnungen.
+4. **Verifikation:** `SHOW COLUMNS` → 11 Werte; ENUM **byte-identisch mit DEV**; alle vier
+   protrackr-Container `healthy`; PROD extern weiter `2.5.0` (unverändert, wie gewollt); App-Log der
+   letzten 5 min ohne Einträge.
+
+**★ NEUE LESSON — ENUM-Mitten-Einfügung ist kein reines „additiv":** `mileage_allowance` landet an
+**Position 6**, nicht am Ende. ENUM speichert intern **Integer-Indizes**; `hotel`/`fuel`/`meal`/`food`/
+`other` verschieben sich dadurch um eins. MySQL mappt in diesem Fall über die **Strings**
+(`ALGORITHM=INPLACE` ist bei Mitten-Einfügung unzulässig → `COPY`/Table-Rebuild) — aber das wurde
+**nachgewiesen statt angenommen**: Kategorie-Verteilung vorher und nachher erhoben und verglichen —
+`car 13 · train 17 · flight 32 · taxi 91 · transport 6 · hotel 48 · fuel 6 · other 6`, **Gesamt 219**,
+**identisch**, dazu **0** leere/`NULL`-Kategorien (Strict-Mode-Fallback ausgeschlossen). Bei einem
+index-basierten Mapping wäre die Verteilung sichtbar verschoben gewesen. **Diese Vorher/Nachher-
+Erhebung ist bei jeder künftigen ENUM-Mitten-Einfügung Pflicht** — die reine `SHOW COLUMNS`-Prüfung
+aus der Ursprungsplanung hätte einen Index-Shift **nicht** entdeckt.
+
+**Damit ist der letzte Pflicht-Blocker vor der Promotion v2.7.9 gefallen.** Die Promotion selbst
+bleibt offen und braucht die ausdrückliche Freigabe des Account-Inhabers (Handover §0.1).
+Rollback für diesen Schritt: Backup aus 1. bzw. Rück-`ALTER` auf die 10-Werte-Definition.
+
+**Nebenbefund (Doku-Schuld, nicht behoben):** Diese Datei endete zuvor am **2026-07-06**. Die
+Rollouts **v2.5.0** (Prod, 15.07.2026) und **v2.7.9 auf Dev** (04./05.08.2026) sind hier **nie**
+eingetragen worden — sie stehen nur im Handover. Bewusst **nicht** nachträglich rekonstruiert
+(Lesson §9.10: nichts aus Dokumenten als Fakt übernehmen); als offener Punkt in Handover §0.1
+vermerkt.

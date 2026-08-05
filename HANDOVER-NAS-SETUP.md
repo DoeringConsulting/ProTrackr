@@ -4,6 +4,7 @@
 > **Stand:** 2026-08-05 · **Branch:** `nas-setup` (HEAD `4752ac0`, v2.7.9) · in Sync mit origin.
 > **Status:** Rollout **v2.7.9 auf DEV live und abgenommen-mit-Befunden**. **PROD steht auf v2.5.0**
 > — Promotion **bewusst offen** (Entscheidung Account-Inhaber, siehe §0.1).
+> **Migration 0021 ist auf PROD nachgezogen** (2026-08-05 12:37, §6.1) — Promotions-Blocker gefallen.
 > **Bei Wiedereinstieg zuerst:** §0 lesen, dann Ist-Stand selbst verifizieren (§1.4).
 
 ---
@@ -19,8 +20,9 @@ Autoren-Maschine (kein localhost seit A5).
 | # | Punkt | Status |
 |---|---|---|
 | **1** | **Promotion v2.7.9 → PROD** | **offen** — Dev-Abnahme brachte Befunde (§7), Account-Inhaber entscheidet, ob vor oder nach Fix promotet wird |
-| **2** | **Migration 0021 auf PROD nachziehen** | **PFLICHT vor Promotion** (§6.1) — Kilometerpauschale ist auf Prod seit jeher nicht erfassbar |
+| **2** | ~~Migration 0021 auf PROD nachziehen~~ | ✅ **ERLEDIGT 2026-08-05 12:37** (§6.1) — Blocker gefallen |
 | **3** | App-Befunde aus der Dev-Abnahme | **an MAIN übergeben** (§7) — vier Punkte, davon einer am neu ausgerollten Feature |
+| **4** | History-Lücke `NAS_SETUP_HISTORY.md` | **offen** — letzter Eintrag ist 2026-07-06; die Rollouts **v2.5.0** (15.07.) und **v2.7.9 auf Dev** (04./05.08.) sind dort nie eingetragen worden |
 
 ---
 
@@ -53,7 +55,7 @@ Autoren-Maschine (kein localhost seit A5).
 | Image | `protrackr-app:latest` | `protrackr-dev-app:latest` |
 | **Version** | **2.5.0** | **2.7.9** |
 | **buildTime (roh)** | **15.07.2026 19:41:57** | **04.08.2026 22:15:21** ← Promotion-Vergleichswert |
-| Migration 0021 | **FEHLT** ⛔ | vorhanden ✓ (nachgezogen 2026-08-05) |
+| Migration 0021 | vorhanden ✓ (nachgezogen 2026-08-05 12:37) | vorhanden ✓ (nachgezogen 2026-08-05) |
 | Daten | Wahrheit | frischer Prod-Klon (2026-08-05) |
 
 - **TZ verifiziert:** App **und** MySQL, Dev **und** Prod → `Europe/Warsaw` / `CEST`,
@@ -102,24 +104,35 @@ Autoren-Maschine (kein localhost seit A5).
 
 ## 6. OFFENE PFLICHT-PUNKTE VOR DER PROMOTION
 
-### 6.1 ⛔ Migration 0021 fehlt auf PROD (Bestandsproblem, kein Release-Folge)
+### 6.1 ✅ Migration 0021 auf PROD nachgezogen (2026-08-05 12:37) — ERLEDIGT
 
-**Verifiziert 2026-08-05** über `information_schema`:
+Bestandsproblem, keine Release-Folge. Ausgeführt als die **einzige freigegebene Ausnahme** von der
+Promotion-Governance (§8), mit Backup, **vor** der Promotion.
+
+**Vorher/Nachher (`information_schema`, selbst gemessen):**
 
 | | `expenses.category` |
 |---|---|
-| PROD | 10 Werte — **`mileage_allowance` fehlt** |
-| DEV | 11 Werte ✓ |
+| PROD **vorher** | 10 Werte — `mileage_allowance` fehlte |
+| PROD **nachher** | **11 Werte ✓ — identisch mit DEV** |
 
-**Folge:** Auf PROD scheitert **jede** Erfassung einer Kilometerpauschale — seit jeher.
+**Ausgeführter Ablauf:**
+1. **Backup** `db-migration/prod-pre-migrate-0021_2026-08-05_12-37-55.sql` (5.946.365 B, 17 Tabellen,
+   Endmarker `Dump completed`, 0 `mysqldump:`-Fehlerzeilen) — Kommando formatgleich zu `deploy-prod.sh`.
+2. **Guard vor dem ALTER:** Backup musste die **Vorher-ENUM-Definition ohne** `mileage_allowance`
+   nachweislich enthalten, sonst Abbruch. Bestanden.
+3. **ALTER** aus der Repo-Datei `drizzle/0021_expenses_add_mileage_allowance.sql`
+   (`md5 efdbbd18fe97e8843e0fbb6b9ea7fb82`) via `docker exec -i … mysql <`, Exit 0, keine Warnungen.
+4. **Verifikation:** `SHOW COLUMNS` = 11 Werte; App healthy; PROD extern weiter auf v2.5.0; App-Log leer.
 
-**Vor der Promotion nachziehen** (additiv, erweitert nur das ENUM, ändert keine Daten):
-```sql
-ALTER TABLE `expenses` MODIFY COLUMN `category`
-  ENUM('car','train','flight','taxi','transport','mileage_allowance',
-       'hotel','fuel','meal','food','other') NOT NULL;
-```
-Ablauf: **Prod-Backup → ALTER → `SHOW COLUMNS FROM expenses LIKE 'category'` (11 Werte) → Promotion.**
+> **⚠️ RISIKO-DETAIL, das die Ursprungsplanung nicht benannte:** Der neue Wert wird an **Position 6
+> eingefügt**, nicht angehängt — `hotel`/`fuel`/`meal`/`food`/`other` verschieben sich im internen
+> ENUM-**Index** um eins. MySQL mappt bei einer Mitten-Einfügung über die **Strings**
+> (`ALGORITHM=COPY`, Table-Rebuild), nicht über die Indizes. **Nachgewiesen statt angenommen:** die
+> Kategorie-Verteilung wurde vorher und nachher erhoben und ist **byte-identisch** —
+> `car 13 · train 17 · flight 32 · taxi 91 · transport 6 · hotel 48 · fuel 6 · other 6`, **Gesamt 219**,
+> dazu **0** leere/`NULL`-Kategorien. Bei einem index-basierten Mapping wäre die Verteilung verschoben.
+> **Diese Vorher/Nachher-Erhebung ist bei jeder künftigen ENUM-Mitten-Einfügung Pflicht.**
 
 **Alle übrigen Migrationen sind auf beiden DBs vollständig** (0013–0016, 0022, 0023, 0024, 0025
 gezielt geprüft; Spaltenmengen Prod == Dev == Soll).
@@ -210,7 +223,9 @@ v. a. Mo/Di = **Hinflug**; bei Umstieg entscheidet der **letzte** Flughafen) und
 
 - **PROD-Änderungen ausschließlich via DEV → Test → Freigabe → Promotion.** Einziger legitimer
   Prod-Weg ist `deploy-prod.sh` (Gate `PROMOTE`, Backup, Rollback-Image, Health-Gate, Auto-Rollback).
-  Ausnahme aktuell freigegeben: **Migration 0021** (§6.1) — mit Backup, vor der Promotion.
+  Die einzige freigegebene Ausnahme — **Migration 0021** — ist am 2026-08-05 12:37 **verbraucht**
+  (§6.1). **Es besteht derzeit keine offene Ausnahme;** jeder weitere Prod-Eingriff braucht eine
+  neue, ausdrückliche und schrittbezogene Freigabe des Account-Inhabers.
 - **Read-only-Zugriffe auf Prod** (Analyse-Skript, `information_schema`) sind **kein** Prod-Deploy und
   lösen keinen Guard-Alarm aus (`docker exec` erzeugt kein start/die-Event).
 - **Niemals `nas-setup → main` mergen** ohne ausdrückliche Freigabe. `main → nas-setup` ist der
