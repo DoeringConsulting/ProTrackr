@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import { addDaysToDateKey } from "@shared/dateStichtag";
+import {
+  normalizeAirportCode,
+  suggestFlightDirection,
+  type FlightDirection,
+} from "@shared/flightDirection";
 import { invokeLLM } from "./_core/llm";
 
 export type ImportIssueSeverity = "error" | "warning";
@@ -32,6 +37,9 @@ export type ReceiptExpenseCandidate = {
   comment?: string;
   fullDay?: boolean;
   flightRouteType?: "domestic" | "international" | null;
+  departureAirport?: string | null;
+  arrivalAirport?: string | null;
+  flightDirection?: FlightDirection | null;
   departureTime?: string | null;
   arrivalTime?: string | null;
   returnDate?: string | null;
@@ -69,6 +77,33 @@ export type ReceiptAnalysisResult = {
 
 const DATE_ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * Flugstrecke aus dem Belegtext (Befund B3).
+ *
+ * Bis v2.8.x wurde das `from X to Y`-Muster nur ausgewertet, um `international` zu setzen —
+ * die Codes selbst fielen weg. Hier werden sie behalten.
+ *
+ * BEWUSST case-SENSITIV auf Versalien: IATA-Codes stehen auf Tickets und Rechnungen immer
+ * in Großbuchstaben. Ein `/i` würde in `from one to two` zwei "Flughäfen" finden — bei drei
+ * Buchstaben ist jedes zweite Wort ein Kandidat. Lieber nichts erkennen als etwas Falsches
+ * (K1): Was hier durchfällt, trägt der Nutzer in der Maske nach.
+ */
+const AIRPORT_ROUTE_PATTERNS: readonly RegExp[] = [
+  /\b(?:FROM|From|from|AB|Ab|ab|VON|Von|von)\s+([A-Z]{3})\s+(?:TO|To|to|NACH|Nach|nach)\s+([A-Z]{3})\b/,
+  // Beschriftete Strecke: "Strecke: KTW-MUC", "Route KTW → MUC", "Trasa: KTW - MUC".
+  /\b(?:Strecke|STRECKE|Route|ROUTE|Trasa|TRASA|Flugstrecke|FLUGSTRECKE)\s*[:\-]?\s*([A-Z]{3})\s*(?:[-–—>→]|to|nach)\s*([A-Z]{3})\b/,
+];
+
+function extractAirportRoute(text: string): { departureAirport: string; arrivalAirport: string } | null {
+  for (const pattern of AIRPORT_ROUTE_PATTERNS) {
+    const match = text.match(pattern);
+    const departureAirport = normalizeAirportCode(match?.[1]);
+    const arrivalAirport = normalizeAirportCode(match?.[2]);
+    if (departureAirport && arrivalAirport) return { departureAirport, arrivalAirport };
+  }
+  return null;
+}
 
 const CATEGORY_ALIASES: Record<string, ExpenseCategory> = {
   auto: "car",
@@ -122,6 +157,7 @@ Arbeite strikt nach diesem Gerüst:
 - comment: kurze, sachliche Beschreibung
 - fullDay: true/false (default false)
 - flightRouteType: domestic|international|null
+- departureAirport/arrivalAirport: IATA-Code aus 3 Buchstaben oder null
 - departureTime/arrivalTime: HH:MM oder null
 - returnDate/checkInDate/checkOutDate: YYYY-MM-DD oder null
 - nights, distanceKm, ratePerKm, liters, pricePerLiter: number oder null
@@ -131,6 +167,9 @@ Regeln:
 - Bei Flug/Hotel immer den Gesamtbetrag genau einmal auf den Starttag beziehen.
 - Währung nur setzen, wenn klar erkennbar; sonst null.
 - Datum/Zeit nur setzen, wenn sicher erkennbar; sonst null.
+- Flughäfen nur als IATA-Code (3 Buchstaben) setzen, wenn der Beleg sie nennt; NIE aus einem
+  Städtenamen erraten. Bei Umstiegsverbindungen ist arrivalAirport das ENDZIEL der Reise,
+  nicht der Zwischenstopp.
 - Keine Freitext-Erfindungen, keine zusätzlichen Felder.
 `.trim();
 
@@ -256,6 +295,8 @@ function extractBasicCandidateFromText(text: string, input: ReceiptAnalysisInput
     /\b(international|ausland|zagranicz|intl)\b/i.test(lower) ||
     /(?:from|ab)\s+[a-z]{3,}\s+(?:to|nach)\s+[a-z]{3,}/i.test(lower);
 
+  const route = category === "flight" ? extractAirportRoute(normalized) : null;
+
   const vendorName = lines[0]?.slice(0, 120) ?? null;
 
   return {
@@ -266,6 +307,11 @@ function extractBasicCandidateFromText(text: string, input: ReceiptAnalysisInput
     comment: lines.slice(0, 3).join(" | ").slice(0, 500),
     fullDay: false,
     flightRouteType: category === "flight" ? (isInternational ? "international" : "domestic") : null,
+    departureAirport: route?.departureAirport ?? null,
+    arrivalAirport: route?.arrivalAirport ?? null,
+    // Richtung nur aus der Strecke, nie aus dem Belegtext geraten. Fehlt die Strecke oder
+    // ist sie nicht eindeutig, bleibt das Feld leer und die Maske fragt nach.
+    flightDirection: suggestFlightDirection(route?.departureAirport, route?.arrivalAirport).direction,
     departureTime,
     arrivalTime,
     returnDate: null,
@@ -347,6 +393,8 @@ async function extractByLlm(input: ReceiptAnalysisInput): Promise<{ model: strin
                     comment: { type: ["string", "null"] },
                     fullDay: { type: ["boolean", "null"] },
                     flightRouteType: { type: ["string", "null"] },
+                    departureAirport: { type: ["string", "null"] },
+                    arrivalAirport: { type: ["string", "null"] },
                     departureTime: { type: ["string", "null"] },
                     arrivalTime: { type: ["string", "null"] },
                     returnDate: { type: ["string", "null"] },
@@ -386,7 +434,15 @@ async function extractByLlm(input: ReceiptAnalysisInput): Promise<{ model: strin
     const rawParsed = JSON.parse(jsonText || "{}");
     const rawCandidates = Array.isArray((rawParsed as any)?.candidates) ? (rawParsed as any).candidates : [];
 
-    const candidates: ReceiptExpenseCandidate[] = rawCandidates.map((candidate: any) => ({
+    const candidates: ReceiptExpenseCandidate[] = rawCandidates.map((candidate: any) => {
+      // Strecke zuerst normalisieren, dann die Richtung ABLEITEN. Die Richtung steht
+      // bewusst NICHT im LLM-Schema: Sie ist eine Fachregel (shared/flightDirection.ts),
+      // keine Extraktion. Ein Modell, das sie miträt, würde bei "MUC → WAW" irgendetwas
+      // antworten, wo die Regel bewusst schweigt und nachfragt (K1/K4).
+      const departureAirport = normalizeAirportCode(candidate?.departureAirport);
+      const arrivalAirport = normalizeAirportCode(candidate?.arrivalAirport);
+
+      return {
       category: normalizeCategory(candidate?.category),
       amount: parseDecimal(candidate?.amount),
       currency: normalizeCurrency(candidate?.currency),
@@ -397,6 +453,9 @@ async function extractByLlm(input: ReceiptAnalysisInput): Promise<{ model: strin
         candidate?.flightRouteType === "international" || candidate?.flightRouteType === "domestic"
           ? candidate.flightRouteType
           : null,
+      departureAirport,
+      arrivalAirport,
+      flightDirection: suggestFlightDirection(departureAirport, arrivalAirport).direction,
       departureTime: normalizeTime(candidate?.departureTime),
       arrivalTime: normalizeTime(candidate?.arrivalTime),
       returnDate: normalizeIsoDate(candidate?.returnDate),
@@ -412,7 +471,8 @@ async function extractByLlm(input: ReceiptAnalysisInput): Promise<{ model: strin
       receiptNo: typeof candidate?.receiptNo === "string" ? candidate.receiptNo : null,
       vendorName: typeof candidate?.vendorName === "string" ? candidate.vendorName : null,
       projectName: typeof candidate?.projectName === "string" ? candidate.projectName : null,
-    }));
+      };
+    });
 
     return {
       model: response.model || "llm-default",
@@ -524,6 +584,12 @@ export function toExpenseMutationPayload(candidate: ReceiptExpenseCandidate): Re
 
   if (category === "flight") {
     payload.flightRouteType = candidate.flightRouteType ?? "domestic";
+    // `undefined` statt "" bei fehlender Strecke: Der Payload legt einen NEUEN Beleg an,
+    // es gibt nichts zu leeren — und ein weggelassenes Feld ist der einzige Weg, "nicht
+    // erfasst" auszudrücken, ohne die Zod-Validierung mit "" zu belegen.
+    payload.departureAirport = candidate.departureAirport ?? undefined;
+    payload.arrivalAirport = candidate.arrivalAirport ?? undefined;
+    payload.flightDirection = candidate.flightDirection ?? undefined;
     payload.departureTime = candidate.departureTime ?? undefined;
     payload.arrivalTime = candidate.arrivalTime ?? undefined;
     payload.checkOutDate = candidate.returnDate ?? undefined;

@@ -32,6 +32,11 @@ import { toast } from "sonner";
 // Dieselbe Verschiebungsregel, die der Server beim Kopieren ANWENDET — die Vorschau darf
 // nichts anderes versprechen, als angelegt wird (K4).
 import { isWorkdayKey, nextWorkdayKey, type CopyScope } from "@shared/copyRangeShift";
+import {
+  normalizeAirportCode,
+  suggestFlightDirection,
+  type FlightDirection,
+} from "@shared/flightDirection";
 
 type TimeEntryFormData = {
   customerId: number | null;
@@ -218,6 +223,9 @@ type ExpenseCalendarItem = {
   checkInDate?: string | Date | null;
   checkOutDate?: string | Date | null;
   flightRouteType?: "domestic" | "international" | string | null;
+  departureAirport?: string | null;
+  arrivalAirport?: string | null;
+  flightDirection?: FlightDirection | string | null;
   departureTime?: string | null;
   arrivalTime?: string | null;
   _showAmount?: boolean;
@@ -259,6 +267,16 @@ export default function TimeTracking() {
   const [tempRatePerKm, setTempRatePerKm] = useState('');
   const [tempFlightReturnDate, setTempFlightReturnDate] = useState('');
   const [tempFlightRouteType, setTempFlightRouteType] = useState<'domestic' | 'international'>('domestic');
+  const [tempFlightDepartureAirport, setTempFlightDepartureAirport] = useState('');
+  const [tempFlightArrivalAirport, setTempFlightArrivalAirport] = useState('');
+  const [tempFlightDirection, setTempFlightDirection] = useState<'' | FlightDirection>('');
+  // Hat der Nutzer die Richtung SELBST gesetzt (oder trug der Beleg schon eine)?
+  //
+  // Ohne dieses Flag müsste der Vorschlag entweder gar nicht vorbelegen oder eine
+  // getroffene Wahl überschreiben, sobald die Strecke noch einmal angefasst wird. Das
+  // zweite ist genau die Klasse stiller Überschreibung, gegen die v2.7.4 angetreten ist:
+  // Die Automatik belegt vor, solange niemand entschieden hat — danach nie wieder.
+  const [tempFlightDirectionTouched, setTempFlightDirectionTouched] = useState(false);
   const [tempFlightTravelStart, setTempFlightTravelStart] = useState('');
   const [tempFlightTravelEnd, setTempFlightTravelEnd] = useState('');
   const [tempHotelCheckInDate, setTempHotelCheckInDate] = useState('');
@@ -409,6 +427,10 @@ export default function TimeTracking() {
     setTempRatePerKm("");
     setTempFlightReturnDate("");
     setTempFlightRouteType("domestic");
+    setTempFlightDepartureAirport("");
+    setTempFlightArrivalAirport("");
+    setTempFlightDirection("");
+    setTempFlightDirectionTouched(false);
     setTempFlightTravelStart("");
     setTempFlightTravelEnd("");
     setTempHotelCheckInDate(defaultDate);
@@ -615,10 +637,23 @@ export default function TimeTracking() {
       if (expense.category === "flight") {
         const items: ExpenseCalendarItem[] = [];
         if (primaryDate === dateStr) {
+          // Trägt der Beleg nur EIN Bein, folgt die Beschriftung der erfassten Richtung.
+          // Sonst behauptete der Kalender „Hinflug" an einem Beleg, an dem der Nutzer
+          // gerade „Rückflug" eingetragen hat — die Gegenaussage im selben Bildschirm.
+          // Bei einem Round-Trip auf einem Ticket entscheidet dagegen das Datum (erster
+          // Tag hin, zweiter zurück); `flightDirection` trägt dort keine Einzelaussage.
+          const returnDateKey = expense.checkOutDate
+            ? getDateKey(expense.checkOutDate as string | Date)
+            : null;
+          const isSingleLeg = returnDateKey === null || returnDateKey === primaryDate;
           items.push({
             ...baseItem,
             _showAmount: true,
-            _subLabel: "Hinflug",
+            _subLabel: isSingleLeg && expense.flightDirection === "return" ? "Rückflug" : "Hinflug",
+            // `_flightLeg` steuert NICHT die Beschriftung, sondern welche Uhrzeit erscheint
+            // (Hinflugtag → Abflugzeit, Rückflugtag → Ankunftszeit). Das hängt an der
+            // Zweiteilung des Round-Trips und bleibt deshalb datumsgesteuert — eine
+            // Einzelstrecke zeigt beide Zeiten, auch wenn sie ein Rückflug ist.
             _flightLeg: "outbound",
           });
         }
@@ -743,6 +778,43 @@ export default function TimeTracking() {
     editingExpenseAmountCents !== null &&
     (computedMileageAmount ?? 0) > 0 &&
     Math.round((computedMileageAmount ?? 0) * 100) !== editingExpenseAmountCents;
+
+  // Richtungsvorschlag aus der Strecke (Befund B3). Die Regel liegt in `shared/`, damit
+  // Maske, KI-Pfad und Import dieselbe benutzen (K4) — hier wird sie nur ausgewertet.
+  const flightDirectionSuggestion = suggestFlightDirection(
+    tempFlightDepartureAirport,
+    tempFlightArrivalAirport
+  );
+  // Was im Select steht, ist auch das, was gespeichert wird — es gibt KEINEN Fallback auf
+  // den Vorschlag beim Speichern.
+  //
+  // WARUM nicht: Ein Beleg mit Strecke, dessen Richtung leer ist, kann zweierlei bedeuten
+  // — „nie entschieden" oder „bewusst leer gelassen". In der DB sind beide NULL. Ein
+  // Fallback beim Speichern schriebe die zweite Absicht beim nächsten beliebigen Speichern
+  // (z. B. einer Betragskorrektur) still um. Der Vorschlag entsteht deshalb ausschließlich
+  // als Folge einer Flughafen-Eingabe (`applyFlightAirportChange`) — sichtbar im Feld,
+  // bevor gespeichert wird.
+  const effectiveFlightDirection: "" | FlightDirection = tempFlightDirection;
+
+  /**
+   * Richtung vorbelegen, wenn der Nutzer noch nicht selbst entschieden hat.
+   *
+   * Bewusst im onChange der Flughafenfelder statt in einem useEffect: Die Vorbelegung
+   * ist die Folge einer Eingabe, kein Nebeneffekt eines Renders — so steht die Kausalität
+   * im Code und es kann keine Schleife entstehen. Liefert die Regel keinen Vorschlag
+   * (Fall 3/4), bleibt das Feld leer statt geraten zu werden (K1).
+   */
+  const applyFlightAirportChange = (which: "departure" | "arrival", rawValue: string) => {
+    const value = rawValue.toUpperCase().slice(0, 3);
+    const nextDeparture = which === "departure" ? value : tempFlightDepartureAirport;
+    const nextArrival = which === "arrival" ? value : tempFlightArrivalAirport;
+
+    if (which === "departure") setTempFlightDepartureAirport(value);
+    else setTempFlightArrivalAirport(value);
+
+    if (tempFlightDirectionTouched) return;
+    setTempFlightDirection(suggestFlightDirection(nextDeparture, nextArrival).direction ?? "");
+  };
 
   return (
     <DashboardLayout>
@@ -1023,6 +1095,17 @@ export default function TimeTracking() {
                                   setTempFlightRouteType(
                                     expense.flightRouteType === "international" ? "international" : "domestic"
                                   );
+                                  setTempFlightDepartureAirport(expense.departureAirport || "");
+                                  setTempFlightArrivalAirport(expense.arrivalAirport || "");
+                                  const storedDirection =
+                                    expense.flightDirection === "outbound" || expense.flightDirection === "return"
+                                      ? expense.flightDirection
+                                      : "";
+                                  setTempFlightDirection(storedDirection);
+                                  // Ein bereits geprüfter Beleg wird nicht neu vorgeschlagen — der
+                                  // gespeicherte Wert ist eine Entscheidung, keine Lücke. Ist er leer
+                                  // (Altbeleg), greift der Vorschlag beim Nachtragen der Strecke.
+                                  setTempFlightDirectionTouched(storedDirection !== "");
                                   setTempFlightTravelStart(expense.departureTime || "");
                                   setTempFlightTravelEnd(expense.arrivalTime || "");
                                   const hotelCheckIn = expense.checkInDate
@@ -1431,8 +1514,32 @@ export default function TimeTracking() {
                       );
                       return;
                     }
+                    // Angefangen, aber nicht fertig getippt: abbrechen statt still zu
+                    // verwerfen. Ein `normalizeAirportCode(...) ?? ""` an dieser Stelle
+                    // schickte "KT" als Leerstring an den Server, der Dialog schlösse mit
+                    // Erfolgsmeldung und die Eingabe wäre ohne Rückmeldung weg (K1) — und
+                    // der Zod-Guard in `routers.ts`, der genau das abfangen soll, sähe den
+                    // Fall nie.
+                    for (const [value, label] of [
+                      [tempFlightDepartureAirport, "Startflughafen"],
+                      [tempFlightArrivalAirport, "Zielflughafen"],
+                    ] as const) {
+                      if (value.trim() && !normalizeAirportCode(value)) {
+                        toast.error(
+                          `${label}: Bitte einen IATA-Code aus 3 Buchstaben eingeben (z.B. KTW) oder das Feld leeren`
+                        );
+                        return;
+                      }
+                    }
                     payloadBase.date = normalizedPrimaryDate;
                     payloadBase.flightRouteType = tempFlightRouteType;
+                    // Ohne `|| undefined`: Leeren ist eine legitime Nutzeraktion, "" wird
+                    // serverseitig zu NULL.
+                    payloadBase.departureAirport = normalizeAirportCode(tempFlightDepartureAirport) ?? "";
+                    payloadBase.arrivalAirport = normalizeAirportCode(tempFlightArrivalAirport) ?? "";
+                    // Gespeichert wird, was im Feld steht — inklusive des Vorschlags, wenn
+                    // der Nutzer ihn hat stehen lassen.
+                    payloadBase.flightDirection = effectiveFlightDirection;
                     payloadBase.departureTime = tempFlightTravelStart || undefined;
                     payloadBase.arrivalTime = tempFlightTravelEnd || undefined;
                     // Flüge kennen keinen Leistungsbeginn getrennt vom Hinflugdatum.
@@ -1620,6 +1727,65 @@ export default function TimeTracking() {
                           <SelectItem value="international">International (Inland ↔ Ausland)</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="flight-departure-airport">Startflughafen (optional)</Label>
+                        <Input
+                          id="flight-departure-airport"
+                          maxLength={3}
+                          placeholder="z.B. KTW"
+                          className="uppercase"
+                          value={tempFlightDepartureAirport}
+                          onChange={(e) => applyFlightAirportChange("departure", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="flight-arrival-airport">Zielflughafen (optional)</Label>
+                        <Input
+                          id="flight-arrival-airport"
+                          maxLength={3}
+                          placeholder="z.B. MUC"
+                          className="uppercase"
+                          value={tempFlightArrivalAirport}
+                          onChange={(e) => applyFlightAirportChange("arrival", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="flight-direction">Richtung</Label>
+                      <Select
+                        value={effectiveFlightDirection || "none"}
+                        onValueChange={(value) => {
+                          // Jede Auswahl — auch „keine Angabe" — ist eine Entscheidung. Ab
+                          // hier belegt der Vorschlag nicht mehr vor.
+                          setTempFlightDirectionTouched(true);
+                          setTempFlightDirection(value === "none" ? "" : (value as FlightDirection));
+                        }}
+                      >
+                        <SelectTrigger id="flight-direction">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">keine Angabe</SelectItem>
+                          <SelectItem value="outbound">Hinflug</SelectItem>
+                          <SelectItem value="return">Rückflug</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {!tempFlightDirectionTouched && tempFlightDirection && (
+                        <p className="text-xs text-muted-foreground">
+                          Vorschlag aus der Strecke — bitte prüfen und bei Bedarf ändern.
+                        </p>
+                      )}
+                      {flightDirectionSuggestion.hint && (
+                        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+                          {flightDirectionSuggestion.hint}
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Bei Umstiegen bitte das <strong>Endziel</strong> als Zielflughafen eintragen,
+                        nicht den Zwischenstopp.
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">

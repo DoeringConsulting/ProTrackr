@@ -1,4 +1,10 @@
 import * as XLSX from "xlsx";
+import {
+  normalizeAirportCode,
+  normalizeFlightDirection,
+  suggestFlightDirection,
+  type FlightDirection,
+} from "@shared/flightDirection";
 
 export type ImportIssueSeverity = "error" | "warning";
 
@@ -65,6 +71,17 @@ export type ExpenseImportRow = {
   fullDay: "0" | "1" | "";
   comment: string;
   flightRouteType: "domestic" | "international" | "";
+  // Flugstrecke und Richtung (Befund B3). Optional: Bestandsdateien ohne diese Spalten
+  // bleiben gültig, die Felder kommen dann leer an.
+  //
+  // Bewusst als ROHWERT (nur getrimmt/normalisiert in der Schreibweise), nicht als
+  // geprüfter Typ: Sonst könnte der Validator „stand da etwas Ungültiges?" nicht mehr
+  // von „stand da nichts?" unterscheiden und müsste ungültige Zellen stillschweigend
+  // schlucken. Dieselbe Bauart wie `currency`. Die Prüfung macht `validateWorkbookRows`,
+  // die Auflösung in Speicherwerte `resolveImportFlightFields`.
+  departureAirport: string;
+  arrivalAirport: string;
+  flightDirection: string;
   departureTime: string;
   arrivalTime: string;
   returnDate: string;
@@ -80,6 +97,36 @@ export type ExpenseImportRow = {
   receiptNo: string;
   vendorName: string;
 };
+
+/**
+ * Speicherwerte für Strecke und Richtung aus einer Importzeile (Befund B3).
+ *
+ * Rangfolge: Was in der Datei steht, gewinnt. Nur eine LEERE Richtungsspalte wird aus
+ * der Strecke vorgeschlagen — dieselbe Regel wie in Maske und KI-Pfad (K4).
+ *
+ * Ein UNGÜLTIGER Richtungswert wird bewusst NICHT durch den Vorschlag ersetzt: Das
+ * schriebe einen anderen Wert in die Datenbank, als in der Datei steht, ohne dass es
+ * jemand erführe. Er fällt auf leer zurück; gemeldet hat ihn `validateWorkbookRows`
+ * bereits als `EXP-FLT-006`, der Import läuft mit dieser Zeile gar nicht erst an.
+ */
+export function resolveImportFlightFields(row: {
+  departureAirport: string;
+  arrivalAirport: string;
+  flightDirection: string;
+}): { departureAirport: string; arrivalAirport: string; flightDirection: FlightDirection | "" } {
+  const departureAirport = normalizeAirportCode(row.departureAirport) ?? "";
+  const arrivalAirport = normalizeAirportCode(row.arrivalAirport) ?? "";
+  const explicitDirection = normalizeFlightDirection(row.flightDirection);
+  const suggestedDirection = row.flightDirection.trim()
+    ? null
+    : suggestFlightDirection(departureAirport, arrivalAirport).direction;
+
+  return {
+    departureAirport,
+    arrivalAirport,
+    flightDirection: explicitDirection ?? suggestedDirection ?? "",
+  };
+}
 
 export type ParsedImportWorkbook = {
   customers: CustomerImportRow[];
@@ -210,6 +257,25 @@ export const IMPORT_ERROR_CATALOG: Record<
     severity: "error",
     template: "[Reisekosten | Zeile {row}] return_date liegt vor date.",
     explanation: "Rückflugdatum darf nicht vor Hinflug liegen.",
+  },
+  // EXP-FLT-005 wurde im Validator seit jeher vergeben, fehlte aber im Katalog — hier
+  // nachgetragen, damit die Referenztabelle auf der Importseite die Prüfung erklärt.
+  "EXP-FLT-005": {
+    severity: "error",
+    template: "[Reisekosten | Zeile {row}] arrival_time ungültig.",
+    explanation: "Zeitformat HH:MM.",
+  },
+  "EXP-FLT-006": {
+    severity: "error",
+    template: "[Reisekosten | Zeile {row}] flight_direction ungültig.",
+    explanation:
+      "flight_direction erlaubt nur outbound (Hinflug) oder return (Rückflug) oder bleibt leer — leer wird aus der Strecke abgeleitet.",
+  },
+  "EXP-FLT-007": {
+    severity: "error",
+    template: "[Reisekosten | Zeile {row}] Flughafen-Code ungültig.",
+    explanation:
+      "departure_airport und arrival_airport erwarten einen IATA-Code aus 3 Buchstaben (z. B. KTW) oder bleiben leer.",
   },
   "EXP-HOT-001": {
     severity: "error",
@@ -467,6 +533,9 @@ export function parseWorkbookV1(workbook: XLSX.WorkBook): ParsedImportWorkbook {
         | "domestic"
         | "international"
         | "") || "",
+      departureAirport: toUpper(readString(row, "departure_airport")),
+      arrivalAirport: toUpper(readString(row, "arrival_airport")),
+      flightDirection: readString(row, "flight_direction").toLowerCase(),
       departureTime: readString(row, "departure_time"),
       arrivalTime: readString(row, "arrival_time"),
       returnDate: readString(row, "return_date"),
@@ -798,7 +867,6 @@ export function validateParsedWorkbook(parsed: ParsedImportWorkbook): ImportIssu
         message: `[Reisekosten | Zeile ${row.rowNumber}] full_day erlaubt nur 0 oder 1.`,
       });
     }
-
     if (row.timeEntryExternalId) {
       if (!timeEntryIds.has(row.timeEntryExternalId)) {
         addIssue(issues, {
@@ -860,6 +928,39 @@ export function validateParsedWorkbook(parsed: ParsedImportWorkbook): ImportIssu
           row: row.rowNumber,
           field: "arrival_time",
           message: `[Reisekosten | Zeile ${row.rowNumber}] arrival_time ungültig.`,
+        });
+      }
+      // Strecke und Richtung: gefüllt, aber unbrauchbar → melden statt still verwerfen.
+      // Ohne diese Prüfung würde "Munich" oder ein Tippfehler im Code beim Import lautlos
+      // zu NULL, und ein ungültiges flight_direction sogar durch einen abweichenden
+      // Vorschlag ersetzt — die Datei sagte das eine, die Datenbank enthielte das andere.
+      //
+      // Bewusst INNERHALB des Flug-Blocks: Nur hier werden die Felder überhaupt gelesen
+      // (`Import.tsx`). Stünde die Prüfung außerhalb, blockierte ein Restwert in einer
+      // Taxi-Zeile den gesamten Import wegen eines Feldes, das dort nie ankommt.
+      for (const [value, field] of [
+        [row.departureAirport, "departure_airport"],
+        [row.arrivalAirport, "arrival_airport"],
+      ] as const) {
+        if (value && !normalizeAirportCode(value)) {
+          addIssue(issues, {
+            code: "EXP-FLT-007",
+            table: "Reisekosten",
+            row: row.rowNumber,
+            field,
+            value,
+            message: `[Reisekosten | Zeile ${row.rowNumber}] ${field} ungültig (IATA-Code aus 3 Buchstaben erwartet).`,
+          });
+        }
+      }
+      if (row.flightDirection && !normalizeFlightDirection(row.flightDirection)) {
+        addIssue(issues, {
+          code: "EXP-FLT-006",
+          table: "Reisekosten",
+          row: row.rowNumber,
+          field: "flight_direction",
+          value: row.flightDirection,
+          message: `[Reisekosten | Zeile ${row.rowNumber}] flight_direction erlaubt nur outbound oder return.`,
         });
       }
       if (row.returnDate && (!isIsoDate(row.returnDate) || row.returnDate < row.date)) {

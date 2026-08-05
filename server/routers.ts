@@ -226,6 +226,18 @@ const expenseCategoryValues = [
 const expenseCategorySchema = z.enum(expenseCategoryValues);
 const flightRouteTypeSchema = z.enum(["domestic", "international"]);
 
+// Flugstrecke und Richtung (Migration 0026, docs/KONZEPT-flugrichtung.md).
+//
+// Der leere String ist ausdrücklich erlaubt: Er ist die Art, wie die Maske ein Feld
+// LEERT. `server/db.ts` macht daraus NULL. Ungültige Codes werden dagegen ABGELEHNT
+// statt still verworfen — "MUCH" darf nicht als NULL durchrutschen, sonst verliert der
+// Nutzer seine Eingabe ohne Rückmeldung (K1).
+const airportCodeSchema = z
+  .string()
+  .regex(/^\s*([A-Za-z]{3})?\s*$/, "Flughafen-Code muss ein IATA-Code aus genau 3 Buchstaben sein")
+  .nullable();
+const flightDirectionSchema = z.union([z.enum(["outbound", "return"]), z.literal("")]).nullable();
+
 function toIsoDateOnly(value: unknown): string | undefined {
   if (!value) return undefined;
   if (value instanceof Date) {
@@ -1461,6 +1473,12 @@ export const appRouter = router({
           ticketNumber: expense.ticketNumber || undefined,
           flightNumber: expense.flightNumber || undefined,
           flightRouteType: expense.flightRouteType || undefined,
+          // Strecke und Richtung wandern unverändert mit. Bewusst KEINE Umkehrung der
+          // Richtung für die Kopie: Der Kopierlauf verschiebt einen Beleg in den nächsten
+          // Zeitraum (derselbe Einsatz, neuer Monat), er dreht keine Reise um.
+          departureAirport: expense.departureAirport || undefined,
+          arrivalAirport: expense.arrivalAirport || undefined,
+          flightDirection: expense.flightDirection || undefined,
           departureTime: expense.departureTime || undefined,
           arrivalTime: expense.arrivalTime || undefined,
           checkInDate: shiftedDates.checkInDate ?? undefined,
@@ -1549,6 +1567,9 @@ export const appRouter = router({
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
         flightRouteType: flightRouteTypeSchema.optional(),
+        departureAirport: airportCodeSchema.optional(),
+        arrivalAirport: airportCodeSchema.optional(),
+        flightDirection: flightDirectionSchema.optional(),
         departureTime: z.string().optional(),
         arrivalTime: z.string().optional(),
         checkInDate: z.string().optional(),
@@ -1606,6 +1627,9 @@ export const appRouter = router({
           ticketNumber: z.string().optional(),
           flightNumber: z.string().optional(),
           flightRouteType: flightRouteTypeSchema.optional(),
+          departureAirport: airportCodeSchema.optional(),
+          arrivalAirport: airportCodeSchema.optional(),
+          flightDirection: flightDirectionSchema.optional(),
           departureTime: z.string().optional(),
           arrivalTime: z.string().optional(),
           checkInDate: z.string().optional(),
@@ -1662,6 +1686,9 @@ export const appRouter = router({
         ticketNumber: z.string().optional(),
         flightNumber: z.string().optional(),
         flightRouteType: flightRouteTypeSchema.optional(),
+        departureAirport: airportCodeSchema.optional(),
+        arrivalAirport: airportCodeSchema.optional(),
+        flightDirection: flightDirectionSchema.optional(),
         departureTime: z.string().optional(),
         arrivalTime: z.string().optional(),
         checkInDate: z.string().optional(),
@@ -1709,7 +1736,13 @@ export const appRouter = router({
         ...data,
         ...(data.fullDay !== undefined ? { fullDay: data.fullDay ? 1 : 0 } : {}),
         ...(nextFlightRouteType !== undefined ? { flightRouteType: nextFlightRouteType } : {}),
-        ...(data.category && data.category !== "flight" ? { flightRouteType: null } : {}),
+        // Kategoriewechsel weg von "flight": alle flugspezifischen Felder mitleeren.
+        // Sonst bliebe an einem Taxi-Beleg eine Strecke KTW→MUC mit Richtung hängen —
+        // unsichtbar in der Maske (die zeigt die Felder nur im Flug-Zweig), aber sichtbar
+        // im PDF-Export und in jedem Backup. Dieselbe Begründung wie bei flightRouteType.
+        ...(data.category && data.category !== "flight"
+          ? { flightRouteType: null, departureAirport: null, arrivalAirport: null, flightDirection: null }
+          : {}),
       };
       await updateExpense(id, normalizedData);
       return { success: true };

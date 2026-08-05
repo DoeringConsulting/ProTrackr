@@ -15,6 +15,7 @@ import {
   IMPORT_ERROR_CATALOG,
   hasBlockingIssues,
   parseWorkbookV1,
+  resolveImportFlightFields,
   type ParsedImportWorkbook,
   type ImportIssue,
   validateParsedWorkbook,
@@ -639,6 +640,13 @@ export default function Import() {
 
           if (row.category === "flight") {
             payload.flightRouteType = row.flightRouteType || "domestic";
+            // Datei-Werte gewinnen; nur eine leere Richtungsspalte wird aus der Strecke
+            // vorgeschlagen. Ungültige Zellen sind an dieser Stelle bereits als
+            // EXP-FLT-005/006 gemeldet und haben den Import gestoppt.
+            const flightFields = resolveImportFlightFields(row);
+            payload.departureAirport = flightFields.departureAirport || undefined;
+            payload.arrivalAirport = flightFields.arrivalAirport || undefined;
+            payload.flightDirection = flightFields.flightDirection || undefined;
             payload.departureTime = row.departureTime || undefined;
             payload.arrivalTime = row.arrivalTime || undefined;
             payload.checkOutDate = row.returnDate || undefined;

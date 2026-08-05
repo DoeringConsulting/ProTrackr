@@ -44,6 +44,11 @@ const expenseHeaders = [
   "full_day",
   "comment",
   "flight_route_type",
+  // Flugstrecke und Richtung (Befund B3). Optional — leer gelassen wird die Richtung
+  // aus der Strecke abgeleitet, sofern ein Heimatflughafen beteiligt ist.
+  "departure_airport",
+  "arrival_airport",
+  "flight_direction",
   "departure_time",
   "arrival_time",
   "return_date",
@@ -120,6 +125,9 @@ const expenseRows = [
     "",
     "",
     "",
+    "",
+    "",
+    "",
     "TX-88421",
     "iTaxi",
   ],
@@ -135,7 +143,16 @@ const expenseRows = [
     "EUR",
     "0",
     "Hinflug MUC-WAW",
-    "domestic",
+    // MUC → WAW überquert eine Grenze: "international". Der Wert stand vorher auf
+    // "domestic" und fiel nicht auf, solange die Strecke nirgends stand — mit den
+    // ausgewiesenen Flughäfen widerspräche sich die Musterdatei sichtbar selbst,
+    // und Musterdateien werden kopiert.
+    "international",
+    // Beispiel für den Fall, in dem die Ableitung bewusst schweigt: An MUC-WAW ist kein
+    // Heimatflughafen (KTW/KRK) beteiligt, die Richtung MUSS also in der Datei stehen.
+    "MUC",
+    "WAW",
+    "outbound",
     "08:30",
     "10:05",
     "",
@@ -169,6 +186,9 @@ const expenseRows = [
     "",
     "",
     "",
+    "",
+    "",
+    "",
     "2026-03-03",
     "2026-03-06",
     3,
@@ -191,6 +211,9 @@ const expenseRows = [
     "PLN",
     "0",
     "Tankfüllung Dienstwagen",
+    "",
+    "",
+    "",
     "",
     "",
     "",
@@ -232,10 +255,32 @@ const expenseRows = [
     "",
     "",
     "",
+    "",
+    "",
+    "",
     "ME-1102",
     "Bistro WAW",
   ],
 ];
+
+// Die Testdaten sind POSITIONSBASIERTE Arrays. Kommt eine Spalte in der Mitte dazu (wie
+// departure_airport/arrival_airport/flight_direction bei Befund B3) und wird eine Datenzeile
+// vergessen, verschieben sich ab dort ALLE Werte um eine Spalte — die Datei bleibt formal
+// gültig und der Fehler fiele erst beim Import auf. Deshalb hier hart prüfen.
+for (const [sheet, rows] of [
+  ["Kunden", customerRows],
+  ["Zeiteintraege", timeRows],
+  ["Reisekosten", expenseRows],
+]) {
+  const [headers, ...dataRows] = rows;
+  dataRows.forEach((row, index) => {
+    if (row.length !== headers.length) {
+      throw new Error(
+        `${sheet}: Datenzeile ${index + 1} hat ${row.length} Werte, die Kopfzeile aber ${headers.length} Spalten.`
+      );
+    }
+  });
+}
 
 const testWorkbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(testWorkbook, XLSX.utils.aoa_to_sheet(customerRows), "Kunden");
