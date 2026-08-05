@@ -31,7 +31,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 // Dieselbe Verschiebungsregel, die der Server beim Kopieren ANWENDET — die Vorschau darf
 // nichts anderes versprechen, als angelegt wird (K4).
-import { nextWorkdayKey, type CopyScope } from "@shared/copyRangeShift";
+import { isWorkdayKey, nextWorkdayKey, type CopyScope } from "@shared/copyRangeShift";
 
 type TimeEntryFormData = {
   customerId: number | null;
@@ -160,10 +160,14 @@ function dayDiff(startDateKey: string, endDateKey: string): number {
  * Der Zielbereich folgt der Server-Regel (`shared/copyRangeShift.ts`):
  *   - Tag: nächster ARBEITSTAG (Fr → Mo), nicht der Folgetag.
  *   - Woche: +7 Tage.
- *   - Monat: der Folgemonat. Einzelne Einträge auf einem überzähligen Wochentag-Vorkommen
- *     (5. Montag im Quellmonat, Zielmonat hat nur 4) landen im Monat darauf. Der Bereich
- *     bildet bewusst den Regelfall ab, nicht jede Einzelverschiebung — auf den Überlauf
- *     weist die DialogDescription im Klartext hin (betrifft die Monatstage 29.–31.).
+ *   - Monat: der Folgemonat. Zeiteinträge und eigenständige Belege bleiben seit der
+ *     Regeländerung IMMER darin; ein überzähliges Wochentag-Vorkommen (5. Montag im
+ *     Quellmonat, Zielmonat hat nur 4) hat kein Ziel und wird ausgelassen statt in den Monat
+ *     darauf verschoben.
+ *     AUSNAHME: Ein mehrtägiger Beleg AN EINEM ZEITEINTRAG folgt dem Offset seines
+ *     Zeiteintrags (sonst liefe er von ihm weg, siehe `shiftExpenseDateKeysByDays`) und kann
+ *     dadurch mit seinem Leistungsende in den Folgemonat ragen. Beide Anker sind für ihn
+ *     nicht gleichzeitig erfüllbar; der Zusammenhalt mit dem Zeiteintrag wiegt schwerer.
  */
 function getScopeRanges(anchorDateKey: string, scope: CopyScope) {
   const anchor = parseDateKey(anchorDateKey);
@@ -232,6 +236,9 @@ export default function TimeTracking() {
   const [isScopeCopyDialogOpen, setIsScopeCopyDialogOpen] = useState(false);
   const [copyScope, setCopyScope] = useState<CopyScope>("day");
   const [copyAnchorDate, setCopyAnchorDate] = useState(formatLocalDate(new Date()));
+  // Default `true` = bisheriges Verhalten. Die Auswahl wird nur angeboten, wenn im
+  // Quellzeitraum überhaupt Sa/So-Einträge liegen — sonst wäre sie eine Frage ohne Gegenstand.
+  const [copyIncludeWeekends, setCopyIncludeWeekends] = useState(true);
   const [isExpensesDialogOpen, setIsExpensesDialogOpen] = useState(false);
   const [selectedExpenseDate, setSelectedExpenseDate] = useState<Date | null>(null);
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
@@ -355,8 +362,29 @@ export default function TimeTracking() {
     onSuccess: (result) => {
       utils.timeEntries.list.invalidate();
       utils.expenses.list.invalidate();
-      const skipSuffix =
-        result.skippedExpenses > 0 ? `, ${result.skippedExpenses} Reisekosten übersprungen` : "";
+      // Jeder Auslassungsgrund wird einzeln benannt — eine Sammelzahl „X übersprungen" ließe
+      // den Nutzer im Unklaren, ob seine eigene Wochenend-Entscheidung oder der Kalender
+      // gewirkt hat (K1).
+      const skipped: string[] = [];
+      if (result.skippedExpenses > 0) {
+        skipped.push(`${result.skippedExpenses} Reisekosten ohne kopierten Zeiteintrag`);
+      }
+      if (result.skippedWeekend > 0) {
+        skipped.push(`${result.skippedWeekend} Wochenend-Einträge abgewählt`);
+      }
+      // Zeiteinträge und Belege getrennt benannt: Bei Belegen sammelt der Zähler außer
+      // „kein Zieltag" auch „unbrauchbares Datum" und „wäre in den Quellzeitraum
+      // zurückgefallen" — ein pauschales „ohne Zieltag" nennte dann den falschen Grund.
+      if (result.skippedNoTarget > 0) {
+        skipped.push(`${result.skippedNoTarget} Zeiteinträge ohne Zieltag im Folgemonat`);
+      }
+      if (result.skippedNoTargetExpenses > 0) {
+        skipped.push(`${result.skippedNoTargetExpenses} Reisekosten ohne gültiges Zieldatum`);
+      }
+      if (result.skippedOther > 0) {
+        skipped.push(`${result.skippedOther} Zeiteinträge aus anderen Gründen`);
+      }
+      const skipSuffix = skipped.length > 0 ? ` — ausgelassen: ${skipped.join(", ")}` : "";
       toast.success(
         `Kopiert: ${result.copiedTimeEntries} Zeiteinträge, ${result.copiedExpenses} Reisekosten${skipSuffix}`
       );
@@ -554,6 +582,9 @@ export default function TimeTracking() {
     copyRangeMutation.mutate({
       scope: copyScope,
       anchorDate: copyAnchorDate,
+      // Nur relevant, wenn die Quelle Wochenend-Einträge hat; sonst immer `true`, damit ein
+      // versehentlich stehengebliebener Haken aus einem früheren Dialog nichts unterschlägt.
+      includeWeekends: sourceHasWeekendEntries ? copyIncludeWeekends : true,
     });
   };
 
@@ -663,6 +694,26 @@ export default function TimeTracking() {
   const days = getDaysInMonth();
   const monthTotal = calculateMonthTotal();
   const copyRanges = getScopeRanges(copyAnchorDate, copyScope);
+  // Eigener Query für den QUELLZEITRAUM des Kopierdialogs. Die Ableitung aus dem bereits
+  // geladenen `timeEntries` wäre falsch: das deckt nur den angezeigten Kalendermonat ab,
+  // während das Referenzdatum im Dialog frei wählbar ist (und eine Woche über den
+  // Monatswechsel reichen kann). Der Quellzeitraum wäre dann teilweise oder ganz ungeladen —
+  // die Rückfrage unterbliebe, und `includeWeekends: true` würde stillschweigend angenommen.
+  // Eine nicht gestellte Frage darf nicht als „ja" gewertet werden.
+  const {
+    data: copySourceEntries,
+    isFetching: isCopySourceLoading,
+    isError: isCopySourceError,
+  } = trpc.timeEntries.list.useQuery(
+    { startDate: copyRanges.sourceStart, endDate: copyRanges.sourceEnd },
+    { enabled: isScopeCopyDialogOpen && Boolean(copyRanges.sourceStart) }
+  );
+  const sourceHasWeekendEntries = Boolean(
+    copySourceEntries?.some((entry: any) => {
+      const key = getDateKey(entry?.date);
+      return key ? !isWorkdayKey(key) : false;
+    })
+  );
   const computedHotelCheckOutDate =
     tempHotelCheckInDate && Number(tempHotelNights) >= 0
       ? addDays(tempHotelCheckInDate, Number(tempHotelNights))
@@ -705,6 +756,10 @@ export default function TimeTracking() {
             variant="outline"
             onClick={() => {
               setCopyAnchorDate(formatLocalDate(expandedDay || new Date()));
+              // Zurücksetzen: Die Anforderung ist eine RÜCKFRAGE pro Kopiervorgang. Ohne
+              // Reset schleppte ein einmal entfernter Haken sich in den nächsten Dialog und
+              // ließe dort erneut Wochenend-Einträge weg, ohne dass danach gefragt wurde.
+              setCopyIncludeWeekends(true);
               setIsScopeCopyDialogOpen(true);
             }}
           >
@@ -1149,8 +1204,11 @@ export default function TimeTracking() {
               <DialogDescription>
                 Überträgt alle Zeiteinträge und Reisekosten auf den nächsten Zeitraum. Der
                 Wochentag bleibt dabei erhalten (Feiertage werden nicht berücksichtigt).
-                Einträge vom Monatsende (29.–31.) können in den übernächsten Monat rutschen,
-                wenn der Zielmonat den Wochentag nicht mehr hergibt.
+                Beim Monatskopieren bleiben Zeiteinträge und eigenständige Reisekosten immer
+                im Zielmonat: Einträge vom Monatsende (29.–31.), für die der Zielmonat den
+                Wochentag nicht mehr hergibt, werden ausgelassen und im Ergebnis ausgewiesen.
+                Eine mehrtägige Reisekostenposition an einem Zeiteintrag folgt ihrem
+                Zeiteintrag und kann mit ihrem Ende in den Folgemonat ragen.
               </DialogDescription>
             </DialogHeader>
 
@@ -1179,6 +1237,31 @@ export default function TimeTracking() {
                 />
               </div>
 
+              {sourceHasWeekendEntries && (
+                <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <input
+                      id="copy-include-weekends"
+                      type="checkbox"
+                      className="mt-1"
+                      checked={copyIncludeWeekends}
+                      onChange={(e) => setCopyIncludeWeekends(e.target.checked)}
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="copy-include-weekends" className="cursor-pointer">
+                        Wochenend-Zeiteinträge mitkopieren
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Im gewählten Quellzeitraum liegen Zeiteinträge auf Samstag oder
+                        Sonntag. Ohne Haken werden sie ausgelassen und im Ergebnis
+                        ausgewiesen. Reisekosten an einem Zeiteintrag entfallen mit ihm;
+                        eigenständige Reisekosten werden unabhängig davon kopiert.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-md border p-3 text-sm">
                 <div>
                   <span className="font-medium">Quelle:</span>{" "}
@@ -1204,9 +1287,21 @@ export default function TimeTracking() {
               <Button
                 type="button"
                 onClick={handleScopeCopySubmit}
-                disabled={copyRangeMutation.isPending}
+                // Solange der Quellzeitraum lädt — oder gar nicht geladen werden konnte —, ist
+                // unbekannt, ob es Wochenend-Einträge gibt. Ein Klick würde die Rückfrage
+                // überspringen und stillschweigend „ja" annehmen. Auch der FEHLERfall sperrt
+                // deshalb: eine nicht gestellte Frage darf nicht als beantwortet gelten.
+                disabled={
+                  copyRangeMutation.isPending || isCopySourceLoading || isCopySourceError
+                }
               >
-                {copyRangeMutation.isPending ? "Kopiere..." : "Jetzt kopieren"}
+                {copyRangeMutation.isPending
+                  ? "Kopiere..."
+                  : isCopySourceLoading
+                    ? "Prüfe Zeitraum..."
+                    : isCopySourceError
+                      ? "Zeitraum nicht prüfbar"
+                      : "Jetzt kopieren"}
               </Button>
             </DialogFooter>
           </DialogContent>

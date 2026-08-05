@@ -31,10 +31,17 @@ import {
   selectExpensesForRangeCopy,
   validateExpenseDateRules,
 } from "./expenseRules";
-import { capRateStichtagKey, toDateKey as toLocalDateKey, warsawDateKey } from "@shared/dateStichtag";
 import {
+  capRateStichtagKey,
+  daysBetweenDateKeys,
+  toDateKey as toLocalDateKey,
+  warsawDateKey,
+} from "@shared/dateStichtag";
+import {
+  isWorkdayKey,
   shiftDateKeyByScope,
   shiftExpenseDateKeys,
+  shiftExpenseDateKeysByDays,
   weekdayIndexOfDateKey,
   type CopyScope,
 } from "@shared/copyRangeShift";
@@ -1247,6 +1254,10 @@ export const appRouter = router({
       return z.object({
         scope: z.enum(["day", "week", "month"]),
         anchorDate: z.string(),
+        // Wochenend-Zeiteinträge mitkopieren? Default `true` = bisheriges Verhalten, damit
+        // ältere Clients unverändert laufen. Der Dialog fragt nur nach, wenn die Quelle
+        // überhaupt Sa/So-Einträge enthält.
+        includeWeekends: z.boolean().optional().default(true),
       }).parse(val);
     }).mutation(async ({ ctx, input }) => {
       const { getTimeEntries, getAllExpenses, createTimeEntry, createExpense, getCustomerById } =
@@ -1279,6 +1290,10 @@ export const appRouter = router({
           copiedTimeEntries: 0,
           copiedExpenses: 0,
           skippedExpenses: 0,
+          skippedWeekend: 0,
+          skippedNoTarget: 0,
+          skippedNoTargetExpenses: 0,
+          skippedOther: 0,
           sourceStart: sourceStartKey,
           sourceEnd: sourceEndKey,
         };
@@ -1287,22 +1302,59 @@ export const appRouter = router({
       const weekdayDe = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
       const weekdayPl = ["Nd", "Pn", "Wt", "Sr", "Cz", "Pt", "Sb"];
       const entryIdMap = new Map<number, number>();
+      // Tagesabstand, um den ein Zeiteintrag verschoben wurde — für seine VERKNÜPFTEN Belege.
+      // Die dürfen nicht ihrem eigenen Leistungsende folgen, sonst landen Eltern und Kind in
+      // verschiedenen Monaten (Details bei `shiftExpenseDateKeysByDays`).
+      const entryShiftDays = new Map<number, number>();
       const customerCache = new Map<number, any>();
       let copiedTimeEntries = 0;
       let copiedExpenses = 0;
       let skippedExpenses = 0;
+      // Getrennte Zähler, weil die Gründe fachlich verschieden sind und der Nutzer sie
+      // unterscheiden können muss: „Wochenende abgewählt" ist seine eigene Entscheidung,
+      // „kein Ziel im Zielmonat" ist eine Eigenschaft des Kalenders (K1: nichts still
+      // verschlucken, beides wird bis in die UI durchgereicht).
+      let skippedWeekend = 0;
+      let skippedNoTarget = 0;
+      let skippedNoTargetExpenses = 0;
+      // Sammelposten für die technisch bedingten Auslassungen (unbrauchbares Datum, Kunde
+      // nicht auflösbar, Anlage ohne verwertbare Id). Alle drei sind über die DB-Constraints
+      // praktisch unerreichbar — aber die Zusage „kopiert + ausgelassen = Quelle" soll auch
+      // dann halten, wenn doch einer eintritt (K1: keine stillen Verluste).
+      let skippedOther = 0;
 
       for (const entry of sourceEntries) {
+        const sourceDateKey = toLocalDateKey(entry.date);
+        if (!sourceDateKey) {
+          skippedOther += 1;
+          continue;
+        }
+
+        // Wochenend-Filter VOR dem Kundenabruf: spart den Roundtrip und hält die Zählung
+        // frei von Einträgen, die ohnehin nicht kopiert werden.
+        if (!input.includeWeekends && !isWorkdayKey(sourceDateKey)) {
+          skippedWeekend += 1;
+          continue;
+        }
+
+        const shiftedDateKey = shiftDateKeyByScope(sourceDateKey, input.scope);
+        // Kein Ziel im Zielmonat (überzähliges Wochentag-Vorkommen, nur bei `month`): Der
+        // Eintrag wird NICHT in den Folgemonat geschoben, sondern ausgelassen und gezählt.
+        if (!shiftedDateKey) {
+          skippedNoTarget += 1;
+          continue;
+        }
+
         let customer = customerCache.get(entry.customerId);
         if (!customer) {
           customer = await getCustomerById(entry.customerId);
           if (customer) customerCache.set(entry.customerId, customer);
         }
-        if (!customer) continue;
+        if (!customer) {
+          skippedOther += 1;
+          continue;
+        }
 
-        const sourceDateKey = toLocalDateKey(entry.date);
-        if (!sourceDateKey) continue;
-        const shiftedDateKey = shiftDateKeyByScope(sourceDateKey, input.scope);
         // Das `weekday`-Label wird IMMER aus dem Zieldatum abgeleitet (nie aus der Quelle
         // übernommen): Bei `month` bleibt der Wochentag zwar erhalten, bei `day` wechselt er
         // aber (Fr → Mo). Ein übernommenes Label wäre ein stiller Datenfehler.
@@ -1329,19 +1381,20 @@ export const appRouter = router({
         });
         if (created && typeof created === "object" && "id" in created) {
           entryIdMap.set(Number(entry.id), Number((created as any).id));
+          entryShiftDays.set(
+            Number(entry.id),
+            daysBetweenDateKeys(sourceDateKey, shiftedDateKey)
+          );
           copiedTimeEntries += 1;
+        } else {
+          // Angelegt, aber ohne verwertbare Id: Der Eintrag fehlt in `entryIdMap`, seine
+          // Belege laufen deshalb in `skippedExpenses`. Ohne diesen Zweig wäre er in der
+          // Bilanz spurlos verschwunden.
+          skippedOther += 1;
         }
       }
 
       for (const expense of sourceExpenses as any[]) {
-        // Leistungsende nach der Scope-Regel, die übrigen Datumsfelder mit demselben
-        // Tagesabstand. Anker ist bewusst dasselbe Leistungsende, nach dem oben ausgewählt
-        // wurde — sonst könnte die Kopie eines grenzüberspannenden Belegs im QUELLzeitraum
-        // landen. Der gemeinsame Offset hält Dauer und Chronologie fest
-        // (siehe `shiftExpenseDateKeys`).
-        const shiftedDates = shiftExpenseDateKeys(expense, input.scope);
-        if (!shiftedDates) continue;
-
         const mappedTimeEntryId =
           expense.timeEntryId && entryIdMap.has(Number(expense.timeEntryId))
             ? Number(entryIdMap.get(Number(expense.timeEntryId)))
@@ -1350,6 +1403,42 @@ export const appRouter = router({
         if (expense.timeEntryId && !mappedTimeEntryId) {
           skippedExpenses += 1;
           continue;
+        }
+
+        // VERKNÜPFTE Belege folgen dem Offset ihres ELTERN-Zeiteintrags, eigenständige ihrem
+        // eigenen Leistungsende nach der Scope-Regel. Am eigenen Leistungsende verschoben,
+        // liefe ein verknüpfter Beleg mit Enddatum im Folgemonat vom Eltern-Eintrag weg und
+        // landete einen Monat zu spät — geldwirksam über die Periodenzuordnung (ADR 0002).
+        // Für eigenständige Belege ist der Leistungsende-Anker dagegen zwingend: nach ihm
+        // wurden sie ausgewählt, ein anderer Anker ließe die Kopie im Quellzeitraum landen.
+        const parentShiftDays =
+          expense.timeEntryId != null ? entryShiftDays.get(Number(expense.timeEntryId)) : undefined;
+        const shiftedDates =
+          parentShiftDays !== undefined
+            ? shiftExpenseDateKeysByDays(expense, parentShiftDays)
+            : shiftExpenseDateKeys(expense, input.scope);
+        // `null` heißt entweder „unbrauchbares Datum" (wie bisher) oder „kein Ziel im
+        // Zielmonat" (neu, überzähliges Wochentag-Vorkommen). Beides führt zum Auslassen;
+        // gezählt wird es, damit die Summe im Dialog aufgeht.
+        if (!shiftedDates) {
+          skippedNoTargetExpenses += 1;
+          continue;
+        }
+
+        // GUARD gegen den Rückfall in den Quellzeitraum — nur am Eltern-Offset möglich.
+        // Beginnt ein verknüpfter Beleg VOR seinem Zeiteintrag (Anreiseflug am Vortag) und
+        // liegt das Eltern-Ziel auf einem der ersten Tage des Zielmonats, kann das
+        // Leistungsende der Kopie vor den Zielbereich fallen — die Kopie landete dann in der
+        // Quellperiode, die typischerweise bereits abgerechnet ist. Bei `costModel:
+        // "exclusive"` wäre das eine zusätzliche Position in einer fakturierten Rechnung.
+        // Am Leistungsende-Anker kann das konstruktiv nicht passieren; hier muss es geprüft
+        // werden. Lieber auslassen und ausweisen als rückwirkend fakturieren.
+        if (parentShiftDays !== undefined) {
+          const targetServiceEnd = shiftedDates.checkOutDate ?? shiftedDates.date;
+          if (targetServiceEnd <= sourceEndKey) {
+            skippedNoTargetExpenses += 1;
+            continue;
+          }
         }
 
         const payload: Record<string, any> = {
@@ -1391,6 +1480,10 @@ export const appRouter = router({
         copiedTimeEntries,
         copiedExpenses,
         skippedExpenses,
+        skippedWeekend,
+        skippedNoTarget,
+        skippedNoTargetExpenses,
+        skippedOther,
         sourceStart: sourceStartKey,
         sourceEnd: sourceEndKey,
       };
