@@ -7,6 +7,7 @@ import {
   nextWorkdayKey,
   shiftDateKeyByScope,
   shiftExpenseDateKeys,
+  shiftExpenseDateKeysByDays,
   shiftMonthKeepingWeekdayOccurrence,
   weekdayIndexOfDateKey,
 } from "@shared/copyRangeShift";
@@ -19,7 +20,8 @@ import { isExpenseServiceEndInRange } from "@shared/expenseServiceEnd";
  *
  *   day   → nächster Arbeitstag (Fr/Sa/So → Mo)
  *   week  → +7 Tage (unverändert)
- *   month → n-tes Wochentag-Vorkommen bleibt erhalten; überzählige Vorkommen rutschen auf
+ *   month → n-tes Wochentag-Vorkommen bleibt erhalten; überzählige Vorkommen haben KEIN Ziel
+ *           (seit der Dev-Abnahme 2026-08-05, siehe `shared/copyRangeShift.ts`) — früher:
  *           das 1. Vorkommen im Folgemonat des Zielmonats
  *
  * Kalendarische Anker (verifiziert): Juni 2026 beginnt Mo und hat 5 Montage, Juli 2026
@@ -114,12 +116,17 @@ describe("scope 'month': n-tes Wochentag-Vorkommen bleibt erhalten", () => {
     expect(shiftDateKeyByScope("2026-06-05", "month")).toBe("2026-07-03");
   });
 
-  it("Mo 29.06. ist der 5. Montag — Juli hat nur 4 → 1. Montag im August (03.08.)", () => {
-    expect(shiftDateKeyByScope("2026-06-29", "month")).toBe("2026-08-03");
+  // GEÄNDERTE FACHREGEL (Dev-Abnahme 2026-08-05): Ein überzähliges Vorkommen bekommt KEIN
+  // Ausweichziel mehr im Monat danach — es gibt schlicht kein Ziel. Vorher landete der
+  // 5. Montag aus dem Juni im AUGUST, also außerhalb des Zeitraums, den der Nutzer im Dialog
+  // bestätigt hatte. Verworfene Alternative: auf das letzte Vorkommen im Zielmonat legen —
+  // dann träfen zwei Quelltage auf denselben Zieltag (zwei 8-Stunden-Tage an einem Datum).
+  it("Mo 29.06. ist der 5. Montag — Juli hat nur 4 → KEIN Ziel (null)", () => {
+    expect(shiftDateKeyByScope("2026-06-29", "month")).toBeNull();
   });
 
-  it("Di 30.06. ist der 5. Dienstag — Juli hat nur 4 → 1. Dienstag im August (04.08.)", () => {
-    expect(shiftDateKeyByScope("2026-06-30", "month")).toBe("2026-08-04");
+  it("Di 30.06. ist der 5. Dienstag — Juli hat nur 4 → KEIN Ziel (null)", () => {
+    expect(shiftDateKeyByScope("2026-06-30", "month")).toBeNull();
   });
 
   it("mittlere Vorkommen: Mo 15.06. ist der 3. Montag → 3. Montag im Juli (20.07.)", () => {
@@ -132,30 +139,52 @@ describe("scope 'month': n-tes Wochentag-Vorkommen bleibt erhalten", () => {
     expect(shiftDateKeyByScope("2026-12-28", "month")).toBe("2027-01-25");
   });
 
-  it("Jahresgrenze mit Überlauf: Do 31.12.2026 (5. Donnerstag) → Do 04.02.2027", () => {
-    // Januar 2027 hat nur 4 Donnerstage → 1. Donnerstag im Februar.
-    expect(shiftDateKeyByScope("2026-12-31", "month")).toBe("2027-02-04");
+  it("Jahresgrenze mit Überlauf: Do 31.12.2026 ist der 5. Donnerstag → KEIN Ziel (null)", () => {
+    // Januar 2027 hat nur 4 Donnerstage. Vorher wich die Regel auf den 1. Donnerstag im
+    // Februar aus — zwei Monate nach der Quelle.
+    expect(shiftDateKeyByScope("2026-12-31", "month")).toBeNull();
   });
 
-  it("der Wochentag bleibt IMMER erhalten und das Ziel liegt immer in der Zukunft", () => {
-    // Vollständige Jahresrunde: jeder Kalendertag 2026 wird geprüft. Das ist die
-    // eigentliche Zusage der Regel — Einzelanker allein könnten sie nicht tragen.
+  it("DIE ZUSAGE: das Ziel liegt im FOLGEMONAT oder es gibt keines — nie weiter", () => {
+    // Vollständige Jahresrunde: jeder Kalendertag 2026. Das ist die eigentliche Zusage der
+    // neuen Regel — Einzelanker allein könnten sie nicht tragen.
+    const nextMonthOf = (dayKey: string) => {
+      const [y, m] = dayKey.split("-").map(Number);
+      const d = new Date(Date.UTC(y, m, 1));
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    };
     let key = "2026-01-01";
+    let withoutTarget = 0;
     while (key <= "2026-12-31") {
       const shifted = shiftMonthKeepingWeekdayOccurrence(key);
-      expect(weekdayIndexOfDateKey(shifted), key).toBe(weekdayIndexOfDateKey(key));
-      expect(shifted > key, `${key} → ${shifted}`).toBe(true);
-      // Zwischen 28 und 35 Tagen: 4 Wochen im Regelfall, 5 beim Überlauf.
-      const distance = daysBetweenDateKeys(key, shifted);
-      expect(distance, key).toBeGreaterThanOrEqual(28);
-      expect(distance, key).toBeLessThanOrEqual(35);
+      if (shifted === null) {
+        // `null` ist AUSSCHLIESSLICH für ein überzähliges (5.) Vorkommen zulässig. Träte es
+        // sonst auf, verlöre der Nutzer Einträge ohne fachlichen Grund.
+        expect(Math.ceil(Number(key.slice(8, 10)) / 7), `${key} ohne Ziel`).toBe(5);
+        withoutTarget += 1;
+      } else {
+        expect(weekdayIndexOfDateKey(shifted), key).toBe(weekdayIndexOfDateKey(key));
+        expect(shifted > key, `${key} → ${shifted}`).toBe(true);
+        // Kern der Änderung: der Zielmonat ist IMMER der unmittelbare Folgemonat.
+        expect(shifted.slice(0, 7), `${key} → ${shifted}`).toBe(nextMonthOf(key));
+        const distance = daysBetweenDateKeys(key, shifted);
+        expect(distance, key).toBeGreaterThanOrEqual(28);
+        expect(distance, key).toBeLessThanOrEqual(35);
+      }
       key = addDaysToDateKey(key, 1);
     }
+    // Gegenprobe, damit der Test nicht still zur Tautologie wird, falls die Regel je wieder
+    // ein Ausweichziel liefert: den Fall „kein Ziel" gibt es 2026 wirklich.
+    expect(withoutTarget).toBeGreaterThan(0);
   });
 
   it("ein Arbeitstag bleibt ein Arbeitstag (Wochentagstreue impliziert das)", () => {
-    for (const key of ["2026-06-01", "2026-06-05", "2026-06-29", "2026-06-30"]) {
-      expect(isWorkdayKey(shiftMonthKeepingWeekdayOccurrence(key)), key).toBe(true);
+    for (const key of ["2026-06-01", "2026-06-05", "2026-06-15"]) {
+      expect(isWorkdayKey(shiftMonthKeepingWeekdayOccurrence(key)!), key).toBe(true);
+    }
+    // 29./30.06. sind 5. Vorkommen und haben im Juli kein Ziel mehr — separat gepinnt.
+    for (const key of ["2026-06-29", "2026-06-30"]) {
+      expect(shiftMonthKeepingWeekdayOccurrence(key), key).toBeNull();
     }
   });
 });
@@ -321,7 +350,12 @@ describe("Der Kopie-Anker ist das Leistungsende (nicht `date`)", () => {
       for (const durationDays of [0, 1, 2, 3, 5, 10, 33]) {
         const expense = { date: key, checkOutDate: addDaysToDateKey(key, durationDays) };
         const shifted = shiftExpenseDateKeys(expense, "month");
-        if (!shifted?.checkOutDate) {
+        // `null` ist seit der Regeländerung ein LEGITIMES Ergebnis: das Leistungsende liegt
+        // auf einem überzähligen Wochentag-Vorkommen, der Zielmonat hat dafür keinen Tag.
+        // Der Beleg wird dann nicht kopiert — er kann also auch nicht im Quellmonat landen,
+        // was diese Invariante gerade zusagt. Kein Verstoß, sondern der Auslassungsfall.
+        if (shifted === null) continue;
+        if (!shifted.checkOutDate) {
           violations.push(`${key}+${durationDays}: keine Verschiebung`);
           continue;
         }
@@ -346,13 +380,19 @@ describe("Der Kopie-Anker ist das Leistungsende (nicht `date`)", () => {
       let key = "2026-01-01";
       while (key <= "2026-12-31") {
         const expected = shiftDateKeyByScope(key, scope);
-        expect(shiftExpenseDateKeys({ date: key }, scope)?.date, `${key}/${scope}`).toBe(expected);
+        // `?? null`, weil ein fehlendes Ziel als `null` aus `shiftDateKeyByScope` kommt, aus
+        // `shiftExpenseDateKeys` aber als `null`-Objekt (und damit `?.date === undefined`).
+        // Beide Wege müssen dieselbe Aussage treffen: kopierbar oder nicht.
         expect(
-          shiftExpenseDateKeys({ date: key, checkOutDate: "" }, scope)?.date,
+          shiftExpenseDateKeys({ date: key }, scope)?.date ?? null,
+          `${key}/${scope}`
+        ).toBe(expected);
+        expect(
+          shiftExpenseDateKeys({ date: key, checkOutDate: "" }, scope)?.date ?? null,
           `${key}/${scope} (leeres Enddatum)`
         ).toBe(expected);
         expect(
-          shiftExpenseDateKeys({ date: key, checkOutDate: key }, scope)?.date,
+          shiftExpenseDateKeys({ date: key, checkOutDate: key }, scope)?.date ?? null,
           `${key}/${scope} (Ende == Beginn)`
         ).toBe(expected);
         key = addDaysToDateKey(key, 1);
@@ -380,5 +420,108 @@ describe("copyRangeToNext verwendet genau diese Bausteine", () => {
 
   it("leitet das `weekday`-Label aus dem ZIELdatum ab", () => {
     expect(routersSource).toContain("weekdayIndexOfDateKey(shiftedDateKey)");
+  });
+
+  it("lässt Einträge ohne Zieltag aus, statt sie in den Folgemonat zu schieben", () => {
+    // Ohne diese Prüfung bliebe ein Rückbau unbemerkt: Würde `shiftDateKeyByScope` je wieder
+    // ein Ausweichziel liefern, wären alle Funktionstests oben weiterhin grün, und der
+    // Eintrag landete still zwei Monate nach der Quelle.
+    expect(routersSource).toContain("if (!shiftedDateKey)");
+    expect(routersSource).toContain("skippedNoTarget += 1");
+  });
+
+  it("filtert Wochenend-Einträge nur auf ausdrücklichen Wunsch und zählt sie", () => {
+    expect(routersSource).toContain("!input.includeWeekends && !isWorkdayKey(sourceDateKey)");
+    expect(routersSource).toContain("skippedWeekend += 1");
+  });
+
+  it("reicht alle Auslassungsgründe getrennt an die UI durch (K1)", () => {
+    // Eine Sammelzahl würde verschleiern, ob die eigene Wochenend-Entscheidung oder der
+    // Kalender gewirkt hat. BEIDE Rückgabepfade müssen jeden Zähler führen: der Leerlauf-
+    // Zweig (`feld: 0`) und der Normalfall (Kurzschreibweise `feld,`). Wäre nur einer
+    // geprüft, könnte der andere still verkümmern und der Client bekäme `undefined`.
+    for (const field of ["skippedWeekend", "skippedNoTarget", "skippedNoTargetExpenses", "skippedOther"]) {
+      expect(routersSource, `${field} im Leerlauf-Return`).toContain(`${field}: 0,`);
+      expect(routersSource, `${field} im Normalfall-Return`).toContain(`\n        ${field},`);
+    }
+  });
+
+  it("verknüpfte Belege folgen dem Offset ihres Zeiteintrags, nicht ihrem Leistungsende", () => {
+    // Der Kern von Befund 1 des Reviews: Am eigenen Leistungsende verschoben, landete ein
+    // Beleg mit Enddatum im Folgemonat einen Monat nach seinem Eltern-Eintrag — und damit in
+    // einer Periode, die der Nutzer im Dialog nie bestätigt hat (ADR 0002, geldwirksam).
+    expect(routersSource).toContain("entryShiftDays.set(");
+    expect(routersSource).toContain("shiftExpenseDateKeysByDays(expense, parentShiftDays)");
+    // Eigenständige Belege müssen weiterhin am Leistungsende hängen — nach ihm wurden sie
+    // ausgewählt; ein anderer Anker ließe die Kopie im Quellzeitraum landen.
+    expect(routersSource).toContain("shiftExpenseDateKeys(expense, input.scope)");
+  });
+});
+
+/**
+ * REGRESSIONSSCHUTZ zu Review-Befund 1: Ein verknüpfter Beleg, dessen Leistungsende in den
+ * Folgemonat ragt, darf nicht von seinem Eltern-Zeiteintrag weglaufen.
+ */
+describe("verknüpfte Belege bleiben beim Eltern-Zeiteintrag", () => {
+  it("REFERENZFALL: Hotel 28.07.–01.08. am Zeiteintrag 28.07. bleibt im August", () => {
+    const entrySource = "2026-07-28";
+    const entryTarget = shiftDateKeyByScope(entrySource, "month");
+    expect(entryTarget, "Zeiteintrag hat ein Ziel").not.toBeNull();
+    expect(entryTarget).toBe("2026-08-25");
+
+    const parentShiftDays = daysBetweenDateKeys(entrySource, entryTarget!);
+    const hotel = { date: "2026-07-28", checkOutDate: "2026-08-01" };
+
+    // NEU: am Eltern-Offset — Beleg und Zeiteintrag im selben Monat.
+    const withParent = shiftExpenseDateKeysByDays(hotel, parentShiftDays);
+    expect(withParent?.date).toBe("2026-08-25");
+    expect(withParent?.checkOutDate).toBe("2026-08-29");
+    expect(withParent!.checkOutDate!.slice(0, 7), "Leistungsende im Zielmonat").toBe("2026-08");
+
+    // ALT (Gegenprobe): am eigenen Leistungsende wäre der Beleg im September gelandet —
+    // ein Monat nach seinem Eltern-Eintrag, in einer nicht bestätigten Periode.
+    const withOwnAnchor = shiftExpenseDateKeys(hotel, "month");
+    expect(withOwnAnchor?.checkOutDate?.slice(0, 7)).toBe("2026-09");
+  });
+
+  it("die Dauer bleibt auch am Eltern-Offset exakt erhalten", () => {
+    for (const durationDays of [0, 1, 2, 5, 33]) {
+      const hotel = { date: "2026-07-28", checkOutDate: addDaysToDateKey("2026-07-28", durationDays) };
+      const shifted = shiftExpenseDateKeysByDays(hotel, 28);
+      expect(daysBetweenDateKeys(shifted!.date, shifted!.checkOutDate!), `Dauer ${durationDays}`).toBe(
+        durationDays
+      );
+    }
+  });
+
+  it("ohne verwertbares `date` weiterhin null (Aufrufer überspringt und zählt)", () => {
+    expect(shiftExpenseDateKeysByDays({ date: "" }, 28)).toBeNull();
+    expect(shiftExpenseDateKeysByDays({ date: "kein Datum" }, 28)).toBeNull();
+  });
+
+  it("DER PREIS des Eltern-Ankers: die Kopie KANN in den Quellzeitraum zurückfallen", () => {
+    // Genau die Gefahr, gegen die der Leistungsende-Anker argumentiert — am Eltern-Offset ist
+    // sie wieder erreichbar, wenn der Beleg VOR seinem Zeiteintrag beginnt und das Eltern-Ziel
+    // auf einen der ersten Tage des Zielmonats fällt.
+    // Eltern Mi 03.06. → Mi 01.07. (Offset 28). Flug am Vortag, 02.06. → 30.06. = QUELLmonat.
+    const entryTarget = shiftDateKeyByScope("2026-06-03", "month");
+    expect(entryTarget).toBe("2026-07-01");
+    const parentShiftDays = daysBetweenDateKeys("2026-06-03", entryTarget!);
+
+    const flight = { date: "2026-06-02" };
+    const shifted = shiftExpenseDateKeysByDays(flight, parentShiftDays);
+    expect(shifted?.date).toBe("2026-06-30");
+    // DESHALB der Guard in `copyRangeToNext`: Leistungsende der Kopie <= Quellbereichsende
+    // → auslassen. Ohne ihn stünde die Position in einer bereits fakturierten Periode.
+    expect(shifted!.date <= "2026-06-30", "läge im Quellzeitraum Juni").toBe(true);
+  });
+
+  it("der Guard gegen den Quellzeitraum-Rückfall ist in copyRangeToNext verdrahtet", () => {
+    const routers = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+    expect(routers).toContain("const targetServiceEnd = shiftedDates.checkOutDate ?? shiftedDates.date;");
+    expect(routers).toContain("if (targetServiceEnd <= sourceEndKey)");
+    // Nur für verknüpfte Belege — eigenständige können konstruktiv nicht zurückfallen, dort
+    // wäre der Guard eine wirkungslose Zusatzbedingung.
+    expect(routers).toContain("if (parentShiftDays !== undefined) {");
   });
 });

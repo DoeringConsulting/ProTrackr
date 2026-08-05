@@ -3,6 +3,7 @@ import {
   aggregateMonthlyTaxResults,
   calculatePolishTaxResult,
   computeMonthlyTaxSeries,
+  totalLeviesCents,
 } from "../client/src/lib/taxEnginePl";
 
 describe("taxEnginePl", () => {
@@ -27,6 +28,120 @@ describe("taxEnginePl", () => {
     choroboweRateBp: 245,
     fpFsRateBp: 245,
   };
+
+  /**
+   * DASHBOARD-BEFUND B1 (Dev-Abnahme 2026-08-05): Im Umsatzchart ging die Rechnung
+   * „Brutto − Kosten = Netto" sichtbar nicht auf — Beispiel aus der Abnahme: Brutto
+   * 1.117.727,14 · Netto 573.521,11 · Kosten 329.457,33 PLN, Differenz 214.748,70.
+   *
+   * Kein Rechenfehler: Die KOSTENLINIE führt nur Betriebskosten (Run-Rate + Fixkosten), der
+   * NETTOGEWINN steht dagegen nach ZUS, Zdrowotna und PIT. Die Differenz ist die Abgabenlast
+   * und war in KEINER Serie sichtbar. Diese Tests pinnen, dass genau `zus + healthInsurance
+   * + tax` die Lücke schließt — nur dann zeigt die neue Chart-Linie den richtigen Wert.
+   */
+  describe("Abgabenlast schließt die Lücke zwischen Kosten und Nettogewinn (Dashboard B1)", () => {
+    const amounts = {
+      revenueCents: 2_000_000,
+      fixedCostsCents: 300_000,
+      variableCostsCents: 100_000,
+      startDate: "2026-01-01",
+      endDate: "2026-01-31",
+      profile: baseProfile,
+      config: baseConfig,
+    };
+
+    it("Umsatz = Nettogewinn + Betriebskosten + Abgaben — ohne Rest", () => {
+      const r = calculatePolishTaxResult(amounts);
+      const abgaben = totalLeviesCents(r);
+      expect(r.netProfit + amounts.fixedCostsCents + amounts.variableCostsCents + abgaben).toBe(
+        amounts.revenueCents
+      );
+    });
+
+    it("die Abgaben sind exakt die Differenz, die im Chart fehlte", () => {
+      const r = calculatePolishTaxResult(amounts);
+      const betriebskosten = amounts.fixedCostsCents + amounts.variableCostsCents;
+      // Genau diese Größe zeichnet die neue Linie: was von „Brutto minus Betriebskosten"
+      // bis zum Nettogewinn fehlt.
+      const luecke = amounts.revenueCents - betriebskosten - r.netProfit;
+      expect(luecke).toBe(r.zus + r.healthInsurance + r.tax);
+    });
+
+    it("gilt auch über eine Monatsreihe (so rechnet das Dashboard)", () => {
+      const points = computeMonthlyTaxSeries({
+        startDate: "2026-01-01",
+        endDate: "2026-03-31",
+        getMonthlyAmounts: () => ({
+          revenueCents: 2_000_000,
+          variableCostsCents: 100_000,
+          fixedCostsCents: 300_000,
+        }),
+        profile: baseProfile,
+        config: baseConfig,
+      });
+      expect(points).toHaveLength(3);
+      for (const p of points) {
+        const abgaben = p.result.zus + p.result.healthInsurance + p.result.tax;
+        const betriebskosten = p.amounts.fixedCostsCents + p.amounts.variableCostsCents;
+        expect(
+          p.result.netProfit + betriebskosten + abgaben,
+          `Monat ${p.monthStart}`
+        ).toBe(p.amounts.revenueCents);
+      }
+    });
+
+    it("auch im Verlustfall bleibt die Identität erhalten (Abgaben laufen weiter)", () => {
+      // Umsatz unter den Kosten: ZUS und Zdrowotna fallen als Minimum trotzdem an, der
+      // Nettogewinn wird negativ. Die Linie muss auch dann aufgehen.
+      const loss = { ...amounts, revenueCents: 200_000 };
+      const r = calculatePolishTaxResult(loss);
+      const abgaben = totalLeviesCents(r);
+      expect(r.netProfit).toBeLessThan(0);
+      expect(r.netProfit + loss.fixedCostsCents + loss.variableCostsCents + abgaben).toBe(
+        loss.revenueCents
+      );
+    });
+
+    it("gilt auch im LEGACY-Pfad (kein Profil/Config geladen)", () => {
+      // Das Dashboard erreicht diesen Pfad real: `mappedTaxProfile` ist null, solange das
+      // Steuerprofil nicht geladen ist, und reicht `legacySettings` durch. Die Chart-Linie
+      // muss auch dort die Lücke exakt treffen.
+      for (const taxType of ["percentage", "fixed"] as const) {
+        const r = calculatePolishTaxResult({
+          revenueCents: 2_000_000,
+          fixedCostsCents: 300_000,
+          variableCostsCents: 100_000,
+          startDate: "2026-01-01",
+          endDate: "2026-01-31",
+          profile: null,
+          config: null,
+          legacySettings: {
+            zusType: "fixed",
+            zusValue: 150_000,
+            healthInsuranceType: "percentage",
+            healthInsuranceValue: 490,
+            taxType,
+            taxValue: taxType === "percentage" ? 1900 : 250_000,
+          },
+        });
+        expect(r.source, taxType).toBe("legacy");
+        expect(r.netProfit + 300_000 + 100_000 + totalLeviesCents(r), taxType).toBe(2_000_000);
+      }
+    });
+
+    it("gilt auch im Zero-Modus (Steuerberechnung deaktiviert)", () => {
+      // Dort sind alle drei Summanden 0 — die Abgabenlinie liegt korrekt auf der Nulllinie,
+      // und Brutto minus Betriebskosten ist bereits der Nettogewinn.
+      const r = calculatePolishTaxResult({
+        ...amounts,
+        profile: { ...baseProfile, taxCalculationMode: "zero" as const },
+      });
+      expect(totalLeviesCents(r)).toBe(0);
+      expect(r.netProfit + amounts.fixedCostsCents + amounts.variableCostsCents).toBe(
+        amounts.revenueCents
+      );
+    });
+  });
 
   it("berechnet pelny_zus mit Regime + Jahreswerten korrekt", () => {
     const result = calculatePolishTaxResult({

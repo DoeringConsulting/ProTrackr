@@ -15,8 +15,30 @@
 //   week  → unverändert +7 Tage (der Wochentag bleibt dabei ohnehin erhalten).
 //   month → das n-te Wochentag-Vorkommen bleibt erhalten: der 3. Montag im Quellmonat wird
 //           zum 3. Montag im Zielmonat. Existiert das n-te Vorkommen dort nicht (Quellmonat
-//           hat 5 Montage, Zielmonat nur 4), landet der Eintrag auf dem 1. Vorkommen dieses
-//           Wochentags im FOLGEMONAT des Zielmonats.
+//           hat 5 Montage, Zielmonat nur 4), gibt es KEIN Ziel: die Funktion liefert `null`,
+//           der Eintrag wird nicht kopiert und vom Aufrufer gezählt.
+//
+// ÄNDERUNG v2.7.x (Entscheidung des Account-Inhabers nach der Dev-Abnahme): Ein Monatskopie
+// darf NIEMALS über den Zielmonat hinausschreiben. Bis dahin landete das überzählige
+// Vorkommen auf dem 1. Vorkommen desselben Wochentags im Monat DANACH — ein Eintrag aus dem
+// Juli tauchte damit im September auf, außerhalb des Zeitraums, den der Nutzer im Dialog
+// bestätigt hatte. Die Alternative „auf das letzte Vorkommen im Zielmonat legen" wurde
+// verworfen, weil dann zwei Quelltage auf demselben Zieltag landen (aus zwei 8-Stunden-Tagen
+// würden 16 an einem Datum). Bewusst gewählt: den Eintrag auslassen und ihn im Ergebnis
+// ausweisen — der Zielmonat hat schlicht weniger Vorkommen dieses Wochentags.
+//
+// Die Grenze gilt NUR für `month`. Bei `day` (nächster Arbeitstag) und `week` (+7) ist ein
+// Monatsübertritt die normale, gewollte Semantik — der 31. Juli wird beim Tageskopieren zum
+// 1. August, und das ist richtig so.
+//
+// REICHWEITE der Zusage: Sie gilt für ZEITEINTRÄGE und EIGENSTÄNDIGE Belege (für beide per
+// Sweep mit 0 Verstößen belegt). Ein mehrtägiger Beleg AN EINEM ZEITEINTRAG folgt dagegen
+// dem Offset seines Zeiteintrags (`shiftExpenseDateKeysByDays`) und kann mit seinem
+// Leistungsende in den Folgemonat ragen. Das ist kein Versehen, sondern ein echter
+// Zielkonflikt: „Beleg bleibt bei seinem Zeiteintrag" und „Beleg bleibt im Zielmonat" sind
+// für ihn nicht gleichzeitig erfüllbar. Der Zusammenhalt wiegt schwerer — ein Beleg in einem
+// anderen Monat als sein Eintrag ist die schlechtere Fehlerlage. Der Rückfall in den
+// QUELLzeitraum wird dagegen aktiv verhindert (Guard in `copyRangeToNext`).
 //
 // Angewendet wird die Regel bei Zeiteinträgen auf `date` (das einzige Datum, das sie haben)
 // und bei Belegen auf das LEISTUNGSENDE (`checkOutDate ?? date`) — dieselbe Größe, nach der
@@ -105,37 +127,24 @@ function nthWeekdayOfMonth(
  * verabredet (jeder 2. Dienstag), nicht an Kalendertagen, und ein datumsgleiches Kopieren
  * warf Einträge regelmäßig aufs Wochenende.
  */
-export function shiftMonthKeepingWeekdayOccurrence(dayKey: string): string {
+export function shiftMonthKeepingWeekdayOccurrence(dayKey: string): string | null {
   const [year, month, day] = dayKey.split("-").map(Number);
   const weekday = weekdayIndexOfDateKey(dayKey);
   const occurrence = Math.ceil(day / DAYS_PER_WEEK);
 
   // Über Date.UTC konstruiert, damit der Jahreswechsel (Dezember → Januar) mitläuft.
   const target = new Date(Date.UTC(year, month, 1));
-  const targetHit = nthWeekdayOfMonth(
-    target.getUTCFullYear(),
-    target.getUTCMonth(),
-    weekday,
-    occurrence
-  );
-  if (targetHit) return targetHit;
-
-  // Überzähliges Vorkommen: 1. Vorkommen desselben Wochentags im Folgemonat des Zielmonats.
-  const overflow = new Date(Date.UTC(year, month + 1, 1));
-  const overflowHit = nthWeekdayOfMonth(
-    overflow.getUTCFullYear(),
-    overflow.getUTCMonth(),
-    weekday,
-    1
-  );
-  if (overflowHit) return overflowHit;
-
-  // Unerreichbar: das 1. Vorkommen eines Wochentags liegt immer im Bereich 1.–7.
-  throw new RangeError(`shiftMonthKeepingWeekdayOccurrence: kein Zieltag für "${dayKey}"`);
+  // `null`, wenn der Zielmonat dieses Vorkommen nicht hat — KEIN Ausweichen in den Monat
+  // danach (siehe Kopf). Der Aufrufer überspringt den Eintrag und weist ihn aus.
+  return nthWeekdayOfMonth(target.getUTCFullYear(), target.getUTCMonth(), weekday, occurrence);
 }
 
-/** Zieltag eines Quelltags für den gewählten Kopier-Bereich. */
-export function shiftDateKeyByScope(dayKey: string, scope: CopyScope): string {
+/**
+ * Zieltag eines Quelltags für den gewählten Kopier-Bereich — oder `null`, wenn es im
+ * Zielbereich kein Ziel gibt (nur bei `month` möglich, siehe
+ * `shiftMonthKeepingWeekdayOccurrence`). `day` und `week` liefern immer einen Tag.
+ */
+export function shiftDateKeyByScope(dayKey: string, scope: CopyScope): string | null {
   if (scope === "day") return nextWorkdayKey(dayKey);
   if (scope === "week") return addDaysToDateKey(dayKey, DAYS_PER_WEEK);
   return shiftMonthKeepingWeekdayOccurrence(dayKey);
@@ -188,14 +197,45 @@ export function shiftExpenseDateKeys(
   expense: { date?: unknown; checkInDate?: unknown; checkOutDate?: unknown },
   scope: CopyScope
 ): ShiftedExpenseDateKeys | null {
-  const sourceDateKey = toDateKey(expense?.date);
   const sourceServiceEndKey = expenseServiceEndKey(expense);
-  // `date` ist NOT NULL in der DB; fehlt es trotzdem, wird der Beleg übersprungen statt
-  // aus dem Leistungsende ein Startdatum zu erfinden.
-  if (!sourceDateKey || !sourceServiceEndKey) return null;
+  if (!sourceServiceEndKey) return null;
 
   const targetServiceEndKey = shiftDateKeyByScope(sourceServiceEndKey, scope);
-  const shiftDays = daysBetweenDateKeys(sourceServiceEndKey, targetServiceEndKey);
+  // Kein Ziel im Zielmonat (überzähliges Wochentag-Vorkommen) → Beleg wird nicht kopiert.
+  // Dieselbe `null`-Semantik wie beim fehlenden `date`; der Aufrufer zählt ihn.
+  if (!targetServiceEndKey) return null;
+
+  return shiftExpenseDateKeysByDays(
+    expense,
+    daysBetweenDateKeys(sourceServiceEndKey, targetServiceEndKey)
+  );
+}
+
+/**
+ * Dieselbe Feldverschiebung, aber mit EXTERN vorgegebenem Tagesabstand.
+ *
+ * Gebraucht für VERKNÜPFTE Belege: die müssen ihrem Eltern-Zeiteintrag folgen, nicht ihrem
+ * eigenen Leistungsende. `selectExpensesForRangeCopy` sagt das bereits zu („Sie folgen ihrem
+ * Zeiteintrag, nicht dem Zeitraum") — die Auswahl hielt sich daran, die Verschiebung nicht.
+ *
+ * WAS DAS AUSEINANDERLAUFEN KOSTETE: Ein Hotel 28.07.–01.08. an einem Zeiteintrag vom 28.07.
+ * hat sein Leistungsende am 01.08., also im FOLGEmonat. Beim Juli→August-Lauf wanderte der
+ * Zeiteintrag auf den 25.08., der Beleg aber auf den 1. Samstag im SEPTEMBER (01.–05.09.):
+ * Eltern und Kind in verschiedenen Monaten, und die Beleg-Periode (ADR 0002: Leistungsende)
+ * fiel in einen Monat, den der Nutzer im Dialog nie bestätigt hatte — bei
+ * `costModel: "exclusive"` eine Position in der falschen Kundenrechnung und Steuerbasis.
+ *
+ * Für EIGENSTÄNDIGE Belege bleibt der Leistungsende-Anker richtig (dort ist per
+ * `selectExpensesForRangeCopy` garantiert, dass das Leistungsende im Quellzeitraum liegt).
+ */
+export function shiftExpenseDateKeysByDays(
+  expense: { date?: unknown; checkInDate?: unknown; checkOutDate?: unknown },
+  shiftDays: number
+): ShiftedExpenseDateKeys | null {
+  const sourceDateKey = toDateKey(expense?.date);
+  // `date` ist NOT NULL in der DB; fehlt es trotzdem, wird der Beleg übersprungen statt
+  // aus dem Leistungsende ein Startdatum zu erfinden.
+  if (!sourceDateKey) return null;
 
   const shiftRelative = (value: unknown): string | undefined => {
     const key = toDateKey(value);

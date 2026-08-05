@@ -192,6 +192,21 @@ export const expenses = mysqlTable("expenses", {
   // Flight/Train specific
   ticketNumber: varchar("ticketNumber", { length: 100 }),
   flightNumber: varchar("flightNumber", { length: 100 }),
+  // Flugstrecke und Richtung (Migration 0026, Konzept docs/KONZEPT-flugrichtung.md).
+  // Reihenfolge folgt der Migration (`AFTER flightNumber`), damit ein Handvergleich
+  // dieser Datei gegen `SHOW COLUMNS` nicht über eine Scheindifferenz stolpert.
+  //
+  // ACHTUNG bei `arrivalAirport`: fachlich das ENDZIEL der Reise, NICHT der Zwischenstopp.
+  // Die Fachregel "bei Umstieg entscheidet der letzte Flughafen" ist mit zwei Feldern nur
+  // dann erfüllt, wenn das so erfasst wird. Erfassungskonvention, technisch nicht erzwingbar
+  // ohne einzelne Legs zu modellieren — steht deshalb auch im Hilfetext der Maske.
+  //
+  // `flightDirection` wird GESPEICHERT, nicht bei jeder Anzeige neu abgeleitet: der Nutzer
+  // muss den Vorschlag überschreiben können, und geprüfte Belege sollen stabil bleiben,
+  // wenn sich die Ableitungsregel (shared/flightDirection.ts) später ändert.
+  departureAirport: varchar("departureAirport", { length: 3 }), // IATA, z. B. KTW
+  arrivalAirport: varchar("arrivalAirport", { length: 3 }), // IATA — Endziel, nicht Umstieg
+  flightDirection: mysqlEnum("flightDirection", ["outbound", "return"]),
   flightRouteType: varchar("flightRouteType", { length: 20 }),
   departureTime: varchar("departureTime", { length: 10 }), // HH:MM format
   arrivalTime: varchar("arrivalTime", { length: 10 }), // HH:MM format

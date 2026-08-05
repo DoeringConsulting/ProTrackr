@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { invoiceNumbers, customers } from "../drizzle/schema";
+import { normalizeAirportCode, normalizeFlightDirection } from "@shared/flightDirection";
 import { ENV } from './_core/env';
 
 /** Format a Date as YYYY-MM-DD using local timezone (avoids UTC off-by-one near midnight). */
@@ -715,6 +716,24 @@ function normalizeExpenseMutationPayload(data: Record<string, any>) {
     }
   }
 
+  // Flugstrecke und Richtung (Migration 0026) HIER normalisieren, nicht in den einzelnen
+  // Aufrufern: create, createBatch, update und der KI-Pfad laufen alle durch diese
+  // Funktion. Eine Normalisierung pro Aufrufer wäre die nächste Driftquelle (K4) — und
+  // ohne sie landete "ktw " als solches in einer VARCHAR(3)-Spalte, wo es beim Vergleich
+  // gegen die Heimatflughäfen still durchfällt.
+  for (const key of ["departureAirport", "arrivalAirport"] as const) {
+    if (!(key in payload)) continue;
+    const raw = payload[key];
+    // Leeres Feld = bewusst geleert → NULL, nicht "" (die Ableitungsregel und die
+    // Anzeige unterscheiden "nicht erfasst" von "erfasst"; "" wäre ein dritter Zustand).
+    payload[key] = raw === null || raw === "" ? null : normalizeAirportCode(raw);
+  }
+
+  if ("flightDirection" in payload) {
+    const raw = payload.flightDirection;
+    payload.flightDirection = raw === null || raw === "" ? null : normalizeFlightDirection(raw);
+  }
+
   return payload;
 }
 
@@ -779,6 +798,9 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
       ticketNumber: expenses.ticketNumber,
       flightNumber: expenses.flightNumber,
       flightRouteType: expenses.flightRouteType,
+      departureAirport: expenses.departureAirport,
+      arrivalAirport: expenses.arrivalAirport,
+      flightDirection: expenses.flightDirection,
       departureTime: expenses.departureTime,
       arrivalTime: expenses.arrivalTime,
       checkInDate: expenses.checkInDate,
@@ -831,6 +853,9 @@ export async function getAllExpenses(userId: number, startDate?: Date, endDate?:
       ticketNumber: expenses.ticketNumber,
       flightNumber: expenses.flightNumber,
       flightRouteType: expenses.flightRouteType,
+      departureAirport: expenses.departureAirport,
+      arrivalAirport: expenses.arrivalAirport,
+      flightDirection: expenses.flightDirection,
       departureTime: expenses.departureTime,
       arrivalTime: expenses.arrivalTime,
       checkInDate: expenses.checkInDate,

@@ -33,6 +33,9 @@ type BookkeepingExpense = {
   departureTime?: string | null;
   arrivalTime?: string | null;
   flightRouteType?: string | null;
+  departureAirport?: string | null;
+  arrivalAirport?: string | null;
+  flightDirection?: string | null;
   comment?: string | null;
   provider?: string | null;
   projectName?: string | null;
@@ -187,7 +190,18 @@ function getExpenseDetailLabel(expense: BookkeepingExpense) {
     const route = expense.flightRouteType === "international" ? "Miedzynarodowy" : "Krajowy";
     const departure = expense.departureTime || "-";
     const arrival = expense.arrivalTime || "-";
-    return `Typ lotu: ${route} | Wylot: ${departure} | Przylot: ${arrival}`;
+    // Strecke und Richtung nur ausweisen, wenn sie erfasst sind. Bestandsbelege tragen
+    // sie nicht (kein Backfill, Konzept §3.5) — dort bliebe sonst ein "- → -" stehen,
+    // das nach fehlerhafter Erfassung aussieht statt nach "gab es damals noch nicht".
+    const parts = [`Typ lotu: ${route}`];
+    if (expense.departureAirport && expense.arrivalAirport) {
+      parts.push(`Trasa: ${expense.departureAirport} - ${expense.arrivalAirport}`);
+    }
+    if (expense.flightDirection) {
+      parts.push(`Kierunek: ${expense.flightDirection === "return" ? "Powrotny" : "Tam"}`);
+    }
+    parts.push(`Wylot: ${departure}`, `Przylot: ${arrival}`);
+    return parts.join(" | ");
   }
   return "-";
 }

@@ -31,7 +31,12 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 // Dieselbe Verschiebungsregel, die der Server beim Kopieren ANWENDET — die Vorschau darf
 // nichts anderes versprechen, als angelegt wird (K4).
-import { nextWorkdayKey, type CopyScope } from "@shared/copyRangeShift";
+import { isWorkdayKey, nextWorkdayKey, type CopyScope } from "@shared/copyRangeShift";
+import {
+  normalizeAirportCode,
+  suggestFlightDirection,
+  type FlightDirection,
+} from "@shared/flightDirection";
 
 type TimeEntryFormData = {
   customerId: number | null;
@@ -160,10 +165,14 @@ function dayDiff(startDateKey: string, endDateKey: string): number {
  * Der Zielbereich folgt der Server-Regel (`shared/copyRangeShift.ts`):
  *   - Tag: nächster ARBEITSTAG (Fr → Mo), nicht der Folgetag.
  *   - Woche: +7 Tage.
- *   - Monat: der Folgemonat. Einzelne Einträge auf einem überzähligen Wochentag-Vorkommen
- *     (5. Montag im Quellmonat, Zielmonat hat nur 4) landen im Monat darauf. Der Bereich
- *     bildet bewusst den Regelfall ab, nicht jede Einzelverschiebung — auf den Überlauf
- *     weist die DialogDescription im Klartext hin (betrifft die Monatstage 29.–31.).
+ *   - Monat: der Folgemonat. Zeiteinträge und eigenständige Belege bleiben seit der
+ *     Regeländerung IMMER darin; ein überzähliges Wochentag-Vorkommen (5. Montag im
+ *     Quellmonat, Zielmonat hat nur 4) hat kein Ziel und wird ausgelassen statt in den Monat
+ *     darauf verschoben.
+ *     AUSNAHME: Ein mehrtägiger Beleg AN EINEM ZEITEINTRAG folgt dem Offset seines
+ *     Zeiteintrags (sonst liefe er von ihm weg, siehe `shiftExpenseDateKeysByDays`) und kann
+ *     dadurch mit seinem Leistungsende in den Folgemonat ragen. Beide Anker sind für ihn
+ *     nicht gleichzeitig erfüllbar; der Zusammenhalt mit dem Zeiteintrag wiegt schwerer.
  */
 function getScopeRanges(anchorDateKey: string, scope: CopyScope) {
   const anchor = parseDateKey(anchorDateKey);
@@ -214,6 +223,9 @@ type ExpenseCalendarItem = {
   checkInDate?: string | Date | null;
   checkOutDate?: string | Date | null;
   flightRouteType?: "domestic" | "international" | string | null;
+  departureAirport?: string | null;
+  arrivalAirport?: string | null;
+  flightDirection?: FlightDirection | string | null;
   departureTime?: string | null;
   arrivalTime?: string | null;
   _showAmount?: boolean;
@@ -232,6 +244,9 @@ export default function TimeTracking() {
   const [isScopeCopyDialogOpen, setIsScopeCopyDialogOpen] = useState(false);
   const [copyScope, setCopyScope] = useState<CopyScope>("day");
   const [copyAnchorDate, setCopyAnchorDate] = useState(formatLocalDate(new Date()));
+  // Default `true` = bisheriges Verhalten. Die Auswahl wird nur angeboten, wenn im
+  // Quellzeitraum überhaupt Sa/So-Einträge liegen — sonst wäre sie eine Frage ohne Gegenstand.
+  const [copyIncludeWeekends, setCopyIncludeWeekends] = useState(true);
   const [isExpensesDialogOpen, setIsExpensesDialogOpen] = useState(false);
   const [selectedExpenseDate, setSelectedExpenseDate] = useState<Date | null>(null);
   const [expandedDay, setExpandedDay] = useState<Date | null>(null);
@@ -252,6 +267,16 @@ export default function TimeTracking() {
   const [tempRatePerKm, setTempRatePerKm] = useState('');
   const [tempFlightReturnDate, setTempFlightReturnDate] = useState('');
   const [tempFlightRouteType, setTempFlightRouteType] = useState<'domestic' | 'international'>('domestic');
+  const [tempFlightDepartureAirport, setTempFlightDepartureAirport] = useState('');
+  const [tempFlightArrivalAirport, setTempFlightArrivalAirport] = useState('');
+  const [tempFlightDirection, setTempFlightDirection] = useState<'' | FlightDirection>('');
+  // Hat der Nutzer die Richtung SELBST gesetzt (oder trug der Beleg schon eine)?
+  //
+  // Ohne dieses Flag müsste der Vorschlag entweder gar nicht vorbelegen oder eine
+  // getroffene Wahl überschreiben, sobald die Strecke noch einmal angefasst wird. Das
+  // zweite ist genau die Klasse stiller Überschreibung, gegen die v2.7.4 angetreten ist:
+  // Die Automatik belegt vor, solange niemand entschieden hat — danach nie wieder.
+  const [tempFlightDirectionTouched, setTempFlightDirectionTouched] = useState(false);
   const [tempFlightTravelStart, setTempFlightTravelStart] = useState('');
   const [tempFlightTravelEnd, setTempFlightTravelEnd] = useState('');
   const [tempHotelCheckInDate, setTempHotelCheckInDate] = useState('');
@@ -355,8 +380,29 @@ export default function TimeTracking() {
     onSuccess: (result) => {
       utils.timeEntries.list.invalidate();
       utils.expenses.list.invalidate();
-      const skipSuffix =
-        result.skippedExpenses > 0 ? `, ${result.skippedExpenses} Reisekosten übersprungen` : "";
+      // Jeder Auslassungsgrund wird einzeln benannt — eine Sammelzahl „X übersprungen" ließe
+      // den Nutzer im Unklaren, ob seine eigene Wochenend-Entscheidung oder der Kalender
+      // gewirkt hat (K1).
+      const skipped: string[] = [];
+      if (result.skippedExpenses > 0) {
+        skipped.push(`${result.skippedExpenses} Reisekosten ohne kopierten Zeiteintrag`);
+      }
+      if (result.skippedWeekend > 0) {
+        skipped.push(`${result.skippedWeekend} Wochenend-Einträge abgewählt`);
+      }
+      // Zeiteinträge und Belege getrennt benannt: Bei Belegen sammelt der Zähler außer
+      // „kein Zieltag" auch „unbrauchbares Datum" und „wäre in den Quellzeitraum
+      // zurückgefallen" — ein pauschales „ohne Zieltag" nennte dann den falschen Grund.
+      if (result.skippedNoTarget > 0) {
+        skipped.push(`${result.skippedNoTarget} Zeiteinträge ohne Zieltag im Folgemonat`);
+      }
+      if (result.skippedNoTargetExpenses > 0) {
+        skipped.push(`${result.skippedNoTargetExpenses} Reisekosten ohne gültiges Zieldatum`);
+      }
+      if (result.skippedOther > 0) {
+        skipped.push(`${result.skippedOther} Zeiteinträge aus anderen Gründen`);
+      }
+      const skipSuffix = skipped.length > 0 ? ` — ausgelassen: ${skipped.join(", ")}` : "";
       toast.success(
         `Kopiert: ${result.copiedTimeEntries} Zeiteinträge, ${result.copiedExpenses} Reisekosten${skipSuffix}`
       );
@@ -381,6 +427,10 @@ export default function TimeTracking() {
     setTempRatePerKm("");
     setTempFlightReturnDate("");
     setTempFlightRouteType("domestic");
+    setTempFlightDepartureAirport("");
+    setTempFlightArrivalAirport("");
+    setTempFlightDirection("");
+    setTempFlightDirectionTouched(false);
     setTempFlightTravelStart("");
     setTempFlightTravelEnd("");
     setTempHotelCheckInDate(defaultDate);
@@ -554,6 +604,9 @@ export default function TimeTracking() {
     copyRangeMutation.mutate({
       scope: copyScope,
       anchorDate: copyAnchorDate,
+      // Nur relevant, wenn die Quelle Wochenend-Einträge hat; sonst immer `true`, damit ein
+      // versehentlich stehengebliebener Haken aus einem früheren Dialog nichts unterschlägt.
+      includeWeekends: sourceHasWeekendEntries ? copyIncludeWeekends : true,
     });
   };
 
@@ -584,10 +637,23 @@ export default function TimeTracking() {
       if (expense.category === "flight") {
         const items: ExpenseCalendarItem[] = [];
         if (primaryDate === dateStr) {
+          // Trägt der Beleg nur EIN Bein, folgt die Beschriftung der erfassten Richtung.
+          // Sonst behauptete der Kalender „Hinflug" an einem Beleg, an dem der Nutzer
+          // gerade „Rückflug" eingetragen hat — die Gegenaussage im selben Bildschirm.
+          // Bei einem Round-Trip auf einem Ticket entscheidet dagegen das Datum (erster
+          // Tag hin, zweiter zurück); `flightDirection` trägt dort keine Einzelaussage.
+          const returnDateKey = expense.checkOutDate
+            ? getDateKey(expense.checkOutDate as string | Date)
+            : null;
+          const isSingleLeg = returnDateKey === null || returnDateKey === primaryDate;
           items.push({
             ...baseItem,
             _showAmount: true,
-            _subLabel: "Hinflug",
+            _subLabel: isSingleLeg && expense.flightDirection === "return" ? "Rückflug" : "Hinflug",
+            // `_flightLeg` steuert NICHT die Beschriftung, sondern welche Uhrzeit erscheint
+            // (Hinflugtag → Abflugzeit, Rückflugtag → Ankunftszeit). Das hängt an der
+            // Zweiteilung des Round-Trips und bleibt deshalb datumsgesteuert — eine
+            // Einzelstrecke zeigt beide Zeiten, auch wenn sie ein Rückflug ist.
             _flightLeg: "outbound",
           });
         }
@@ -663,6 +729,26 @@ export default function TimeTracking() {
   const days = getDaysInMonth();
   const monthTotal = calculateMonthTotal();
   const copyRanges = getScopeRanges(copyAnchorDate, copyScope);
+  // Eigener Query für den QUELLZEITRAUM des Kopierdialogs. Die Ableitung aus dem bereits
+  // geladenen `timeEntries` wäre falsch: das deckt nur den angezeigten Kalendermonat ab,
+  // während das Referenzdatum im Dialog frei wählbar ist (und eine Woche über den
+  // Monatswechsel reichen kann). Der Quellzeitraum wäre dann teilweise oder ganz ungeladen —
+  // die Rückfrage unterbliebe, und `includeWeekends: true` würde stillschweigend angenommen.
+  // Eine nicht gestellte Frage darf nicht als „ja" gewertet werden.
+  const {
+    data: copySourceEntries,
+    isFetching: isCopySourceLoading,
+    isError: isCopySourceError,
+  } = trpc.timeEntries.list.useQuery(
+    { startDate: copyRanges.sourceStart, endDate: copyRanges.sourceEnd },
+    { enabled: isScopeCopyDialogOpen && Boolean(copyRanges.sourceStart) }
+  );
+  const sourceHasWeekendEntries = Boolean(
+    copySourceEntries?.some((entry: any) => {
+      const key = getDateKey(entry?.date);
+      return key ? !isWorkdayKey(key) : false;
+    })
+  );
   const computedHotelCheckOutDate =
     tempHotelCheckInDate && Number(tempHotelNights) >= 0
       ? addDays(tempHotelCheckInDate, Number(tempHotelNights))
@@ -693,6 +779,43 @@ export default function TimeTracking() {
     (computedMileageAmount ?? 0) > 0 &&
     Math.round((computedMileageAmount ?? 0) * 100) !== editingExpenseAmountCents;
 
+  // Richtungsvorschlag aus der Strecke (Befund B3). Die Regel liegt in `shared/`, damit
+  // Maske, KI-Pfad und Import dieselbe benutzen (K4) — hier wird sie nur ausgewertet.
+  const flightDirectionSuggestion = suggestFlightDirection(
+    tempFlightDepartureAirport,
+    tempFlightArrivalAirport
+  );
+  // Was im Select steht, ist auch das, was gespeichert wird — es gibt KEINEN Fallback auf
+  // den Vorschlag beim Speichern.
+  //
+  // WARUM nicht: Ein Beleg mit Strecke, dessen Richtung leer ist, kann zweierlei bedeuten
+  // — „nie entschieden" oder „bewusst leer gelassen". In der DB sind beide NULL. Ein
+  // Fallback beim Speichern schriebe die zweite Absicht beim nächsten beliebigen Speichern
+  // (z. B. einer Betragskorrektur) still um. Der Vorschlag entsteht deshalb ausschließlich
+  // als Folge einer Flughafen-Eingabe (`applyFlightAirportChange`) — sichtbar im Feld,
+  // bevor gespeichert wird.
+  const effectiveFlightDirection: "" | FlightDirection = tempFlightDirection;
+
+  /**
+   * Richtung vorbelegen, wenn der Nutzer noch nicht selbst entschieden hat.
+   *
+   * Bewusst im onChange der Flughafenfelder statt in einem useEffect: Die Vorbelegung
+   * ist die Folge einer Eingabe, kein Nebeneffekt eines Renders — so steht die Kausalität
+   * im Code und es kann keine Schleife entstehen. Liefert die Regel keinen Vorschlag
+   * (Fall 3/4), bleibt das Feld leer statt geraten zu werden (K1).
+   */
+  const applyFlightAirportChange = (which: "departure" | "arrival", rawValue: string) => {
+    const value = rawValue.toUpperCase().slice(0, 3);
+    const nextDeparture = which === "departure" ? value : tempFlightDepartureAirport;
+    const nextArrival = which === "arrival" ? value : tempFlightArrivalAirport;
+
+    if (which === "departure") setTempFlightDepartureAirport(value);
+    else setTempFlightArrivalAirport(value);
+
+    if (tempFlightDirectionTouched) return;
+    setTempFlightDirection(suggestFlightDirection(nextDeparture, nextArrival).direction ?? "");
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -705,6 +828,10 @@ export default function TimeTracking() {
             variant="outline"
             onClick={() => {
               setCopyAnchorDate(formatLocalDate(expandedDay || new Date()));
+              // Zurücksetzen: Die Anforderung ist eine RÜCKFRAGE pro Kopiervorgang. Ohne
+              // Reset schleppte ein einmal entfernter Haken sich in den nächsten Dialog und
+              // ließe dort erneut Wochenend-Einträge weg, ohne dass danach gefragt wurde.
+              setCopyIncludeWeekends(true);
               setIsScopeCopyDialogOpen(true);
             }}
           >
@@ -968,6 +1095,17 @@ export default function TimeTracking() {
                                   setTempFlightRouteType(
                                     expense.flightRouteType === "international" ? "international" : "domestic"
                                   );
+                                  setTempFlightDepartureAirport(expense.departureAirport || "");
+                                  setTempFlightArrivalAirport(expense.arrivalAirport || "");
+                                  const storedDirection =
+                                    expense.flightDirection === "outbound" || expense.flightDirection === "return"
+                                      ? expense.flightDirection
+                                      : "";
+                                  setTempFlightDirection(storedDirection);
+                                  // Ein bereits geprüfter Beleg wird nicht neu vorgeschlagen — der
+                                  // gespeicherte Wert ist eine Entscheidung, keine Lücke. Ist er leer
+                                  // (Altbeleg), greift der Vorschlag beim Nachtragen der Strecke.
+                                  setTempFlightDirectionTouched(storedDirection !== "");
                                   setTempFlightTravelStart(expense.departureTime || "");
                                   setTempFlightTravelEnd(expense.arrivalTime || "");
                                   const hotelCheckIn = expense.checkInDate
@@ -1149,8 +1287,11 @@ export default function TimeTracking() {
               <DialogDescription>
                 Überträgt alle Zeiteinträge und Reisekosten auf den nächsten Zeitraum. Der
                 Wochentag bleibt dabei erhalten (Feiertage werden nicht berücksichtigt).
-                Einträge vom Monatsende (29.–31.) können in den übernächsten Monat rutschen,
-                wenn der Zielmonat den Wochentag nicht mehr hergibt.
+                Beim Monatskopieren bleiben Zeiteinträge und eigenständige Reisekosten immer
+                im Zielmonat: Einträge vom Monatsende (29.–31.), für die der Zielmonat den
+                Wochentag nicht mehr hergibt, werden ausgelassen und im Ergebnis ausgewiesen.
+                Eine mehrtägige Reisekostenposition an einem Zeiteintrag folgt ihrem
+                Zeiteintrag und kann mit ihrem Ende in den Folgemonat ragen.
               </DialogDescription>
             </DialogHeader>
 
@@ -1179,6 +1320,31 @@ export default function TimeTracking() {
                 />
               </div>
 
+              {sourceHasWeekendEntries && (
+                <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <input
+                      id="copy-include-weekends"
+                      type="checkbox"
+                      className="mt-1"
+                      checked={copyIncludeWeekends}
+                      onChange={(e) => setCopyIncludeWeekends(e.target.checked)}
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="copy-include-weekends" className="cursor-pointer">
+                        Wochenend-Zeiteinträge mitkopieren
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Im gewählten Quellzeitraum liegen Zeiteinträge auf Samstag oder
+                        Sonntag. Ohne Haken werden sie ausgelassen und im Ergebnis
+                        ausgewiesen. Reisekosten an einem Zeiteintrag entfallen mit ihm;
+                        eigenständige Reisekosten werden unabhängig davon kopiert.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-md border p-3 text-sm">
                 <div>
                   <span className="font-medium">Quelle:</span>{" "}
@@ -1204,9 +1370,21 @@ export default function TimeTracking() {
               <Button
                 type="button"
                 onClick={handleScopeCopySubmit}
-                disabled={copyRangeMutation.isPending}
+                // Solange der Quellzeitraum lädt — oder gar nicht geladen werden konnte —, ist
+                // unbekannt, ob es Wochenend-Einträge gibt. Ein Klick würde die Rückfrage
+                // überspringen und stillschweigend „ja" annehmen. Auch der FEHLERfall sperrt
+                // deshalb: eine nicht gestellte Frage darf nicht als beantwortet gelten.
+                disabled={
+                  copyRangeMutation.isPending || isCopySourceLoading || isCopySourceError
+                }
               >
-                {copyRangeMutation.isPending ? "Kopiere..." : "Jetzt kopieren"}
+                {copyRangeMutation.isPending
+                  ? "Kopiere..."
+                  : isCopySourceLoading
+                    ? "Prüfe Zeitraum..."
+                    : isCopySourceError
+                      ? "Zeitraum nicht prüfbar"
+                      : "Jetzt kopieren"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1336,8 +1514,32 @@ export default function TimeTracking() {
                       );
                       return;
                     }
+                    // Angefangen, aber nicht fertig getippt: abbrechen statt still zu
+                    // verwerfen. Ein `normalizeAirportCode(...) ?? ""` an dieser Stelle
+                    // schickte "KT" als Leerstring an den Server, der Dialog schlösse mit
+                    // Erfolgsmeldung und die Eingabe wäre ohne Rückmeldung weg (K1) — und
+                    // der Zod-Guard in `routers.ts`, der genau das abfangen soll, sähe den
+                    // Fall nie.
+                    for (const [value, label] of [
+                      [tempFlightDepartureAirport, "Startflughafen"],
+                      [tempFlightArrivalAirport, "Zielflughafen"],
+                    ] as const) {
+                      if (value.trim() && !normalizeAirportCode(value)) {
+                        toast.error(
+                          `${label}: Bitte einen IATA-Code aus 3 Buchstaben eingeben (z.B. KTW) oder das Feld leeren`
+                        );
+                        return;
+                      }
+                    }
                     payloadBase.date = normalizedPrimaryDate;
                     payloadBase.flightRouteType = tempFlightRouteType;
+                    // Ohne `|| undefined`: Leeren ist eine legitime Nutzeraktion, "" wird
+                    // serverseitig zu NULL.
+                    payloadBase.departureAirport = normalizeAirportCode(tempFlightDepartureAirport) ?? "";
+                    payloadBase.arrivalAirport = normalizeAirportCode(tempFlightArrivalAirport) ?? "";
+                    // Gespeichert wird, was im Feld steht — inklusive des Vorschlags, wenn
+                    // der Nutzer ihn hat stehen lassen.
+                    payloadBase.flightDirection = effectiveFlightDirection;
                     payloadBase.departureTime = tempFlightTravelStart || undefined;
                     payloadBase.arrivalTime = tempFlightTravelEnd || undefined;
                     // Flüge kennen keinen Leistungsbeginn getrennt vom Hinflugdatum.
@@ -1525,6 +1727,65 @@ export default function TimeTracking() {
                           <SelectItem value="international">International (Inland ↔ Ausland)</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="flight-departure-airport">Startflughafen (optional)</Label>
+                        <Input
+                          id="flight-departure-airport"
+                          maxLength={3}
+                          placeholder="z.B. KTW"
+                          className="uppercase"
+                          value={tempFlightDepartureAirport}
+                          onChange={(e) => applyFlightAirportChange("departure", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="flight-arrival-airport">Zielflughafen (optional)</Label>
+                        <Input
+                          id="flight-arrival-airport"
+                          maxLength={3}
+                          placeholder="z.B. MUC"
+                          className="uppercase"
+                          value={tempFlightArrivalAirport}
+                          onChange={(e) => applyFlightAirportChange("arrival", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="flight-direction">Richtung</Label>
+                      <Select
+                        value={effectiveFlightDirection || "none"}
+                        onValueChange={(value) => {
+                          // Jede Auswahl — auch „keine Angabe" — ist eine Entscheidung. Ab
+                          // hier belegt der Vorschlag nicht mehr vor.
+                          setTempFlightDirectionTouched(true);
+                          setTempFlightDirection(value === "none" ? "" : (value as FlightDirection));
+                        }}
+                      >
+                        <SelectTrigger id="flight-direction">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">keine Angabe</SelectItem>
+                          <SelectItem value="outbound">Hinflug</SelectItem>
+                          <SelectItem value="return">Rückflug</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {!tempFlightDirectionTouched && tempFlightDirection && (
+                        <p className="text-xs text-muted-foreground">
+                          Vorschlag aus der Strecke — bitte prüfen und bei Bedarf ändern.
+                        </p>
+                      )}
+                      {flightDirectionSuggestion.hint && (
+                        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+                          {flightDirectionSuggestion.hint}
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Bei Umstiegen bitte das <strong>Endziel</strong> als Zielflughafen eintragen,
+                        nicht den Zwischenstopp.
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
