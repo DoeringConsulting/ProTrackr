@@ -42,6 +42,23 @@ export type TaxCalculationResult = {
   source: "regime_config" | "legacy";
 };
 
+/**
+ * Gesamte Steuer- und Sozialabgabenlast eines Ergebnisses: ZUS + Zdrowotna + PIT.
+ *
+ * Steht bewusst NEBEN der `netProfit`-Definition, weil sie deren Gegenstück ist: In jedem
+ * Berechnungspfad gilt `netProfit = revenue − fixed − variable − zus − healthInsurance − tax`,
+ * diese Funktion liefert also exakt die Differenz zwischen „Umsatz minus Betriebskosten" und
+ * dem Nettogewinn. Genau diese Größe fehlte im Dashboard-Chart und ließ die Rechnung
+ * unerklärlich aussehen (Dev-Abnahme B1).
+ *
+ * Als Funktion statt als Inline-Summe an den Verwendungsstellen: Käme je ein weiterer Abzug
+ * hinzu, müsste er sonst an jeder Stelle einzeln nachgezogen werden — und die Chart-Linie
+ * zeigte stillschweigend zu wenig. Das ist die Divergenz-Fehlerklasse dieses Projekts (K4).
+ */
+export function totalLeviesCents(result: TaxCalculationResult): number {
+  return result.zus + result.healthInsurance + result.tax;
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }

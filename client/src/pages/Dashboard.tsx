@@ -19,7 +19,11 @@ import {
   Users,
 } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, ResponsiveContainer } from "recharts";
-import { aggregateMonthlyTaxResults, computeMonthlyTaxSeries } from "@/lib/taxEnginePl";
+import {
+  aggregateMonthlyTaxResults,
+  computeMonthlyTaxSeries,
+  totalLeviesCents,
+} from "@/lib/taxEnginePl";
 import {
   computeMonthlyAmounts,
   computeMonthlyDisplayRevenue,
@@ -124,6 +128,13 @@ export default function Dashboard() {
   const [showGross, setShowGross] = useState(true);
   const [showNet, setShowNet] = useState(true);
   const [showTime, setShowTime] = useState(false);
+  // Standardmäßig AN: Ohne diese Linie ist die Differenz zwischen Brutto minus Kosten und
+  // Nettogewinn im Chart unerklärlich — sie ist die Steuer- und Sozialabgabenlast, und die
+  // stand in keiner Serie. Genau daran ist die Dev-Abnahme hängengeblieben.
+  const [showAbgaben, setShowAbgaben] = useState(true);
+  // Betriebskosten (Reisekosten + Provision + Fixkosten). Zusammen mit den Abgaben schließen
+  // sie die Rechnung: Brutto − Betriebskosten − Abgaben = Nettogewinn.
+  const [showKosten, setShowKosten] = useState(true);
   // Prognose-Toggle: hängt Zukunftsmonate an (nur im Modus „Einheitliche Währung").
   const [showForecast, setShowForecast] = useState(false);
 
@@ -422,6 +433,8 @@ export default function Dashboard() {
       };
 
       const netTargetByMonth = new Map<string, number>();
+      const abgabenTargetByMonth = new Map<string, number>();
+      const istKostenTargetByMonth = new Map<string, number>();
       const taxSeries = computeMonthlyTaxSeries({
         startDate: rangeStart,
         endDate: rangeEnd,
@@ -443,6 +456,35 @@ export default function Dashboard() {
         } else {
           netTargetByMonth.set(point.monthStart.slice(0, 7), netTarget);
         }
+
+        // Steuer- und Sozialabgaben als eigene Serie. Ohne sie ging die Rechnung im Chart
+        // sichtbar nicht auf: Die Kostenlinie führt NUR Betriebskosten (Run-Rate + Fixkosten),
+        // der Nettogewinn steht dagegen NACH ZUS, Zdrowotna und PIT. Die Differenz — bei der
+        // Dev-Abnahme 214.748,70 PLN — war in keiner Linie sichtbar und wirkte wie ein
+        // Rechenfehler. Die Werte lagen bereits vor, sie wurden nur nicht dargestellt.
+        const abgabenTarget = convertAmountCents(
+          totalLeviesCents(point.result),
+          "PLN",
+          targetCurrency,
+          rateMap
+        );
+        if (abgabenTarget === null) {
+          missingRates += 1;
+          abgabenTargetByMonth.set(point.monthStart.slice(0, 7), 0);
+        } else {
+          abgabenTargetByMonth.set(point.monthStart.slice(0, 7), abgabenTarget);
+        }
+
+        // Betriebskosten AUCH als Ist-Serie. Ohne sie blieb im reinen Ist-View (Prognose aus)
+        // eine unbeschriftete Restlücke: Brutto − Netto − Abgaben = Betriebskosten, für die es
+        // bis dahin nur eine Prognose-Linie gab. Der Befund B1 wäre nur halb gelöst gewesen.
+        const istKostenTarget = convertAmountCents(
+          point.amounts.variableCostsCents + point.amounts.fixedCostsCents,
+          "PLN",
+          targetCurrency,
+          rateMap
+        );
+        istKostenTargetByMonth.set(point.monthStart.slice(0, 7), istKostenTarget ?? 0);
       }
 
       const displayCtx = {
@@ -457,25 +499,35 @@ export default function Dashboard() {
       let bruttoCum = 0;
       let nettoCum = 0;
       let zeitCum = 0;
+      let abgabenCum = 0;
+      let istKostenCum = 0;
       const data: Array<Record<string, string | number | null>> = monthStarts.map((monthStart) => {
         const { ms, me, ym } = monthBounds(monthStart);
         const rev = computeMonthlyDisplayRevenue(ms, me, displayCtx);
         let bruttoCents = rev.grossCents;
         let zeitCents = rev.timeCents;
         let nettoCents = netTargetByMonth.get(ym) ?? 0;
+        let abgabenCents = abgabenTargetByMonth.get(ym) ?? 0;
+        let istKostenCents = istKostenTargetByMonth.get(ym) ?? 0;
         if (chartMode === "cumulative") {
           bruttoCum += bruttoCents;
           zeitCum += zeitCents;
           nettoCum += nettoCents;
+          abgabenCum += abgabenCents;
+          istKostenCum += istKostenCents;
           bruttoCents = bruttoCum;
           zeitCents = zeitCum;
           nettoCents = nettoCum;
+          abgabenCents = abgabenCum;
+          istKostenCents = istKostenCum;
         }
         const row: Record<string, string | number | null> = {
           month: monthStart.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }),
           brutto: bruttoCents / 100,
           netto: nettoCents / 100,
           zeit: zeitCents / 100,
+          abgaben: abgabenCents / 100,
+          kosten: istKostenCents / 100,
         };
         // Ist-Monate tragen leere Prognose-Keys (Anschluss erst am letzten Ist-Monat).
         if (showForecast) {
@@ -483,6 +535,7 @@ export default function Dashboard() {
           row.nettoForecast = null;
           row.zeitForecast = null;
           row.kostenForecast = null;
+          row.abgabenForecast = null;
         }
         return row;
       });
@@ -583,6 +636,7 @@ export default function Dashboard() {
             legacySettings: taxSettings,
           });
           const netForecastByMonth = new Map<string, number>();
+          const abgabenForecastByMonth = new Map<string, number>();
           for (const point of forecastTaxSeries) {
             const netTarget = convertAmountCents(point.result.netProfit, "PLN", targetCurrency, rateMap);
             if (netTarget === null) {
@@ -590,6 +644,20 @@ export default function Dashboard() {
               netForecastByMonth.set(point.monthStart.slice(0, 7), 0);
             } else {
               netForecastByMonth.set(point.monthStart.slice(0, 7), netTarget);
+            }
+            // Abgaben auch in der Prognose — sonst klaffte die Lücke ab dem ersten
+            // Prognosemonat wieder auf, genau dort, wo sie zuerst aufgefallen ist.
+            const abgabenTarget = convertAmountCents(
+              totalLeviesCents(point.result),
+              "PLN",
+              targetCurrency,
+              rateMap
+            );
+            if (abgabenTarget === null) {
+              missingRates += 1;
+              abgabenForecastByMonth.set(point.monthStart.slice(0, 7), 0);
+            } else {
+              abgabenForecastByMonth.set(point.monthStart.slice(0, 7), abgabenTarget);
             }
           }
 
@@ -600,10 +668,13 @@ export default function Dashboard() {
             anchorRow.bruttoForecast = anchorRow.brutto;
             anchorRow.nettoForecast = anchorRow.netto;
             anchorRow.zeitForecast = anchorRow.zeit;
-            // Kostenlinie hat keine Ist-Entsprechung: Monatsmodus = konstante Run-Rate,
-            // Kumuliert = kumulierte Ist-Kosten als Startpunkt (Zeitachsen-konsistent).
+            anchorRow.abgabenForecast = anchorRow.abgaben;
+            // Kumuliert setzt die Prognose auf dem Ist-Kumulwert DERSELBEN Zeile auf (statt auf
+            // einer separat summierten Größe) — sonst entstünde am Anker ein sichtbarer
+            // Rundungsversatz zwischen Ist- und Prognose-Kostenlinie. Im Monatsmodus beginnt
+            // sie bei der konstanten Run-Rate.
             anchorRow.kostenForecast =
-              chartMode === "cumulative" ? istCostSumTarget / 100 : monthlyForecastCostTarget / 100;
+              chartMode === "cumulative" ? anchorRow.kosten : monthlyForecastCostTarget / 100;
           }
 
           // Prognose-Kumulation vom letzten Ist-Kumulwert fortführen (nicht bei 0 neu).
@@ -611,6 +682,7 @@ export default function Dashboard() {
           let nettoForecastCum = nettoCum;
           let zeitForecastCum = zeitCum;
           let kostenForecastCum = istCostSumTarget;
+          let abgabenForecastCum = abgabenCum;
           for (const monthStart of trimmedForecastMonths) {
             const { ms, me, ym } = monthBounds(monthStart);
             const rev = computeMonthlyDisplayRevenue(ms, me, displayCtxForecast);
@@ -618,25 +690,31 @@ export default function Dashboard() {
             let zeitCents = rev.timeCents;
             let nettoCents = netForecastByMonth.get(ym) ?? 0;
             let kostenCents = monthlyForecastCostTarget;
+            let abgabenCents = abgabenForecastByMonth.get(ym) ?? 0;
             if (chartMode === "cumulative") {
               bruttoForecastCum += bruttoCents;
               zeitForecastCum += zeitCents;
               nettoForecastCum += nettoCents;
               kostenForecastCum += kostenCents;
+              abgabenForecastCum += abgabenCents;
               bruttoCents = bruttoForecastCum;
               zeitCents = zeitForecastCum;
               nettoCents = nettoForecastCum;
               kostenCents = kostenForecastCum;
+              abgabenCents = abgabenForecastCum;
             }
             data.push({
               month: monthStart.toLocaleDateString("de-DE", { month: "short", year: "2-digit" }),
               brutto: null,
               netto: null,
               zeit: null,
+              abgaben: null,
+              kosten: null,
               bruttoForecast: bruttoCents / 100,
               nettoForecast: nettoCents / 100,
               zeitForecast: zeitCents / 100,
               kostenForecast: kostenCents / 100,
+              abgabenForecast: abgabenCents / 100,
             });
           }
         }
@@ -648,7 +726,10 @@ export default function Dashboard() {
       );
       return {
         data,
-        seriesKeys: ["brutto", "netto", "zeit"],
+        // Wird NUR im Nicht-Einheitswährungs-Zweig gelesen (dort trägt es Währungscodes).
+        // Im Unified-Zweig sind die Serien fest verdrahtet — der Wert wäre hier ohnehin
+        // unvollständig (ohne Prognose-Keys) und deshalb eher irreführend als nützlich.
+        seriesKeys: [],
         missingRates,
         nettoHasNegative,
         todayLabel,
@@ -1307,6 +1388,20 @@ export default function Dashboard() {
                     >
                       Zeitumsatz
                     </Button>
+                    <Button
+                      variant={showKosten ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowKosten((v) => !v)}
+                    >
+                      Betriebskosten
+                    </Button>
+                    <Button
+                      variant={showAbgaben ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowAbgaben((v) => !v)}
+                    >
+                      Steuern &amp; Abgaben
+                    </Button>
                     {/* Erklärt die Zeitumsatz-Linie (user-internal, kein Datenleck). Als
                         <button> für Tastatur-/Screenreader-Zugriff; UiTooltip = Radix-Alias. */}
                     <UiTooltip>
@@ -1454,6 +1549,33 @@ export default function Dashboard() {
                           dot={false}
                         />
                       ),
+                      // Farben bewusst weit auseinander: Abgaben in der Markenfarbe (dunkles
+                      // Blaugrau), Kosten im Braunton der bestehenden Prognose-Linie. Ein
+                      // zweiter Warmton neben #b98847 wäre bei zwei gestrichelten
+                      // Prognose-Linien nicht mehr zu unterscheiden — und genau diese beiden
+                      // muss man gegeneinander lesen, um die Rechnung nachzuvollziehen.
+                      showAbgaben && (
+                        <Line
+                          key="abgaben"
+                          type="monotone"
+                          dataKey="abgaben"
+                          stroke="#1d3240"
+                          strokeWidth={2}
+                          name="Steuern & Abgaben"
+                          dot={false}
+                        />
+                      ),
+                      showKosten && (
+                        <Line
+                          key="kosten"
+                          type="monotone"
+                          dataKey="kosten"
+                          stroke="#b98847"
+                          strokeWidth={2}
+                          name="Betriebskosten"
+                          dot={false}
+                        />
+                      ),
                       // Prognose-Linien: gestrichelt + gedämpft, setzen am letzten Ist-Monat
                       // an (connectNulls=false überspringt die leeren Ist-Monate davor).
                       showForecast && revenueChart.hasForecast && showGross && (
@@ -1498,9 +1620,22 @@ export default function Dashboard() {
                           strokeOpacity={0.55}
                         />
                       ),
-                      // Kostenlinie existiert NUR als Prognose (keine Ist-Entsprechung),
-                      // daher unabhängig von showGross/showNet.
-                      showForecast && revenueChart.hasForecast && (
+                      showForecast && revenueChart.hasForecast && showAbgaben && (
+                        <Line
+                          key="abgabenForecast"
+                          type="monotone"
+                          dataKey="abgabenForecast"
+                          stroke="#1d3240"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          name="Steuern & Abgaben (Prognose)"
+                          dot={false}
+                          connectNulls={false}
+                          strokeOpacity={0.55}
+                        />
+                      ),
+                      // Prognose-Kostenlinie folgt demselben Toggle wie die Ist-Kostenlinie.
+                      showForecast && revenueChart.hasForecast && showKosten && (
                         <Line
                           key="kostenForecast"
                           type="monotone"
