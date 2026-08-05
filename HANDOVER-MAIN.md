@@ -2,35 +2,54 @@
 
 > Self-contained Übergabe für die **main-Welt** von ProTrackr. Eine neue Main-Sitzung
 > kann allein auf Basis dieses Dokuments + der Memory-Dateien lückenlos weiterarbeiten.
-> **Stand: 2026-08-04 · App-Release v2.7.4 (auf main; NAS-Prod-Rollout offen) · origin/main synchron.**
-> **Working Tree sauber, Manifest `2.7.4.json` + Tag `v2.7.4` gesetzt.**
+> **Stand: 2026-08-05 · App-Release v2.9.0 (auf main; NAS-Rollout DEV+PROD offen) · origin/main synchron.**
+> **Working Tree sauber, Manifest `2.9.0.json` + Tag `v2.9.0` gesetzt.**
 > Pendant: `HANDOVER-NAS-SETUP.md` (Branch `nas-setup`, NAS-Welt, eigener Chat).
 
 ---
 
-## 0.1 SOFORT ZU TUN (Stand 2026-08-05, Abschluss Sitzung 7)
+## 0.1 SOFORT ZU TUN (Stand 2026-08-05, Abschluss Sitzung 8)
 
-**Nichts Halbfertiges im Code.** Working Tree sauber, `origin/main` synchron, HEAD auf
-**v2.8.x**, App-Release **v2.8.0**, Tag `v2.8.0`, Manifest `.claude/rollouts/2.8.0.json`.
-**PROD und DEV stehen beide auf v2.7.9** (Promotion 2026-08-05 13:23, bit-identisch, Tag
-`nas-rollout/2.7.9`) — der Rollout-Rückstand ist abgebaut, Migration `0021` ist auf **beiden**
-DBs geschlossen.
+**Nichts Halbfertiges im Code.** Working Tree sauber, `origin/main` synchron (Drift `0 0`),
+App-Release **v2.9.0**, Tag `v2.9.0` (auf dem Release-Commit `0e0bab9`), Manifest
+`.claude/rollouts/2.9.0.json`. **PROD und DEV stehen beide auf v2.7.9** — zwischen ihnen und
+main liegen jetzt **v2.8.0 und v2.9.0**.
 
-### ⏭️ PRIMÄRE AUFGABE DER NÄCHSTEN SITZUNG: B3 umsetzen
+### ⏭️ PRIMÄRE AUFGABE DER NÄCHSTEN SITZUNG: B3 auf DEV ausrollen und abnehmen
 
-**Konzept liegt fertig und FREIGEGEBEN vor:** [`docs/KONZEPT-flugrichtung.md`](docs/KONZEPT-flugrichtung.md)
-v1.1.0. Alle drei Entscheidungen sind getroffen (§5), die Umsetzungsreihenfolge steht in §6.
+**B3 ist auf main umgesetzt** (v2.9.0). Was noch fehlt, ist der Rollout im **NAS-Chat**
+(`/nas-rollout`, Manifest `2.9.0.json`) und die fachliche Abnahme auf DEV.
 
-- **Migration `0026` ist freigegeben** — drei additive, nullable Spalten (`departureAirport`,
-  `arrivalAirport`, `flightDirection`).
-- **Heimatflughäfen ausschließlich `KTW`/`KRK`.** Andere polnische Flughäfen (WAW, GDN, …)
-  gelten NICHT als Heimat, sondern lösen eine **Rückfrage** aus — ein Flug nach Warschau ist
-  eher ein Kundeneinsatz als eine Heimreise. (Korrektur des ersten Entwurfs, der sie als Heimat
-  gezählt hätte.)
-- **Bestandsdaten bleiben leer**, Nachtragen später möglich — konstruktiv erfüllt, keine
-  Zusatzarbeit.
-- Migration **erst beim Rollout anwenden**, nach der Pflicht-Prozedur aus
-  [[project_db_migration_drift]].
+> 🔴 **Diese Release enthält eine neue Migration — und ihre Reihenfolge ist HART.**
+> `0026_expenses_flight_route.sql` liegt im Repo und ist **nicht angewendet**.
+> **Drizzle erzeugt nie `SELECT *`**: Auch `db.select().from(expenses)` ohne Spaltenliste
+> listet jede Spalte der Schema-Definition namentlich auf (verifiziert am 2026-08-05 über
+> `QueryBuilder(...).toSQL()`). Läuft die neue App gegen eine DB ohne `0026`, scheitert
+> deshalb **jeder** Zugriff auf `expenses` — Belegliste, Bericht, Kopierlauf **und das
+> Backup**. Also: Migration **vor** dem Container-Start, Backup-Guard davor (läuft noch mit
+> der alten App, das ist richtig so), danach Spaltenexistenz **und** Zeilenzahl gegenprüfen.
+> Rollback ist asymmetrisch: Container zurückrollen bei stehenden Spalten ist unbedenklich,
+> Spalten entfernen bei laufender neuer App legt die Anwendung lahm.
+
+**Was auf DEV abzunehmen ist** (Reisekosten → Flug-Beleg anlegen/bearbeiten):
+
+1. Start `MUC`, Ziel `KTW` → Richtung springt auf **Rückflug**, darunter „Vorschlag aus der
+   Strecke". Speichern, wieder öffnen: Wert steht.
+2. Richtung von Hand auf **Hinflug** stellen, danach den Zielflughafen ändern → die Wahl darf
+   **nicht** überschrieben werden.
+3. Start `MUC`, Ziel `WAW` → **kein** Vorschlag, dafür der gelbe Hinweis „WAW ist ein
+   polnischer Flughafen, aber kein hinterlegter Heimatflughafen".
+4. Nur `KT` eintippen und speichern → **Fehlermeldung**, kein stilles Leeren.
+5. Altbeleg ohne Strecke öffnen, `KTW`/`MUC` nachtragen → Vorschlag **Hinflug**, speichern.
+6. Flug-Beleg auf Kategorie **Taxi** umstellen → Strecke und Richtung müssen weg sein
+   (in der DB prüfen, die Maske zeigt die Felder dort nicht).
+7. Buchhaltungsbericht als PDF: Flugzeile zeigt `Trasa: KTW - MUC | Kierunek: Tam`;
+   ein **Altbeleg ohne Strecke** zeigt weiterhin nur `Typ lotu | Wylot | Przylot`.
+
+**Konzept ist auf v1.2.0 nachgeführt** ([`docs/KONZEPT-flugrichtung.md`](docs/KONZEPT-flugrichtung.md)):
+Regel 0 in §3.2 (beide Heimatflughäfen → Rückfrage), §4 um die harte Migrations-Reihenfolge,
+§6.1 um die drei Pfade, die §3.4 nicht kannte (Kalender-Beschriftung, Kopierlauf,
+Import-Vorlage).
 
 ### ⏸️ DANACH, NICHT VORHER: B4 (Import/MCP)
 
@@ -55,7 +74,27 @@ abgebrochen — offen.**
 **Unabhängig davon bereit:** Der CSV-Import-Bug — `Import.tsx` vergleicht
 `String(dateObjekt).slice(0,10)` gegen `"YYYY-MM-DD"`, was `"Tue Jul 01"` ergibt und **nie**
 trifft. Folge: Duplikatserkennung greift nie, Belege werden nie an Zeiteinträge gehängt. Kleiner,
-isolierter Fix, jederzeit vorziehbar.
+isolierter Fix, jederzeit vorziehbar. **In v2.9.0 bewusst NICHT mitgenommen** — B3 sollte eine
+Runde ohne Nebenaufgaben bleiben.
+
+### 📌 Lessons aus Sitzung 8 (B3)
+
+1. **Ein Konzept nennt nicht alle Pfade.** §3.4 des B3-Konzepts listete sechs Dateien; drei
+   weitere fielen erst im Review auf, darunter eine, die dem neuen Feld im selben Bildschirm
+   **widersprochen** hätte (der Kalender beschriftete Flüge hart mit „Hinflug"). Beim Anlegen
+   eines Feldes lohnt die Frage: *Wo wird dieselbe Aussage heute schon anders hergeleitet?*
+2. **Ein serverseitiger Guard nützt nichts, wenn der Client den Fall nie durchlässt.** Das
+   Zod-Schema lehnte ungültige IATA-Codes ausdrücklich ab, damit nichts still verlorengeht —
+   die Maske normalisierte vorher auf `""` und machte den Guard zu totem Code. Guards immer
+   von der Eingabeseite her durchdenken.
+3. **Bump-Level hängt am Commit-Subject — und der hing an der Shell.** PowerShell-Here-String-
+   Syntax (`@'…'@`) im **Bash**-Tool schrieb ein `@` vor das `feat(...)`, der Hook las „kein
+   `feat:`" und bumpte PATCH statt MINOR. Für mehrzeilige Commit-Messages: Datei schreiben und
+   `git commit -F <datei>`. Und: `SKIP_TEST_CLEANUP=1` gehört **auch** vor ein `git commit
+   --amend`, sonst scheitert der Teardown an der abgeschalteten lokalen MySQL — bei grünen Tests.
+4. **Positionsbasierte Testdaten brauchen einen Wächter.** Die Import-Vorlage besteht aus
+   Arrays ohne Spaltennamen; eine in der Mitte eingefügte Spalte verschiebt alles danach
+   lautlos. `scripts/generate-import-templates.mjs` prüft die Zeilenlängen jetzt hart.
 
 ---
 
