@@ -1,11 +1,11 @@
 # HANDOVER — ProTrackr NAS-Setup (Sitzungs-Übergabe)
 
 > **Zweck:** Vollständiger, self-contained Wiedereinstiegspunkt für den **NAS-Setup-Chat**.
-> **Stand:** 2026-08-05 · **Branch:** `nas-setup` (HEAD `38ec505`, v2.7.9) · in Sync mit origin.
-> **Status:** ✅ **v2.7.9 ist auf DEV *und* PROD live** — Promotion am 2026-08-05 13:23 CEST,
-> bit-identisch, nach ausdrücklicher Freigabe des Account-Inhabers. Beide Umgebungen laufen auf
-> demselben Image `39e5f4d28455`. Vorbedingung **Migration 0021** war um 12:37 erledigt (§6.1).
-> **Offen sind nur noch die App-Befunde B1–B4 (§7) — sie gehören auf `main`, nicht hierher.**
+> **Stand:** 2026-08-05 · **Branch:** `nas-setup` (HEAD `482a07b`, v2.9.0) · in Sync mit origin.
+> **Status:** ✅ **v2.9.0 ist auf DEV live** (Deploy 2026-08-05 18:49, Migration **0026** um 18:47
+> davor angewendet) — **wartet auf die fachliche Abnahme des Account-Inhabers.**
+> **PROD steht unverändert auf v2.7.9** und wurde in dieser Runde **nicht angefasst**;
+> die Promotion erfolgt erst nach der DEV-Abnahme und ausdrücklicher Freigabe.
 > **Bei Wiedereinstieg zuerst:** §0 lesen, dann Ist-Stand selbst verifizieren (§1.4).
 
 ---
@@ -13,18 +13,18 @@
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 ProTrackr läuft in **zwei isolierten Umgebungen auf dem Unraid-NAS (DCS01)**: **PROD** (`:9443`,
-echte Daten, **v2.7.9**) + **DEV** (`:9444`, **v2.7.9**, frischer Prod-Klon). Der Laptop ist reine
-Autoren-Maschine (kein localhost seit A5). **Beide Umgebungen sind versionsgleich** — der
-Rollout-Rückstand von neun Versionen ist abgebaut.
+echte Daten, **v2.7.9**) + **DEV** (`:9444`, **v2.9.0**, Prod-Klon + Migration 0026). Der Laptop ist
+reine Autoren-Maschine (kein localhost seit A5).
 
 ### 0.1 Was JETZT offen ist (Priorität)
 
 | # | Punkt | Status |
 |---|---|---|
-| **1** | ~~Promotion v2.7.9 → PROD~~ | ✅ **ERLEDIGT 2026-08-05 13:23 CEST** — bit-identisch, Nachweis in §2 |
-| **2** | ~~Migration 0021 auf PROD nachziehen~~ | ✅ **ERLEDIGT 2026-08-05 12:37** (§6.1) |
-| **3** | App-Befunde aus der Dev-Abnahme | **an MAIN übergeben** (§7) — vier Punkte. **B2 ist mit der Promotion jetzt auf PROD live** und damit gegen Echtdaten wirksam |
-| **4** | Doku-Schuld aus früheren Runden | **offen, zwei Teile:** (a) `NAS_SETUP_HISTORY.md` hatte vor dem 2026-08-05 als letzten Eintrag den **2026-07-06** — die Rollouts **v2.5.0** (15.07.) und **v2.7.9 auf Dev** (04./05.08.) fehlen dort; (b) der Tag **`nas-rollout/2.5.0` fehlt** (Rollout-Commit `6bd1dd6` existiert). Bewusst **nicht** rekonstruiert — der damalige Vorgang ist hier nicht verifizierbar (Lesson §9.10) |
+| **1** | **Fachliche Abnahme v2.9.0 auf DEV** (`:9444`) | **offen — liegt beim Account-Inhaber.** Sieben Schritte in `HANDOVER-MAIN.md` §0.1 (main-Repo). Schwerpunkt: Befund **B3** (Flugstrecke + Hin-/Rückflug) und die **B2-Kopierregel** aus v2.8.0 |
+| **2** | **Promotion v2.9.0 → PROD** | **gesperrt bis zur Abnahme.** Danach ausdrückliche Freigabe nötig. ⚠️ **Migration 0026 muss auf PROD VOR dem Container-Start laufen** — siehe §6.3 |
+| **3** | App-Befunde aus der v2.7.9-Abnahme | **B1 + B2 sind mit v2.8.0 gefixt, B3 mit v2.9.0** (beide auf DEV). **B4** (Import-Überarbeitung) ist auf main angehalten |
+| **4** | Doku-Schuld aus früheren Runden | **offen, zwei Teile:** (a) `NAS_SETUP_HISTORY.md` hat eine Lücke **2026-07-06 → 2026-08-05** — die Rollouts **v2.5.0** (15.07.) und **v2.7.9 auf Dev** (04./05.08.) fehlen dort; (b) der Tag **`nas-rollout/2.5.0` fehlt** (Rollout-Commit `6bd1dd6` existiert). Bewusst **nicht** rekonstruiert — der damalige Vorgang ist hier nicht verifizierbar (Lesson §9.10) |
+| **5** | Zwei Werkzeug-Mängel aus dieser Runde | **offen, gehören auf `main`** — Manifest-Umgebungsdaten und Konflikt-Klassifikation in `rollout-to-nas.ps1`, siehe §6.4 |
 
 ---
 
@@ -55,11 +55,11 @@ Rollout-Rückstand von neun Versionen ist abgebaut.
 | Compose | `docker-compose.yml` | `compose.dev.yml` (Projekt `protrackr-dev`) |
 | App-/DB-Container | `protrackr-app` / `protrackr-mysql` | `protrackr-app-dev` / `protrackr-mysql-dev` |
 | Image | `protrackr-app:latest` | `protrackr-dev-app:latest` |
-| **Version** | **2.7.9** | **2.7.9** |
-| **buildTime (roh)** | **2026-08-04T22:15:21.391Z** | **2026-08-04T22:15:21.391Z** |
-| Image | `39e5f4d28455` | `39e5f4d28455` (dasselbe) |
-| Migration 0021 | vorhanden ✓ (nachgezogen 2026-08-05 12:37) | vorhanden ✓ (nachgezogen 2026-08-05) |
-| Daten | Wahrheit (219 Belege / 160 Zeiteinträge / 3 Kunden) | frischer Prod-Klon (2026-08-05) |
+| **Version** | **2.7.9** | **2.9.0** |
+| **buildTime (roh)** | **2026-08-04T22:15:21.391Z** | **2026-08-05T16:49:04.505Z** |
+| Migration 0021 | vorhanden ✓ (nachgezogen 2026-08-05 12:37) | vorhanden ✓ |
+| **Migration 0026** | **NICHT vorhanden** — kommt erst mit der Promotion (§6.3) | **vorhanden ✓** (2026-08-05 18:47) |
+| Daten | Wahrheit (219 Belege / 160 Zeiteinträge / 3 Kunden) | Prod-Klon, 219 Belege unverändert |
 
 **Bit-Identitäts-Nachweis der Promotion (2026-08-05 13:23 CEST):** Die rohen `/version.json`-Bodies
 von `:9443` und `:9444` sind **byte-identisch** — SHA256
@@ -158,6 +158,57 @@ gezielt geprüft; Spaltenmengen Prod == Dev == Soll).
 
 `taxProfiles.taxModuleEnabled` existiert in **beiden** DBs, steht aber nicht in `schema.ts` —
 tote Spalte aus einer früheren Entfernung ohne `DROP COLUMN`. Harmlos, kein Blocker.
+
+### 6.3 ⛔ Migration 0026 muss auf PROD VOR dem Container-Start laufen
+
+Gilt für die kommende Promotion v2.9.0 → PROD. **Neue Spalten sind härter als neue ENUM-Werte.**
+
+`0026_expenses_flight_route.sql` fügt `expenses` drei Spalten hinzu (`departureAirport`,
+`arrivalAirport` `VARCHAR(3)`, `flightDirection` `ENUM('outbound','return')`) — additiv und nullable,
+kein Backfill. **Drizzle erzeugt nie `SELECT *`**: auch `db.select().from(expenses)` listet jede
+Schema-Spalte namentlich auf. Die neue App gegen eine DB ohne 0026 lässt deshalb **jeden** Zugriff
+auf `expenses` scheitern — Belegliste, Bericht, Kopierlauf **und das Backup**.
+
+**Reihenfolge auf PROD (nicht tauschen):** Backup (läuft noch mit der alten App — richtig so) →
+`ALTER` aus der Repo-Datei → Spaltenexistenz **und** Zeilenzahl gegenprüfen → erst dann
+`deploy-prod.sh`.
+
+> **Rollback-Asymmetrie, andersherum als bei ENUMs:** Den Container zurückrollen, während die
+> Spalten stehen bleiben, ist **unbedenklich** (die alte App kennt sie nicht). Die Spalten
+> entfernen, während die neue App läuft, legt die Anwendung **lahm**.
+
+**Auf DEV am 2026-08-05 18:47 so durchgeführt und verifiziert:** 3 Spalten an Position 12–14,
+219 Zeilen unverändert, 0 belegte Werte, Backup `db-migration/dev-pre-2.9.0.sql` (5.987.053 B) mit
+vorgeschaltetem Guard, dass es den Vorher-Zustand ohne die neuen Spalten enthält.
+
+### 6.4 Zwei Werkzeug-Mängel aus dem v2.9.0-Rollout (gehören auf `main`)
+
+**(a) Die Umgebungsdaten im Manifest sind falsch.** `2.9.0.json` nennt Container, die es nicht gibt,
+und mischt PROD-Werte in die generischen Blöcke:
+
+| Manifest | tatsächlich |
+|---|---|
+| `environments.dev.dbContainer: "mysql-dev"` | `protrackr-mysql-dev` |
+| `environments.prod.dbContainer: "mysql-prod"` | `protrackr-mysql` |
+| `environments.prod.appContainer: "protrackr-app-prod"` | `protrackr-app` |
+| `environments.prod.composeFile: "compose.prod.yml"` | `docker-compose.yml` |
+| `database.container` / `app.*` (generisch) | zeigen auf **PROD** (`protrackr-mysql`, Port 3010) |
+
+Wer dem Manifest folgt, sichert bei einem **Dev**-Rollout über `database.container` die **PROD-DB** —
+ein Bruch von Leitplanke 5. Zusätzlich steht `source.freezeTag` auf `"v2.8.0"`, obwohl die Release
+2.9.0 ist und `v2.9.0` auf genau diesem `source.commit` liegt. Diese Felder stammen aus
+`scripts/generate-rollout-manifest.mjs` und sind dort zu korrigieren.
+**Bis dahin gilt: Umgebungswerte immer per `docker ps` bestätigen, nie aus dem Manifest übernehmen.**
+
+**(b) `rollout-to-nas.ps1` klassifiziert Manifest-Konflikte als App-Konflikte.** `$VersionFiles`
+(Zeile 30–34) kennt nur die sieben Versionsdateien; ein Konflikt in `.claude/rollouts/*.json` fällt
+damit in den `nonVersion`-Zweig und bricht mit „App-Konflikte — bitte im Main-Chat klären" ab. Genau
+das trat hier auf: main hatte sein `2.7.9.json` nachträglich um die 0021-Warnung ergänzt (`9421547`),
+die NAS-Seite hatte ihre Kopie schon bereitgestellt → add/add-Konflikt, einziger Unterschied das
+`notes`-Feld. Sinnvoll wäre, `.claude/rollouts/*.json` derselben `--theirs`-Regel zu unterstellen
+(main ist für Manifeste die Quelle der Wahrheit). Zweitens scheitert das `git commit --no-edit` des
+Skripts im NAS-Worktree ohnehin am `pre-commit`-Hook (kein `node_modules`) — der Konfliktpfad ist
+dort also generell nicht lauffähig.
 
 ---
 

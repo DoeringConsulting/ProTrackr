@@ -2174,3 +2174,58 @@ der Warntext darüber schon. **B1–B4 sind jetzt auf PROD wirksam und gehören 
 **`nas-rollout/2.5.0` fehlt**, obwohl der Rollout-Commit `6bd1dd6` existiert und PROD nachweislich
 auf 2.5.0 lief. Nicht nachträglich gesetzt — der damalige Prod-Vorgang ist aus dieser Session nicht
 verifizierbar; ein Tag würde eine Aussage über ein ungeprüftes Ereignis treffen.
+
+## 2026-08-05 — Dev-Rollout v2.9.0 (Migration 0026, erster Rollout mit NEUEN SPALTEN)
+
+**Ziel: nur DEV.** PROD blieb unberührt und steht weiter auf v2.7.9 — objektiv gegengeprüft
+(`:9443` roh weiterhin `2.7.9`, PROD-DB hat **0** der drei neuen Spalten).
+
+**Delta:** 8 Commits, `v2.8.0` (Dashboard-Linien Steuern/Betriebskosten, Kopierregel B2) +
+`v2.9.0` (Befund B3, Flugstrecke + Hin-/Rückflug). Manifest `2.9.0.json`, `source.commit` `0e0bab9`,
+Tag `v2.9.0` zeigt exakt darauf.
+
+**Ablauf (Reihenfolge war hart vorgegeben und wurde eingehalten):**
+1. Manifest bit-identisch aus `origin/main` (Blob-Weg, `git hash-object` verifiziert) → `c354352`.
+2. Probe-Merge → **Konflikt** (siehe unten) → aufgelöst → Merge `482a07b` → gepusht. Push **vor**
+   dem Deploy, weil der NAS den Stand per `git reset --hard origin/nas-setup` zieht.
+3. **DB-Backup `dev-pre-2.9.0.sql` (5.987.053 B)** — lief noch gegen die **alte** App; Guard davor:
+   Abbruch, falls das Backup die neuen Spalten schon enthält (= wäre nicht der Vorher-Zustand).
+4. **Migration 0026 VOR dem Container-Start**, aus der Repo-Datei via `docker exec -i … mysql <`.
+5. Verifikation: 3 Spalten an Position 12–14 mit korrekten Typen (`varchar(3)` ×2,
+   `enum('outbound','return')`), **219 Zeilen unverändert**, **0 belegte Werte** (kein Backfill).
+6. `deploy-dev.sh` → Image gebaut, `healthy` nach 15 s, Health-Gate `2.9.0`.
+7. Roh-Gegenprobe: DEV `2.9.0` / `2026-08-05T16:49:04.505Z`, PROD unverändert `2.7.9`.
+   Dev-App-Log ohne Einträge; `SELECT` über die neuen Spalten läuft → App-Schema und DB passen.
+
+**★ LESSON — `md5sum` taugt nicht für Cross-Platform-Dateivergleiche.** Die Vorgabe „Migration aus
+der Repo-Datei fahren, md5 mitloggen" führte zu einem scheinbaren Fehlschlag: lokal (Windows)
+`d01f87c6…`, auf dem NAS (Linux) `80903cb8…`. Ursache ist die **CRLF/LF-Konvertierung** beim
+Checkout, nicht ein abweichender Inhalt — nachgewiesen über den LF-normierten md5 (lokal ==
+NAS-roh) und `git hash-object`, das auf **beiden** Seiten `fa6e20f5…` liefert. **Für Vergleiche
+über Plattformgrenzen `git hash-object` nehmen** (normalisiert per `.gitattributes`), `md5sum` nur
+innerhalb derselben Plattform.
+
+**★ BEFUND — Manifest-Umgebungsdaten sind falsch und gefährlich** (Details Handover §6.4a):
+`environments.dev.dbContainer` nennt `mysql-dev`, real ist `protrackr-mysql-dev`; die generischen
+Blöcke `database.container` / `app.*` zeigen auf **PROD**. Wer dem Manifest folgt, sichert bei einem
+**Dev**-Rollout die **PROD-DB** — Bruch von Leitplanke 5. Hier durchgängig die per `docker ps`
+bestätigten Werte verwendet. Ebenfalls falsch: `source.freezeTag: "v2.8.0"` bei Release 2.9.0.
+Korrektur gehört in `scripts/generate-rollout-manifest.mjs` (main).
+
+**★ BEFUND — `rollout-to-nas.ps1` klassifiziert Manifest-Konflikte falsch** (Details §6.4b):
+Der Probe-Merge kollidierte in `.claude/rollouts/2.7.9.json` (add/add). Ursache: main hatte sein
+2.7.9-Manifest nachträglich um die 0021-Warnung ergänzt (`9421547`), nachdem die NAS-Seite ihre
+Kopie bereitgestellt hatte — **einziger Unterschied das `notes`-Feld**, die übrigen 110 Zeilen
+identisch. `$VersionFiles` kennt aber nur die sieben Versionsdateien, also wäre das Skript mit
+„App-Konflikte — bitte im Main-Chat klären" abgebrochen. Da es weder App-Code noch inhaltlich
+strittig war, **manuell mit derselben Regel aufgelöst, die das Skript für Versionsdateien vorsieht**
+(`--theirs`, main gewinnt — Manifeste sind main-Deliverables). Zusätzlich hätte das
+`git commit --no-edit` des Skripts im NAS-Worktree ohnehin am `pre-commit`-Hook scheitern müssen.
+
+**Kein `nas-rollout/2.9.0`-Tag und kein `.DONE`** — beides gehört nach Projektpraxis (Handover §5
+Punkt 5) an die **Prod-Promotion**, nicht an einen Dev-Deploy. Der `nas-rollout`-Skill formuliert
+Stufe 7 generisch für beide Umgebungen; hier gilt die engere Projektkonvention.
+
+**Offen:** fachliche Abnahme auf `:9444` durch den Account-Inhaber (sieben Schritte in
+`HANDOVER-MAIN.md` §0.1). Erst danach, und nur nach ausdrücklicher Freigabe, die Promotion — dann
+mit Migration 0026 **vor** dem Container-Start (§6.3).
