@@ -8,7 +8,58 @@
 
 ---
 
-## 0.1 SOFORT ZU TUN (Stand 2026-08-04, Abschluss der Sitzung)
+## 0.1 SOFORT ZU TUN (Stand 2026-08-05, Abschluss Sitzung 7)
+
+**Nichts Halbfertiges im Code.** Working Tree sauber, `origin/main` synchron, HEAD auf
+**v2.8.x**, App-Release **v2.8.0**, Tag `v2.8.0`, Manifest `.claude/rollouts/2.8.0.json`.
+**PROD und DEV stehen beide auf v2.7.9** (Promotion 2026-08-05 13:23, bit-identisch, Tag
+`nas-rollout/2.7.9`) — der Rollout-Rückstand ist abgebaut, Migration `0021` ist auf **beiden**
+DBs geschlossen.
+
+### ⏭️ PRIMÄRE AUFGABE DER NÄCHSTEN SITZUNG: B3 umsetzen
+
+**Konzept liegt fertig und FREIGEGEBEN vor:** [`docs/KONZEPT-flugrichtung.md`](docs/KONZEPT-flugrichtung.md)
+v1.1.0. Alle drei Entscheidungen sind getroffen (§5), die Umsetzungsreihenfolge steht in §6.
+
+- **Migration `0026` ist freigegeben** — drei additive, nullable Spalten (`departureAirport`,
+  `arrivalAirport`, `flightDirection`).
+- **Heimatflughäfen ausschließlich `KTW`/`KRK`.** Andere polnische Flughäfen (WAW, GDN, …)
+  gelten NICHT als Heimat, sondern lösen eine **Rückfrage** aus — ein Flug nach Warschau ist
+  eher ein Kundeneinsatz als eine Heimreise. (Korrektur des ersten Entwurfs, der sie als Heimat
+  gezählt hätte.)
+- **Bestandsdaten bleiben leer**, Nachtragen später möglich — konstruktiv erfüllt, keine
+  Zusatzarbeit.
+- Migration **erst beim Rollout anwenden**, nach der Pflicht-Prozedur aus
+  [[project_db_migration_drift]].
+
+### ⏸️ DANACH, NICHT VORHER: B4 (Import/MCP)
+
+**Ausdrückliche Anweisung des Account-Inhabers (2026-08-05):** B4 wird eine **separate Runde
+ohne Nebenaufgaben** — und erst, wenn **B3 abgeschlossen ist und auf der DEV-App läuft**.
+Vorher ist ein **vollständiges, umsetzbares Konzept** vorzulegen („erst wenn du dir zu 100 %
+sicher bist, dass alles sitzt").
+
+**Geklärt:** MCP-Endpoint gehört **auf den NAS** (Mini Mac kommt hinzu, direkt am Switch;
+Laptop über Tailscale — ein lokal installierter Server müsste je Gerät gepflegt werden) ·
+eigener Token nur für den Skill-Weg · **keine Dateien**, nur extrahierte Werte · **Kennzeichen
+am Beleg** („KI-erstellt"), nur ProTrackr-intern, **nie** in Kundenberichten — statt getrennter
+Listen.
+
+**Offen, blockiert das Konzept:** Der Account-Inhaber will das „KI-Abteil" unten auf der
+Import-Seite auf eine **Info-Box** reduzieren („Daten wurden bereits per Skill geladen"), hatte
+zuvor aber „als **Kandidat zur Freigabe**" entschieden. Beides zusammen geht nur in einer von
+zwei Varianten: (a) Freigabeliste bleibt, nur Upload/Analyse entfällt, oder (b) Skill bucht
+direkt und die Kontrolle findet in der Zeiterfassung statt. **Die Rückfrage dazu wurde
+abgebrochen — offen.**
+
+**Unabhängig davon bereit:** Der CSV-Import-Bug — `Import.tsx` vergleicht
+`String(dateObjekt).slice(0,10)` gegen `"YYYY-MM-DD"`, was `"Tue Jul 01"` ergibt und **nie**
+trifft. Folge: Duplikatserkennung greift nie, Belege werden nie an Zeiteinträge gehängt. Kleiner,
+isolierter Fix, jederzeit vorziehbar.
+
+---
+
+## 0.2 ARCHIV — Stand 2026-08-04 (Sitzung 6)
 
 **Nichts Halbfertiges offen.** Working Tree sauber, `origin/main` synchron (Drift `0 0`), HEAD auf
 **v2.7.4**, Manifest `.claude/rollouts/2.7.4.json` + Tag `v2.7.4` gesetzt. Der in der Vorsitzung
@@ -666,6 +717,59 @@ rechnet auf `YYYY-MM-DD`-Strings und meidet `toISOString` bewusst.
 `"YYYY-MM-DD"` — das trifft **nie** (`String(Date)` liefert „Tue Jul 01 2026 …"). Folge: die
 Duplikatserkennung beim Import greift nie, und Belege werden nie an Zeiteinträge gehängt. Fix ist
 klein, ändert aber spürbar das Import-Verhalten — deshalb eigene Entscheidung.
+
+### 6.11 Dev-Abnahme-Befunde B1–B4 (Sitzung 7, 2026-08-05)
+
+Der Account-Inhaber hat v2.7.9 auf `:9444` mit Echtdaten geprüft. Vier Befunde; zwei sind
+erledigt und released, einer liegt als freigegebenes Konzept vor, einer ist angehalten.
+
+**B1 — Dashboard: Brutto ≠ Netto + Kosten → ✅ v2.8.0**
+Kein Rechenfehler. Die Kostenlinie führte nur Betriebskosten, der Nettogewinn steht **nach**
+ZUS, Zdrowotna und PIT — die Abgabenlast war in **keiner** Serie sichtbar. Nachgerechnet:
+`1.117.727,14 − 329.457,33 − 214.748,70 = 573.521,11` geht auf den Cent auf; 27,24 % der Basis
+= PIT 19 % + Zdrowotna 4,9 % + ~2.196 PLN ZUS/Monat.
+Neu: **zwei** Serien (Ist + Prognose) — „Steuern & Abgaben" **und** „Betriebskosten". Letztere
+gab es bisher nur als Prognose; ohne die Ist-Variante wäre im reinen Ist-View eine
+unbeschriftete Restlücke geblieben, also die nächste Rückfrage. K4: Die Summe liegt jetzt
+einmal als `totalLeviesCents()` neben der `netProfit`-Definition.
+*Review-Auflage:* Die zuerst gewählte Farbe lag außerhalb der Palette und war neben der braunen
+Kostenlinie nicht zu unterscheiden — ausgerechnet bei den zwei Linien, die man gegeneinander
+liest. Jetzt Markenfarbe `#1d3240`.
+
+**B2 — „Zeitraum kopieren" → ✅ v2.7.11**
+(1) Monatsgrenze: Ein überzähliges Wochentag-Vorkommen landete im **Monat DANACH** — außerhalb
+des bestätigten Zeitraums. Jetzt kein Ziel (`null`), Auslassung wird ausgewiesen.
+(2) Wochenend-Rückfrage, nur wenn die Quelle Sa/So-Einträge hat; der Dialog lädt seinen
+Quellzeitraum selbst, weil die Kalenderdaten des angezeigten Monats ihn nicht abdecken.
+(3) **Geldwirksamer Review-Fund:** Verknüpfte Belege folgten ihrem **eigenen** Leistungsende und
+liefen vom Eltern-Zeiteintrag weg (Hotel 28.07.–01.08. → September, Eintrag → August; Sweep
+2026: 174 Fälle). Jetzt Eltern-Offset, plus Guard gegen den Rückfall in den **Quellmonat**
+(den mein eigener Fix erst ermöglicht hatte, 8/5040 Fälle).
+
+> **🔑 Zielkonflikt, bewusst entschieden:** „Beleg bleibt bei seinem Zeiteintrag" und „Beleg
+> bleibt im Zielmonat" sind für einen **mehrtägigen verknüpften** Beleg nicht gleichzeitig
+> erfüllbar. Der Zusammenhalt wiegt schwerer; Dialogtexte und JSDoc sagen das jetzt so, statt
+> eine Absolutheit zu versprechen, die es nie gab. Für Zeiteinträge und eigenständige Belege
+> gilt die Zielmonatsgrenze uneingeschränkt (Sweep: 0 Verstöße).
+
+**B3 — Flugrichtung → 📄 Konzept freigegeben, Umsetzung offen.** Siehe §0.1.
+Kernbefund: `flightRouteType` kodiert Inland/Ausland, `travelStart`/`travelEnd` sind trotz des
+Namens `varchar(5)` = **Uhrzeiten**, und die SPEC-Annahme „ohne neues Datenfeld ableitbar"
+trägt nicht — **die Flughafencodes existieren nirgends**. `receiptAi` erkennt ein
+„from X to Y"-Muster, **verwirft** die Codes aber und behält nur `international`.
+
+**B4 — Import/MCP → ⏸️ angehalten.** Siehe §0.1.
+
+**🔑 Lessons dieser Sitzung:**
+1. **Eine Zusage im UI ist ein Versprechen an den Nutzer.** B2 hat gezeigt: Der Dialogtext sagte
+   „nie über den Zielmonat hinaus", während verknüpfte Belege es doch taten. Wo zwei Anker
+   fachlich kollidieren, gehört das benannt — nicht weggeschrieben.
+2. **Ein Fix kann einen neuen Fehlerfall öffnen.** Der Eltern-Offset reparierte 174 Fälle und
+   erzeugte 8 neue (Rückfall in den Quellmonat). Erst der zweite Review-Durchgang fand das.
+3. **Ein halb gelöster Befund erzeugt die nächste Rückfrage.** Die Abgabenlinie allein hätte im
+   Ist-View eine neue unerklärte Lücke hinterlassen.
+4. **Fachliche Präzisierung schlägt Vollständigkeit.** Alle polnischen Flughäfen als „Heimat" zu
+   werten wäre naheliegend gewesen und hätte falsche Vorschläge erzeugt — nur KTW/KRK sind es.
 
 ## 7. GOVERNANCE-REGELN (verbindlich)
 

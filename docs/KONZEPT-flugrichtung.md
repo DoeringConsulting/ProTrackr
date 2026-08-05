@@ -1,6 +1,10 @@
 # KONZEPT — Flugstrecke und Hin-/Rückflug-Kennzeichnung (Befund B3)
 
-> **Version:** 1.0.0 · **Stand:** 2026-08-05 · **Status:** **VORSCHLAG — Entscheidung offen**
+> **Version:** 1.1.0 · **Stand:** 2026-08-05 · **Status:** **FREIGEGEBEN — Umsetzung offen**
+> **Freigabe des Account-Inhabers am 2026-08-05:** Migration `0026` freigegeben; Heimatflughäfen
+> auf **KTW/KRK beschränkt** (andere polnische Flughäfen lösen eine Rückfrage aus, keinen
+> Vorschlag); Bestandsdaten bleiben zunächst leer, **Nachtragen zu einem späteren Zeitpunkt**
+> muss möglich bleiben.
 > **Auslöser:** Befund B3 der Dev-Abnahme v2.7.9 (`HANDOVER-NAS-SETUP.md` §7)
 > **Fachliche Quellen:** `docs/SPEC-Reisekosten-Abgrenzung.md` v1.1.0 §3.2, Memory
 > `project_reisekosten_fachregeln`
@@ -92,16 +96,32 @@ Umzusetzen als **reine Funktion** in `shared/` — damit Server, Client und Impo
 benutzen (K4), analog zu `shared/expenseServiceEnd.ts`.
 
 ```
-suggestFlightDirection(departureAirport, arrivalAirport) → "outbound" | "return" | null
+suggestFlightDirection(departureAirport, arrivalAirport)
+  → { direction: "outbound" | "return" | null, hint?: string }
 
-  1. Zielflughafen ist ein POLNISCHER Flughafen  → "return"
-  2. Startflughafen ist ein POLNISCHER Flughafen → "outbound"
-  3. sonst (Drittland → Drittland, Umstieg)      → null  [kein Vorschlag]
+  1. Ziel   ist HEIMATflughafen (KTW/KRK) → "return"
+  2. Start  ist HEIMATflughafen (KTW/KRK) → "outbound"
+  3. anderer POLNISCHER Flughafen beteiligt → null + Hinweis
+        „<Code> ist ein polnischer Flughafen, aber kein hinterlegter Heimatflughafen —
+         Richtung bitte prüfen."
+  4. sonst (Drittland → Drittland, Umstieg) → null, kein Hinweis
 ```
 
-**Polnische Flughäfen:** `KTW`, `KRK` als bevorzugte laut Fachregel; ergänzend `WAW`, `WRO`,
-`POZ`, `GDN`, `RZE`, `LCJ`, `SZZ`, `BZG` — als benannte Konstante an einer Stelle, nicht
-verstreut.
+**HEIMATflughäfen: ausschließlich `KTW` und `KRK`** (Entscheidung des Account-Inhabers,
+2026-08-05).
+
+> ⚠️ **Korrektur gegenüber v1.0.0 dieses Konzepts.** Der erste Entwurf zählte alle polnischen
+> Verkehrsflughäfen (`WAW`, `WRO`, `POZ`, `GDN`, …) als Heimat. Das hätte **falsche Vorschläge
+> erzeugt**: Ein Flug nach Warschau ist weit eher ein **Kundeneinsatz** als eine Heimreise —
+> die Automatik hätte ihn als Rückflug vorgeschlagen. Nur KTW/KRK sind die tatsächlichen
+> Heimatflughäfen.
+
+**Die übrigen polnischen Flughäfen** (`WAW`, `WRO`, `POZ`, `GDN`, `RZE`, `LCJ`, `SZZ`, `BZG`)
+werden trotzdem als Konstante geführt — nicht um sie als Heimat zu werten, sondern um Fall 3
+zu erkennen und **gezielt nachzufragen**. Genau das war die Anforderung („wenn anderer
+Flughafen genannt wird, nachfragen"): Die Automatik entscheidet nur, wo sie sicher ist, und
+macht auf die Fälle aufmerksam, die eine menschliche Entscheidung brauchen — statt still zu
+raten (K1).
 
 **Zur Umsteige-Regel:** Die Fachregel sagt „bei Umstieg entscheidet der letzte Flughafen". Das
 ist mit **zwei** Feldern genau dann erfüllt, wenn `arrivalAirport` das **Endziel** der Reise
@@ -145,9 +165,18 @@ Der Vorschlag greift beim **Erfassen und Bearbeiten**, nicht rückwirkend auf ge
 - Ein Backfill aus dem Wochentag wäre genau das Raten, das oben verworfen wurde.
 - Ohne Abrechnungswirkung bei Einzelstrecken (§2.2) entsteht kein Schaden durch leere Felder.
 
-**Vorschlag:** Felder bleiben bei Altbelegen leer; wer sie braucht, trägt sie beim nächsten
-Bearbeiten nach. Bei 32 Flugbelegen wäre ein manuelles Nachtragen an einem Nachmittag machbar —
-das ist eine kaufmännische Entscheidung, keine technische.
+**Entschieden (2026-08-05):** Felder bleiben bei Altbelegen zunächst **leer**; das Nachtragen
+soll **zu einem späteren Zeitpunkt möglich** sein.
+
+Das ist konstruktiv erfüllt und braucht keine Zusatzarbeit: Die Spalten sind nullable, die
+Bearbeiten-Maske schreibt sie wie jedes andere Feld, und es gibt keine Validierung, die einen
+Altbeleg ohne Flughäfen ablehnt. Ein Nachtragen ist damit jederzeit möglich — Beleg öffnen,
+Start/Ziel eintragen, Richtung wird vorgeschlagen, speichern.
+
+**Bewusst NICHT gebaut:** eine eigene Nachtrage-Maske oder ein Massenbearbeitungs-Dialog für
+die 32 Altbelege. Bei dieser Menge ist der Weg über die normale Bearbeitung schneller gebaut
+und weniger fehleranfällig als ein Sonderwerkzeug. Sollte sich das ändern, ist es ein eigenes,
+kleines Vorhaben.
 
 ### 3.6 Abgrenzung — was dieses Konzept NICHT tut
 
@@ -176,11 +205,34 @@ das ist eine kaufmännische Entscheidung, keine technische.
 
 ---
 
-## 5. Offene Entscheidung
+## 5. Entscheidungen — alle getroffen (2026-08-05)
 
-Die Migration ist ein **kritischer Eingriff (K14)** und wird **nicht** ohne ausdrückliche
-Freigabe ausgeführt. Zu entscheiden:
+| Frage | Entscheidung |
+|---|---|
+| Migration `0026` | ✅ **freigegeben** in der vorgeschlagenen Form |
+| Flughafenliste | ✅ **nur KTW/KRK** als Heimat; andere polnische Flughäfen → **Rückfrage**, kein Vorschlag |
+| Bestandsdaten | ✅ zunächst **leer**; Nachtragen muss später möglich bleiben (konstruktiv erfüllt, §3.5) |
 
-1. **Freigabe der Migration `0026`** in der vorgeschlagenen Form?
-2. **Flughafenliste:** nur `KTW`/`KRK` (Fachregel wörtlich) oder alle polnischen Verkehrsflughäfen?
-3. **Bestandsdaten:** leer lassen (Vorschlag) oder die 32 Flüge manuell nachtragen?
+**Damit ist die Umsetzung freigegeben.** Reihenfolge für die Umsetzung siehe §6.
+
+---
+
+## 6. Umsetzungsreihenfolge (für die nächste Sitzung)
+
+Vorschlag, jeweils mit `tsc` + Gate und Senior-Review vor dem Commit:
+
+1. **Fundament** — `drizzle/0026_*.sql`, `drizzle/schema.ts`, `shared/flightDirection.ts`
+   (Ableitungsregel + Heimat-/PL-Konstanten) mit Unit-Tests. In sich abgeschlossen und
+   ohne Verhaltensänderung, weil noch kein Aufrufer existiert.
+2. **Server** — Zod-Schemas in `expenses.create` / `.update` / `.createBatch`.
+3. **Maske** — Flug-Zweig in `TimeTracking.tsx`: zwei Flughafenfelder, Richtungsauswahl mit
+   vorbelegtem Vorschlag und dem Hinweistext aus Fall 3.
+4. **KI-Pfad** — `receiptAi.ts`: Flughafencodes extrahieren statt verwerfen, Vorschlag im
+   Kandidaten mitliefern.
+5. **Rand** — CSV-Import (drei optionale Spalten), PDF-Export (Strecke + Richtung ausweisen).
+
+Nach 1–3 ist das Feature nutzbar; 4 und 5 sind Komfort und können nachziehen.
+
+**Migration erst beim Rollout anwenden** — nach der Pflicht-Prozedur aus
+`project_db_migration_drift` (Backup-Guard, Migration aus der Repo-Datei, Spalten- und
+Zeilenzahl-Gegenprüfung, nach jedem Prod→Dev-Klon erneut prüfen).
