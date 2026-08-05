@@ -1,10 +1,11 @@
 # HANDOVER — ProTrackr NAS-Setup (Sitzungs-Übergabe)
 
 > **Zweck:** Vollständiger, self-contained Wiedereinstiegspunkt für den **NAS-Setup-Chat**.
-> **Stand:** 2026-08-05 · **Branch:** `nas-setup` (HEAD `4752ac0`, v2.7.9) · in Sync mit origin.
-> **Status:** Rollout **v2.7.9 auf DEV live und abgenommen-mit-Befunden**. **PROD steht auf v2.5.0**
-> — Promotion **bewusst offen** (Entscheidung Account-Inhaber, siehe §0.1).
-> **Migration 0021 ist auf PROD nachgezogen** (2026-08-05 12:37, §6.1) — Promotions-Blocker gefallen.
+> **Stand:** 2026-08-05 · **Branch:** `nas-setup` (HEAD `38ec505`, v2.7.9) · in Sync mit origin.
+> **Status:** ✅ **v2.7.9 ist auf DEV *und* PROD live** — Promotion am 2026-08-05 13:23 CEST,
+> bit-identisch, nach ausdrücklicher Freigabe des Account-Inhabers. Beide Umgebungen laufen auf
+> demselben Image `39e5f4d28455`. Vorbedingung **Migration 0021** war um 12:37 erledigt (§6.1).
+> **Offen sind nur noch die App-Befunde B1–B4 (§7) — sie gehören auf `main`, nicht hierher.**
 > **Bei Wiedereinstieg zuerst:** §0 lesen, dann Ist-Stand selbst verifizieren (§1.4).
 
 ---
@@ -12,17 +13,18 @@
 ## 0. SOFORT-EINSTIEG (TL;DR)
 
 ProTrackr läuft in **zwei isolierten Umgebungen auf dem Unraid-NAS (DCS01)**: **PROD** (`:9443`,
-echte Daten, **v2.5.0**) + **DEV** (`:9444`, **v2.7.9**, frischer Prod-Klon). Der Laptop ist reine
-Autoren-Maschine (kein localhost seit A5).
+echte Daten, **v2.7.9**) + **DEV** (`:9444`, **v2.7.9**, frischer Prod-Klon). Der Laptop ist reine
+Autoren-Maschine (kein localhost seit A5). **Beide Umgebungen sind versionsgleich** — der
+Rollout-Rückstand von neun Versionen ist abgebaut.
 
 ### 0.1 Was JETZT offen ist (Priorität)
 
 | # | Punkt | Status |
 |---|---|---|
-| **1** | **Promotion v2.7.9 → PROD** | **offen** — Dev-Abnahme brachte Befunde (§7), Account-Inhaber entscheidet, ob vor oder nach Fix promotet wird |
-| **2** | ~~Migration 0021 auf PROD nachziehen~~ | ✅ **ERLEDIGT 2026-08-05 12:37** (§6.1) — Blocker gefallen |
-| **3** | App-Befunde aus der Dev-Abnahme | **an MAIN übergeben** (§7) — vier Punkte, davon einer am neu ausgerollten Feature |
-| **4** | History-Lücke `NAS_SETUP_HISTORY.md` | **offen** — letzter Eintrag ist 2026-07-06; die Rollouts **v2.5.0** (15.07.) und **v2.7.9 auf Dev** (04./05.08.) sind dort nie eingetragen worden |
+| **1** | ~~Promotion v2.7.9 → PROD~~ | ✅ **ERLEDIGT 2026-08-05 13:23 CEST** — bit-identisch, Nachweis in §2 |
+| **2** | ~~Migration 0021 auf PROD nachziehen~~ | ✅ **ERLEDIGT 2026-08-05 12:37** (§6.1) |
+| **3** | App-Befunde aus der Dev-Abnahme | **an MAIN übergeben** (§7) — vier Punkte. **B2 ist mit der Promotion jetzt auf PROD live** und damit gegen Echtdaten wirksam |
+| **4** | Doku-Schuld aus früheren Runden | **offen, zwei Teile:** (a) `NAS_SETUP_HISTORY.md` hatte vor dem 2026-08-05 als letzten Eintrag den **2026-07-06** — die Rollouts **v2.5.0** (15.07.) und **v2.7.9 auf Dev** (04./05.08.) fehlen dort; (b) der Tag **`nas-rollout/2.5.0` fehlt** (Rollout-Commit `6bd1dd6` existiert). Bewusst **nicht** rekonstruiert — der damalige Vorgang ist hier nicht verifizierbar (Lesson §9.10) |
 
 ---
 
@@ -53,15 +55,24 @@ Autoren-Maschine (kein localhost seit A5).
 | Compose | `docker-compose.yml` | `compose.dev.yml` (Projekt `protrackr-dev`) |
 | App-/DB-Container | `protrackr-app` / `protrackr-mysql` | `protrackr-app-dev` / `protrackr-mysql-dev` |
 | Image | `protrackr-app:latest` | `protrackr-dev-app:latest` |
-| **Version** | **2.5.0** | **2.7.9** |
-| **buildTime (roh)** | **15.07.2026 19:41:57** | **04.08.2026 22:15:21** ← Promotion-Vergleichswert |
+| **Version** | **2.7.9** | **2.7.9** |
+| **buildTime (roh)** | **2026-08-04T22:15:21.391Z** | **2026-08-04T22:15:21.391Z** |
+| Image | `39e5f4d28455` | `39e5f4d28455` (dasselbe) |
 | Migration 0021 | vorhanden ✓ (nachgezogen 2026-08-05 12:37) | vorhanden ✓ (nachgezogen 2026-08-05) |
-| Daten | Wahrheit | frischer Prod-Klon (2026-08-05) |
+| Daten | Wahrheit (219 Belege / 160 Zeiteinträge / 3 Kunden) | frischer Prod-Klon (2026-08-05) |
+
+**Bit-Identitäts-Nachweis der Promotion (2026-08-05 13:23 CEST):** Die rohen `/version.json`-Bodies
+von `:9443` und `:9444` sind **byte-identisch** — SHA256
+`DCFB0B14898BFD703F4D564C535912C5189B7A0DF5D2717D0C420F782C49FC38` auf beiden Seiten.
+**Ungeparst gemessen** (`Invoke-WebRequest .Content`): `Invoke-RestMethod` wandelt `buildTime` in ein
+`DateTime` um und ist damit bereits eine Interpretationsebene — genau wovor Lesson §9.10 warnt.
 
 - **TZ verifiziert:** App **und** MySQL, Dev **und** Prod → `Europe/Warsaw` / `CEST`,
-  `@@time_zone=SYSTEM`, `NOW()` deckungsgleich. Die Projekt-TZ ist im Repo **nirgends** gesetzt —
-  Korrektheit hängt allein an dieser Container-Einstellung.
-- **Rollback-Ziel ist 2.5.0** (nicht 2.4.0).
+  `@@time_zone=SYSTEM`, `NOW()` deckungsgleich; nach dem Prod-Neustart erneut geprüft. Die
+  Projekt-TZ ist im Repo **nirgends** gesetzt — Korrektheit hängt allein an dieser
+  Container-Einstellung.
+- **Rollback-Ziel ist jetzt 2.5.0** über das Image `protrackr-app:rollback-2026-08-05_13-23-12`
+  (`9e426a871909`) — siehe §10.
 
 ---
 
@@ -102,7 +113,7 @@ Autoren-Maschine (kein localhost seit A5).
 
 ---
 
-## 6. OFFENE PFLICHT-PUNKTE VOR DER PROMOTION
+## 6. PFLICHT-PUNKTE VOR DER PROMOTION — alle erledigt
 
 ### 6.1 ✅ Migration 0021 auf PROD nachgezogen (2026-08-05 12:37) — ERLEDIGT
 
@@ -155,6 +166,19 @@ tote Spalte aus einer früheren Entfernung ohne `DROP COLUMN`. Harmlos, kein Blo
 Der Account-Inhaber hat v2.7.9 auf `:9444` mit Echtdaten visuell/funktional geprüft. **Ergebnis:
 vier Befunde + eine neue Aufgabe.** Diese sind **App-Themen und gehören auf `main`** — hier nur
 dokumentiert, damit die Promotion-Entscheidung informiert getroffen werden kann.
+
+> **Stand nach der Promotion:** Der Account-Inhaber hat am 2026-08-05 entschieden, **vor** dem
+> B2-Fix zu promoten. Alle vier Befunde sind damit **auf PROD gegen Echtdaten wirksam** — B2 als
+> einziger davon am neu ausgerollten Feature. **Entscheidungsgrundlage war (im NAS-Chat am Code
+> von v2.7.9 verifiziert, nicht aus Dokumenten übernommen):** B2 ist eine **Anforderungsänderung,
+> kein stiller Fehler.** Das Überlaufverhalten ist in `shared/copyRangeShift.ts:123-131` bewusst
+> konstruiert und begründet, und der Kopier-Dialog **warnt im Klartext**
+> (`TimeTracking.tsx:1152`): „Einträge vom Monatsende (29.–31.) können in den übernächsten Monat
+> rutschen, wenn der Zielmonat den Wochentag nicht mehr hergibt." Auslöser eng begrenzt: nur
+> `scope: "month"`, nur Quelltage 29.–31., nur wenn der Zielmonat das 5. Wochentag-Vorkommen nicht
+> hat. **Konkret real:** Fr 31.07.2026 → August hat nur vier Freitage → Ziel wäre **04.09.2026**.
+> Die Bereichs-Vorschau des Dialogs (`getScopeRanges`, `month`-Zweig) bildet den Regelfall ab und
+> zeigt diesen Sprung **nicht** — der Warntext darüber schon.
 
 ### B1 — Dashboard: Brutto ≠ Netto + Kosten (analysiert, KEIN Rechenfehler)
 
@@ -290,7 +314,15 @@ v. a. Mo/Di = **Hinflug**; bei Umstieg entscheidet der **letzte** Flughafen) und
 3. **Prod-DB-Backups** `db-migration/prod-pre-promote-*.sql`; Auto-Rollback bei Health-Gate-Fehler.
 4. **Dev ist Wegwerf:** `docker compose -f compose.dev.yml down -v` + `clone-prod-to-dev.sh --yes`.
    Aktuelles Dev-Backup: `db-migration/dev-pre-2.7.9.sql` (5,9 MB, 2026-08-05).
-5. **Rollback-Ziel dieser Runde ist 2.5.0.**
+5. **Rollback-Netze nach der Promotion v2.7.9 (2026-08-05):**
+   - **Image-Sofortrollback auf v2.5.0:** `protrackr-app:rollback-2026-08-05_13-23-12`
+     (`9e426a871909`) → `docker tag … protrackr-app:latest` + `docker compose up -d --no-build app`.
+   - **DB:** `db-migration/prod-pre-promote-2026-08-05_13-23-12.sql` (5.807 KB, vor der Promotion)
+     und `db-migration/prod-pre-migrate-0021_2026-08-05_12-37-55.sql` (5.946.365 B, vor der Migration).
+   - ⚠️ **Ein Image-Rollback auf v2.5.0 nimmt Migration 0021 NICHT zurück** — das ENUM bleibt bei
+     11 Werten. Das ist unschädlich (additiver Wert, den die ältere App nur nicht anbietet) und
+     **soll auch so bleiben**: das Zurücknehmen wäre der destruktive Schritt, nicht das Behalten.
+   - Alles Ältere über **Git-Tags** (`nas-rollout/2.7.9` → `4752ac0`), jede Version neu baubar.
 
 ---
 

@@ -2119,3 +2119,58 @@ Rollouts **v2.5.0** (Prod, 15.07.2026) und **v2.7.9 auf Dev** (04./05.08.2026) s
 eingetragen worden — sie stehen nur im Handover. Bewusst **nicht** nachträglich rekonstruiert
 (Lesson §9.10: nichts aus Dokumenten als Fakt übernehmen); als offener Punkt in Handover §0.1
 vermerkt.
+
+## 2026-08-05 — Prod-Promotion v2.7.9 (Rückstand von neun Versionen abgebaut)
+
+**Freigabe:** ausdrücklich durch den Account-Inhaber, nachdem die Entscheidungsgrundlage zu Befund
+B2 am Code verifiziert vorlag (siehe unten). Entschieden wurde: **vor** dem B2-Fix promoten.
+
+**Vorbedingung erfüllt:** Migration 0021 um 12:37 desselben Tages auf PROD nachgezogen (eigener
+History-Eintrag oben). Ohne sie wäre die Kilometerpauschale auf PROD weiterhin nicht erfassbar
+gewesen.
+
+**Zusätzliche Vorprüfung, die `deploy-prod.sh` NICHT leistet:** Das Skript prüft nur, ob
+`protrackr-dev-app:latest` **existiert** — nicht, ob der **abgenommene, laufende** Dev-Container
+dasselbe Image benutzt. Wäre auf Dev zwischenzeitlich neu deployt worden, hätte die Promotion einen
+**anderen als den getesteten** Stand nach PROD getragen, ohne dass es aufgefallen wäre. Vorab
+verglichen: `docker inspect --format='{{.Image}}' protrackr-app-dev` == `docker image inspect
+--format='{{.Id}}' protrackr-dev-app:latest` → beide `sha256:39e5f4d2…` ✓. **Diese Prüfung gehört
+künftig vor jede Promotion** (Kandidat für eine Skript-Erweiterung).
+
+**Promotion** (`deploy-prod.sh`, Gate `PROMOTE`, 13:23:12 CEST):
+- Backup `db-migration/prod-pre-promote-2026-08-05_13-23-12.sql` (5.807 KB)
+- Rollback-Image `protrackr-app:rollback-2026-08-05_13-23-12` (v2.5.0, `9e426a871909`)
+- `docker tag` statt Rebuild → Prod-Image `39e5f4d28455`, **identisch zu Dev**
+- Health-Gate: nach 15 s `healthy`. Prod **v2.5.0 → v2.7.9**.
+
+**★ BIT-IDENTITÄTS-NACHWEIS — und eine Verschärfung von Lesson §9.10:** Verglichen wurden die
+**rohen, ungeparsten** Response-Bodies beider `/version.json` — **byte-identisch**, SHA256
+`DCFB0B14898BFD703F4D564C535912C5189B7A0DF5D2717D0C420F782C49FC38`, `buildTime`
+`2026-08-04T22:15:21.391Z`. **Der erste Versuch lief über `Invoke-RestMethod` — und das ist bereits
+eine Interpretationsebene:** PowerShell parst das JSON und macht aus `buildTime` ein `DateTime`,
+zeigt also nicht mehr den ausgelieferten String. Das Ergebnis stimmte hier zwar, aber die Lesson
+„nie den Footer, immer roh" reicht nicht weit genug — **auch der JSON-Parser ist eine
+Darstellungsebene.** Für den Identitätsbeweis `Invoke-WebRequest … .Content` (bzw. `curl`) nehmen
+und die Strings/Hashes vergleichen.
+
+**Verifikation nach der Promotion:** `protrackr-app` healthy auf dem promoteten Image; App-Log ohne
+Einträge; `expenses.category` weiter 11 Werte; Datenbestand unverändert (219 expenses / 160
+timeEntries / 3 customers); TZ nach dem Neustart erneut `CEST` mit deckungsgleichem `NOW()`.
+
+**Artefakte:** Tag `nas-rollout/2.7.9` → `4752ac0` (annotiert, gepusht),
+`.claude/rollouts/2.7.9.DONE` (Laufzeit-Artefakt, per `.gitignore` nicht versioniert),
+NAS-Repo auf `38ec505` abgeglichen.
+
+**Entscheidungsgrundlage B2 (am v2.7.9-Code verifiziert, nicht aus dem Handover übernommen):**
+B2 ist eine **Anforderungsänderung, kein stiller Fehler**. Das Überlaufverhalten steht bewusst und
+begründet in `shared/copyRangeShift.ts:123-131` (n-tes Wochentag-Vorkommen fehlt im Zielmonat →
+1. Vorkommen im **Folgemonat des Zielmonats**), und der Kopier-Dialog warnt im Klartext
+(`TimeTracking.tsx:1152`). Auslöser eng begrenzt: nur `scope: "month"`, nur Quelltage 29.–31., nur
+wenn der Zielmonat das 5. Vorkommen nicht hat. Realbeispiel: Fr **31.07.2026** → August hat nur vier
+Freitage → Ziel **04.09.2026**. Die Bereichs-Vorschau (`getScopeRanges`) zeigt diesen Sprung nicht,
+der Warntext darüber schon. **B1–B4 sind jetzt auf PROD wirksam und gehören auf `main`.**
+
+**Offene Doku-Schuld aus früheren Runden (nicht rekonstruiert, Lesson §9.10):** Der Tag
+**`nas-rollout/2.5.0` fehlt**, obwohl der Rollout-Commit `6bd1dd6` existiert und PROD nachweislich
+auf 2.5.0 lief. Nicht nachträglich gesetzt — der damalige Prod-Vorgang ist aus dieser Session nicht
+verifizierbar; ein Tag würde eine Aussage über ein ungeprüftes Ereignis treffen.
